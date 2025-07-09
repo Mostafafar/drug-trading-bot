@@ -1313,7 +1313,7 @@ async def handle_compensation_quantity(update: Update, context: ContextTypes.DEF
                     WHERE user_id = ? AND quantity > 0 AND id NOT IN ({})
                     '''.format(','.join('?' * len([i['id'] for i in comp_data['selected_items']]))), 
                     [context.user_data['selected_seller']['id']] + [i['id'] for i in comp_data['selected_items']]
-
+                                  )
                     
                 remaining_drugs = cursor.fetchall()
                 
