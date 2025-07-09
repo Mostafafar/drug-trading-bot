@@ -36,19 +36,14 @@ from datetime import datetime
 import random
 
 logger = logging.getLogger(__name__)
-if not Path('drug_trading.db').exists():
-    logger.warning("Database file not found, initializing new database")
 
-# File download helper
-async def download_file(file, file_type, user_id):
-    """Download a file from Telegram and return the saved path"""
-    file_name = f"{user_id}_{file_type}{os.path.splitext(file.file_path)[1]}"
-    file_path = os.path.join(PHOTO_STORAGE, file_name)
-    await file.download_to_drive(file_path)
-    return file_path
-
-# Initialize storage directory
+# Initialize paths and directories
+current_dir = Path(__file__).parent
+excel_file = current_dir / "DrugPrices.xlsx"
 PHOTO_STORAGE = "registration_docs"
+DB_FILE = current_dir / "drug_trading.db"
+
+# Ensure directories exist
 Path(PHOTO_STORAGE).mkdir(exist_ok=True)
 
 # ======== STATES ENUM ========
@@ -104,6 +99,14 @@ logger = logging.getLogger(__name__)
 # Verification codes storage
 verification_codes = {}
 
+# File download helper
+async def download_file(file, file_type, user_id):
+    """Download a file from Telegram and return the saved path"""
+    file_name = f"{user_id}_{file_type}{os.path.splitext(file.file_path)[1]}"
+    file_path = os.path.join(PHOTO_STORAGE, file_name)
+    await file.download_to_drive(file_path)
+    return file_path
+
 def get_db_connection(max_retries: int = 3, retry_delay: float = 1.0):
     """Get a database connection with retry logic and validation"""
     conn = None
@@ -112,7 +115,7 @@ def get_db_connection(max_retries: int = 3, retry_delay: float = 1.0):
     for attempt in range(max_retries):
         try:
             conn = sqlite3.connect(
-                'drug_trading.db',
+                DB_FILE,
                 timeout=30,
                 isolation_level=None,
                 check_same_thread=False
@@ -148,16 +151,25 @@ def get_db_connection(max_retries: int = 3, retry_delay: float = 1.0):
         raise last_error
     raise sqlite3.Error("Unknown database connection error")
 
-# Load the Excel file
+# Load or create Excel file
 try:
-    excel_file = "DrugPrices.xlsx"  # Changed from food to drug
+    if not excel_file.exists():
+        pd.DataFrame(columns=['name', 'price']).to_excel(excel_file, index=False)
+        logger.info("Created new DrugPrices.xlsx template file")
+    
     df = pd.read_excel(excel_file, sheet_name="Sheet1")
     df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
     drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
     drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
+    logger.info(f"Successfully loaded {len(drug_list)} drugs from Excel file")
 except Exception as e:
     logger.error(f"Error loading Excel file: {e}")
     drug_list = []
+    # Create backup if file exists but is corrupted
+    if excel_file.exists():
+        backup_file = current_dir / f"DrugPrices_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        excel_file.rename(backup_file)
+        logger.info(f"Created backup of corrupted file at {backup_file}")
 
 def initialize_db():
     conn = get_db_connection()
