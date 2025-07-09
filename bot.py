@@ -2204,6 +2204,7 @@ async def handle_match_view(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             
             # Store drug and need in context for purchase flow
             context.user_data['matched_drug'] = dict(drug)
