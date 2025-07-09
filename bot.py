@@ -729,7 +729,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         "پس از انتخاب موارد، روی «محاسبه جمع» کلیک کنید"
     )
     
-    if update.callback_query:
+        if update.callback_query:
         await update.callback_query.edit_message_text(
             message,
             reply_markup=InlineKeyboardMarkup(keyboard)
@@ -738,6 +738,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         await update.message.reply_text(
             message,
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
     
     return States.SELECT_ITEMS
 
@@ -748,12 +749,6 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "cancel":
         await cancel(update, context)
         return
-
-    if query.data == "finish_selection":
-        selected_items = context.user_data.get('selected_items', [])
-        if not selected_items:
-            await query.answer("لطفا حداقل یک مورد را انتخاب کنید", show_alert=True)
-            return
         
         # Calculate totals
         seller_total = sum(
