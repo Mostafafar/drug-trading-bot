@@ -1,7 +1,4 @@
 import time
-# در ابتدای فایل bot.py بعد از imports
-import subprocess
-subprocess.run(["termux-fix-shebang"])
 import re
 import sqlite3
 from telegram.ext import BaseHandler
