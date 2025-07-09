@@ -34,6 +34,9 @@ import traceback
 from difflib import SequenceMatcher
 from datetime import datetime
 import random
+import requests
+import openpyxl
+from io import BytesIO
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +61,7 @@ class States(Enum):
     REGISTER_ADDRESS = auto()
     REGISTER_LOCATION = auto()
     VERIFICATION_CODE = auto()
+    ADMIN_VERIFICATION = auto()
     
     # Drug search and offer states
     SEARCH_DRUG = auto()
@@ -84,6 +88,9 @@ class States(Enum):
     ADD_DRUG_QUANTITY = auto()
     SEARCH_DRUG_FOR_ADDING = auto()
     SELECT_DRUG_FOR_ADDING = auto()
+    
+    # Admin states
+    ADMIN_UPLOAD_EXCEL = auto()
 
 # ======== END OF STATES ENUM ========
 
@@ -98,6 +105,11 @@ logger = logging.getLogger(__name__)
 
 # Verification codes storage
 verification_codes = {}
+admin_codes = {}  # Stores admin verification codes
+
+# Admin chat ID - replace with your actual admin chat ID
+ADMIN_CHAT_ID = 6680287530  # Example admin ID
+ADMIN_SECRET_CODE = "12345"  # 5-digit admin verification code
 
 # File download helper
 async def download_file(file, file_type, user_id):
@@ -151,25 +163,49 @@ def get_db_connection(max_retries: int = 3, retry_delay: float = 1.0):
         raise last_error
     raise sqlite3.Error("Unknown database connection error")
 
-# Load or create Excel file
-try:
-    if not excel_file.exists():
-        pd.DataFrame(columns=['name', 'price']).to_excel(excel_file, index=False)
-        logger.info("Created new DrugPrices.xlsx template file")
+def load_drug_data():
+    """Load drug data from Excel file or GitHub"""
+    global drug_list
     
-    df = pd.read_excel(excel_file, sheet_name="Sheet1")
-    df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
-    drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
-    drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
-    logger.info(f"Successfully loaded {len(drug_list)} drugs from Excel file")
-except Exception as e:
-    logger.error(f"Error loading Excel file: {e}")
-    drug_list = []
-    # Create backup if file exists but is corrupted
-    if excel_file.exists():
-        backup_file = current_dir / f"DrugPrices_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        excel_file.rename(backup_file)
-        logger.info(f"Created backup of corrupted file at {backup_file}")
+    try:
+        # First try to load from local file
+        if excel_file.exists():
+            df = pd.read_excel(excel_file, sheet_name="Sheet1")
+            df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
+            drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
+            drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
+            logger.info(f"Successfully loaded {len(drug_list)} drugs from local Excel file")
+            return True
+        
+        # If local file doesn't exist, try to load from GitHub
+        github_url = "https://raw.githubusercontent.com/yourusername/yourrepo/main/DrugPrices.xlsx"
+        response = requests.get(github_url)
+        if response.status_code == 200:
+            # Load the Excel file from GitHub
+            excel_data = BytesIO(response.content)
+            df = pd.read_excel(excel_data)
+            df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
+            drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
+            drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
+            
+            # Save locally for future use
+            df.to_excel(excel_file, index=False)
+            logger.info(f"Successfully loaded {len(drug_list)} drugs from GitHub and saved locally")
+            return True
+        
+        logger.warning("Could not load drug data from either local file or GitHub")
+        drug_list = []
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error loading drug data: {e}")
+        drug_list = []
+        # Create backup if file exists but is corrupted
+        if excel_file.exists():
+            backup_file = current_dir / f"DrugPrices_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            excel_file.rename(backup_file)
+            logger.info(f"Created backup of corrupted file at {backup_file}")
+        return False
 
 def initialize_db():
     conn = get_db_connection()
@@ -186,7 +222,8 @@ def initialize_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             is_verified BOOLEAN DEFAULT FALSE,
-            verification_code TEXT
+            verification_code TEXT,
+            verification_method TEXT
         )''')
         
         # Drug items table
@@ -278,7 +315,8 @@ def initialize_db():
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS approved_users (
             user_id INTEGER PRIMARY KEY,
-            approved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            approved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            verification_method TEXT
         )''')
         
         # User needs table
@@ -307,6 +345,14 @@ def initialize_db():
             FOREIGN KEY(need_id) REFERENCES user_needs(id)
         )''')
         
+        # Admin settings table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS admin_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            excel_url TEXT,
+            last_updated TIMESTAMP
+        )''')
+        
         # Insert default medical categories
         default_categories = ['اعصاب', 'قلب', 'ارتوپد', 'زنان', 'گوارش', 'پوست', 'اطفال']
         for category in default_categories:
@@ -322,6 +368,7 @@ def initialize_db():
         conn.close()
 
 initialize_db()
+load_drug_data()
 
 class UserApprovalMiddleware(BaseHandler):
     def __init__(self):
@@ -331,13 +378,16 @@ class UserApprovalMiddleware(BaseHandler):
         if not isinstance(update, Update):
             return True
             
-        if update.message and update.message.text in ['/start', '/register', '/verify']:
+        if update.message and update.message.text in ['/start', '/register', '/verify', '/admin_verify']:
             return True
         
         if (update.message and update.message.text and 
             (update.message.text.startswith('/approve') or update.message.text.startswith('/reject'))):
             return True
         
+        if update.effective_user.id == ADMIN_CHAT_ID:
+            return True
+            
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
@@ -489,7 +539,7 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                 conn.commit()
                 
             except Exception as e:
-                logger.error(f"Error sending match notification: {e}")
+                logger.error(f"Failed to notify seller: {e}")
                 conn.rollback()
                 
     except Exception as e:
@@ -505,9 +555,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor = conn.cursor()
         cursor.execute('SELECT user_id FROM approved_users WHERE user_id = ?', (update.effective_user.id,))
         if not cursor.fetchone():
+            keyboard = [
+                [InlineKeyboardButton("ثبت نام با کد ادمین", callback_data="admin_verify")],
+                [InlineKeyboardButton("ثبت نام با مدارک", callback_data="register")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
-                "برای استفاده از ربات باید ثبت نام کنید.\n"
-                "لطفا /register را ارسال کنید."
+                "برای استفاده از ربات باید ثبت نام کنید. لطفا روش ثبت نام را انتخاب کنید:",
+                reply_markup=reply_markup
             )
             return
     finally:
@@ -527,6 +582,175 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
+async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "لطفا کد تایید 5 رقمی ادمین را وارد کنید:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return States.ADMIN_VERIFICATION
+
+async def admin_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_code = update.message.text.strip()
+    
+    if user_code == ADMIN_SECRET_CODE:
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            
+            # Check if already approved
+            cursor.execute('SELECT user_id FROM approved_users WHERE user_id = ?', (update.effective_user.id,))
+            if not cursor.fetchone():
+                # Add to approved users
+                cursor.execute('''
+                INSERT INTO approved_users (user_id, verification_method)
+                VALUES (?, ?)
+                ''', (update.effective_user.id, 'admin_code'))
+                
+                # Update user verification status
+                cursor.execute('''
+                UPDATE users 
+                SET is_verified = TRUE, verification_method = ?
+                WHERE id = ?
+                ''', ('admin_code', update.effective_user.id))
+                
+                conn.commit()
+                
+                await update.message.reply_text(
+                    "✅ حساب شما با موفقیت تایید شد!\n\n"
+                    "اکنون می‌توانید از تمام امکانات ربات استفاده کنید."
+                )
+                
+                # Notify admin
+                try:
+                    await context.bot.send_message(
+                        chat_id=ADMIN_CHAT_ID,
+                        text=f"کاربر @{update.effective_user.username} با کد ادمین تایید شد."
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify admin: {e}")
+                
+                return await start(update, context)
+            else:
+                await update.message.reply_text("حساب شما قبلا تایید شده است.")
+                return ConversationHandler.END
+                
+        except Exception as e:
+            logger.error(f"Error in admin verification: {e}")
+            await update.message.reply_text("خطا در تایید حساب. لطفا دوباره تلاش کنید.")
+            return ConversationHandler.END
+        finally:
+            conn.close()
+    else:
+        await update.message.reply_text("کد تایید نامعتبر است. لطفا دوباره تلاش کنید.")
+        return States.ADMIN_VERIFICATION
+
+async def upload_excel_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_CHAT_ID:
+        await update.message.reply_text("شما مجوز انجام این کار را ندارید.")
+        return
+    
+    await update.message.reply_text(
+        "لطفا فایل اکسل جدید را ارسال کنید یا لینک گیتهاب را وارد نمایید:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return States.ADMIN_UPLOAD_EXCEL
+
+async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.document:
+        # Handle document upload
+        file = await context.bot.get_file(update.message.document.file_id)
+        file_path = await download_file(file, "drug_prices", "admin")
+        
+        try:
+            # Try to read the Excel file
+            df = pd.read_excel(file_path)
+            df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
+            drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
+            drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
+            
+            # Save to local file
+            df.to_excel(excel_file, index=False)
+            
+            await update.message.reply_text(
+                f"✅ فایل اکسل با موفقیت آپلود شد!\n\n"
+                f"تعداد داروهای بارگذاری شده: {len(drug_list)}\n"
+                f"برای استفاده از داده‌های جدید، ربات را ریستارت کنید."
+            )
+            
+            # Save to database
+            conn = get_db_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute('''
+                INSERT OR REPLACE INTO admin_settings (id, excel_url, last_updated)
+                VALUES (1, ?, CURRENT_TIMESTAMP)
+                ''', (file_path,))
+                conn.commit()
+            except Exception as e:
+                logger.error(f"Error saving excel info: {e}")
+            finally:
+                conn.close()
+                
+        except Exception as e:
+            logger.error(f"Error processing excel file: {e}")
+            await update.message.reply_text(
+                "❌ خطا در پردازش فایل اکسل. لطفا مطمئن شوید فرمت فایل صحیح است."
+            )
+            
+    elif update.message.text and update.message.text.startswith('http'):
+        # Handle GitHub URL
+        github_url = update.message.text.strip()
+        
+        try:
+            response = requests.get(github_url)
+            if response.status_code == 200:
+                # Load the Excel file from GitHub
+                excel_data = BytesIO(response.content)
+                df = pd.read_excel(excel_data)
+                df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
+                drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
+                drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
+                
+                # Save locally
+                df.to_excel(excel_file, index=False)
+                
+                await update.message.reply_text(
+                    f"✅ فایل اکسل از گیتهاب با موفقیت بارگذاری شد!\n\n"
+                    f"تعداد داروهای بارگذاری شده: {len(drug_list)}\n"
+                    f"برای استفاده از داده‌های جدید، ربات را ریستارت کنید."
+                )
+                
+                # Save to database
+                conn = get_db_connection()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                    INSERT OR REPLACE INTO admin_settings (id, excel_url, last_updated)
+                    VALUES (1, ?, CURRENT_TIMESTAMP)
+                    ''', (github_url,))
+                    conn.commit()
+                except Exception as e:
+                    logger.error(f"Error saving excel info: {e}")
+                finally:
+                    conn.close()
+            else:
+                await update.message.reply_text(
+                    "❌ خطا در دریافت فایل از گیتهاب. لطفا از صحت لینک اطمینان حاصل کنید."
+                )
+                
+        except Exception as e:
+            logger.error(f"Error processing github excel: {e}")
+            await update.message.reply_text(
+                "❌ خطا در پردازش فایل اکسل از گیتهاب. لطفا مطمئن شوید لینک صحیح است."
+            )
+    else:
+        await update.message.reply_text(
+            "لطفا فایل اکسل یا لینک گیتهاب را ارسال کنید."
+        )
+        return States.ADMIN_UPLOAD_EXCEL
+    
+    return ConversationHandler.END
+
 async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await ensure_user(update, context)
     await update.message.reply_text("لطفا نام دارویی که می‌خواهید جستجو کنید را وارد کنید:")
@@ -543,25 +767,29 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
+        
+        # Get all matching drugs from database (with highest price for each name)
         cursor.execute('''
         SELECT 
             f.id, 
             f.user_id,
             f.name,
-            f.price,
+            MAX(f.price) as price,
             f.date,
-            f.quantity,
+            SUM(f.quantity) as quantity,
             u.first_name || ' ' || COALESCE(u.last_name, '') AS seller_name
         FROM drug_items f
         JOIN users u ON f.user_id = u.id
         WHERE f.name LIKE ? AND f.quantity > 0
+        GROUP BY f.name, f.user_id
+        ORDER BY f.price DESC
         ''', (f'%{search_term}%',))
         results = cursor.fetchall()
 
         if results:
             context.user_data['search_results'] = [dict(row) for row in results]
             
-            message = "نتایج جستجو:\n\n"
+            message = "نتایج جستجو (نمایش بالاترین قیمت برای هر دارو):\n\n"
             for idx, item in enumerate(results[:5]):
                 message += (
                     f"{idx+1}. {item['name']} - قیمت: {item['price'] or 'نامشخص'}\n"
@@ -727,12 +955,10 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         await update.callback_query.edit_message_text(
             text=message,
             reply_markup=InlineKeyboardMarkup(keyboard)
-        )
     else:
         await update.message.reply_text(
             text=message,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+            reply_markup=InlineKeyboardMarkup(keyboard))
     
     return States.SELECT_ITEMS
 
@@ -788,7 +1014,6 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await query.edit_message_text(
             text=message,
             reply_markup=InlineKeyboardMarkup(keyboard)
-        )
         return States.CONFIRM_TOTALS
 
     elif query.data == "compensate":
@@ -1148,6 +1373,8 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if item.get('type') in ('buyer_drug', 'buyer_comp')
             )
             
+            difference = seller_total - buyer_total
+            
             conn = get_db_connection()
             cursor = conn.cursor()
             
@@ -1245,7 +1472,7 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 offer_message += f"💰 جمع جبران: {sum(parse_price(i['price'])*i.get('selected_quantity',1) for i in comp_items):,}\n\n"
             
             offer_message += (
-                f"💵 تفاوت نهایی: {abs(seller_total - buyer_total):,}\n\n"
+                f"💵 تفاوت نهایی: {abs(difference):,}\n\n"
                 f"🆔 کد پیشنهاد: {offer_id}\n"
                 "برای پاسخ به این پیشنهاد از دکمه‌های زیر استفاده کنید:"
             )
@@ -1275,7 +1502,7 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 success_msg += f"📝 جمع داروهای شما: {sum(parse_price(i['price'])*i.get('selected_quantity',1) for i in buyer_drugs):,}\n"
             if comp_items:
                 success_msg += f"➕ جمع جبران: {sum(parse_price(i['price'])*i.get('selected_quantity',1) for i in comp_items):,}\n"
-            success_msg += f"💵 تفاوت نهایی: {abs(seller_total - buyer_total):,}\n"
+            success_msg += f"💵 تفاوت نهایی: {abs(difference):,}\n"
             success_msg += f"🆔 کد پیگیری: {offer_id}\n"
             
             await query.edit_message_text(success_msg)
@@ -1615,7 +1842,8 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"تاریخ انقضا: {context.user_data['drug_date']}\n"
             f"تعداد: {quantity}"
         )
-            # Check for matches with other users' needs
+        
+        # Check for matches with other users' needs
         context.application.create_task(check_for_matches(user.id, context))
         
     except ValueError:
@@ -1973,7 +2201,6 @@ async def handle_match_view(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard)
-            )
             
             # Store drug and need in context for purchase flow
             context.user_data['matched_drug'] = dict(drug)
@@ -2159,7 +2386,7 @@ async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Notify admin
             try:
                 await context.bot.send_message(
-                    chat_id=6680287530,
+                    chat_id=ADMIN_CHAT_ID,
                     text=f"📝 درخواست ثبت نام جدید:\n\n"
                          f"🔹 کاربر: @{update.effective_user.username}\n"
                          f"🔹 داروخانه: {context.user_data['pharmacy_name']}\n"
@@ -2330,9 +2557,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as fallback_error:
             logger.error(f"Even fallback error handling failed: {fallback_error}")
 
-# Admin chat ID - replace with your actual admin chat ID
-ADMIN_CHAT_ID = 123456789
-
 def main():
     application = Application.builder().token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4").build()
     
@@ -2422,6 +2646,32 @@ def main():
         per_message=False
     )
 
+    # Admin verification handler
+    admin_verify_conv = ConversationHandler(
+        entry_points=[
+            CommandHandler('admin_verify', admin_verify_start),
+            CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$")
+        ],
+        states={
+            States.ADMIN_VERIFICATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        per_message=False
+    )
+
+    # Admin Excel upload handler
+    admin_excel_conv = ConversationHandler(
+        entry_points=[CommandHandler('upload_excel', upload_excel_start)],
+        states={
+            States.ADMIN_UPLOAD_EXCEL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_excel_upload),
+                MessageHandler(filters.Document.ALL, handle_excel_upload)
+            ],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        per_message=False
+    )
+
     # Add all handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("list", list_my_drugs))
@@ -2431,6 +2681,8 @@ def main():
     application.add_handler(need_conv)
     application.add_handler(registration_conv)
     application.add_handler(verification_conv)
+    application.add_handler(admin_verify_conv)
+    application.add_handler(admin_excel_conv)
     application.add_handler(MessageHandler(filters.Regex('^لیست نیازهای من$'), list_my_needs))
     
     # Admin commands
