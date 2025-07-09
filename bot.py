@@ -1903,6 +1903,7 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text(
             message,
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return States.SELECT_NEED_CATEGORY
         
     except Exception as e:
