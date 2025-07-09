@@ -663,21 +663,20 @@ async def select_seller(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             return await show_two_column_selection(update, context)
 
-async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show the drug selection interface with proper v20+ syntax"""
     seller = context.user_data.get('selected_seller', {})
     seller_drugs = context.user_data.get('seller_drugs', [])
     buyer_drugs = context.user_data.get('buyer_drugs', [])
     selected_items = context.user_data.get('selected_items', [])
-    seller_categories = context.user_data.get('seller_categories', [])
     
-    # Create two-column layout
+    # Create keyboard
     keyboard = []
     max_length = max(len(seller_drugs), len(buyer_drugs))
     
     for i in range(max_length):
         row = []
-        
-        # Seller's drugs column
+        # Seller drugs column
         if i < len(seller_drugs):
             drug = seller_drugs[i]
             is_selected = any(
@@ -692,7 +691,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         else:
             row.append(InlineKeyboardButton(" ", callback_data="none"))
         
-        # Buyer's drugs column
+        # Buyer drugs column
         if i < len(buyer_drugs):
             drug = buyer_drugs[i]
             is_selected = any(
@@ -708,47 +707,49 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
             row.append(InlineKeyboardButton(" ", callback_data="none"))
         
         keyboard.append(row)
-    
-    # Add seller's categories if any
-    if seller_categories:
-        keyboard.append([InlineKeyboardButton(
-            "شاخه‌های دارویی فروشنده: " + ", ".join(c['name'] for c in seller_categories),
-            callback_data="show_categories"
-        )])
-    
+
     # Add control buttons
     keyboard.append([
         InlineKeyboardButton("💰 محاسبه جمع", callback_data="finish_selection"),
         InlineKeyboardButton("❌ لغو", callback_data="cancel")
     ])
-    
+
+    # Create message text
     message = (
         f"🔹 فروشنده: {seller.get('name', '')}\n\n"
         "💊 داروهای فروشنده | 📝 داروهای شما برای معامله\n\n"
         "علامت ✅ نشان‌دهنده انتخاب است\n"
         "پس از انتخاب موارد، روی «محاسبه جمع» کلیک کنید"
     )
-    
-        if update.callback_query:
+
+    # Send or update message
+    if update.callback_query:
         await update.callback_query.edit_message_text(
-            message,
+            text=message,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
         await update.message.reply_text(
-            message,
+            text=message,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     
     return States.SELECT_ITEMS
 
-async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle item selection with proper v20+ typing"""
     query = update.callback_query
     await query.answer()
 
     if query.data == "cancel":
         await cancel(update, context)
-        return
+        return ConversationHandler.END
+
+    if query.data == "finish_selection":
+        selected_items = context.user_data.get('selected_items', [])
+        if not selected_items:
+            await query.answer("لطفا حداقل یک مورد را انتخاب کنید", show_alert=True)
+            return States.SELECT_ITEMS
         
         # Calculate totals
         seller_total = sum(
@@ -785,8 +786,9 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         
         await query.edit_message_text(
-            message,
+            text=message,
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return States.CONFIRM_TOTALS
 
     elif query.data == "compensate":
@@ -801,7 +803,6 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         if difference > 0:  # Seller has more value, buyer needs to compensate
-            # Get buyer's remaining drugs
             selected_drug_ids = [
                 item['id'] for item in context.user_data['selected_items'] 
                 if item.get('type') == 'buyer_drug'
@@ -821,7 +822,7 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 if not remaining_drugs:
                     await query.answer("داروی دیگری برای جبران ندارید!", show_alert=True)
-                    return
+                    return States.SELECT_ITEMS
                 
                 context.user_data['compensation'] = {
                     'difference': difference,
@@ -838,9 +839,10 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )])
                 
                 await query.edit_message_text(
-                    f"🔻 نیاز به جبران: {difference:,}\n\n"
-                    f"لطفا از داروهای خود برای جبران تفاوت انتخاب کنید:",
-                    reply_markup=InlineKeyboardMarkup(keyboard))
+                    text=f"🔻 نیاز به جبران: {difference:,}\n\n"
+                         f"لطفا از داروهای خود برای جبران تفاوت انتخاب کنید:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
                 return States.COMPENSATION_SELECTION
                 
             except Exception as e:
@@ -851,7 +853,6 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 conn.close()
                 
         else:  # Buyer has more value, seller needs to compensate
-            # Get seller's remaining drugs
             selected_drug_ids = [
                 item['id'] for item in context.user_data['selected_items'] 
                 if item.get('type') == 'seller_drug'
@@ -871,7 +872,7 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 if not remaining_drugs:
                     await query.answer("فروشنده داروی دیگری برای جبران ندارد!", show_alert=True)
-                    return
+                    return States.SELECT_ITEMS
                 
                 context.user_data['compensation'] = {
                     'difference': abs(difference),
@@ -888,9 +889,10 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )])
                 
                 await query.edit_message_text(
-                    f"🔻 نیاز به جبران: {abs(difference):,}\n\n"
-                    f"لطفا از داروهای فروشنده برای جبران تفاوت انتخاب کنید:",
-                    reply_markup=InlineKeyboardMarkup(keyboard))
+                    text=f"🔻 نیاز به جبران: {abs(difference):,}\n\n"
+                         f"لطفا از داروهای فروشنده برای جبران تفاوت انتخاب کنید:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
                 return States.COMPENSATION_SELECTION
                 
             except Exception as e:
