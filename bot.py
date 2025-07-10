@@ -39,6 +39,8 @@ import requests
 import openpyxl
 from io import BytesIO
 import asyncio
+import tracemalloc
+tracemalloc.start()
 
 logger = logging.getLogger(__name__)
 
