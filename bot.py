@@ -4,6 +4,7 @@ import psycopg2
 from psycopg2 import sql, extras
 from telegram.ext import BaseHandler
 from typing import Optional, Awaitable
+import gc
 from telegram.ext import BaseHandler, ContextTypes
 from telegram import Update
 import pandas as pd
@@ -1272,13 +1273,13 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return States.CONFIRM_TOTALS
 
     # Handle drug selection/deselection
-    elif query.data.startswith(("pharmacydrug_", "buyerdrug_")):
+    if query.data.startswith(("pharmacydrug_", "buyerdrug_")):
         item_type, item_id = query.data.split("_")
         item_id = int(item_id)
         
         selected_items = context.user_data.get('selected_items', [])
         
-        # Toggle selection
+        # Toggle selection with proper memory management
         existing_idx = next(
             (i for i, item in enumerate(selected_items) 
              if item.get('id') == item_id and 
@@ -1287,20 +1288,26 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             ), None)
         
         if existing_idx is not None:
-            selected_items.pop(existing_idx)
+            # Explicitly delete the item
+            removed_item = selected_items.pop(existing_idx)
+            del removed_item  # Ensure proper cleanup
         else:
-            # Find the item in available items
-            if item_type == "pharmacydrug":
-                source = context.user_data.get('pharmacy_drugs', [])
-                item_type = 'pharmacy_drug'
-            else:
-                source = context.user_data.get('buyer_drugs', [])
-                item_type = 'buyer_drug'
+            # Find the item with proper resource handling
+            source = (context.user_data.get('pharmacy_drugs', []) 
+                     if item_type == "pharmacydrug" 
+                     else context.user_data.get('buyer_drugs', []))
             
             item = next((i for i in source if i['id'] == item_id), None)
             if item:
-                item_copy = item.copy()
-                item_copy['type'] = item_type
+                # Create a clean copy
+                item_copy = {
+                    'id': item['id'],
+                    'name': item['name'],
+                    'price': item['price'],
+                    'type': 'pharmacy_drug' if item_type == "pharmacydrug" else 'buyer_drug'
+                }
+                if 'selected_quantity' in item:
+                    item_copy['selected_quantity'] = item['selected_quantity']
                 selected_items.append(item_copy)
         
         context.user_data['selected_items'] = selected_items
