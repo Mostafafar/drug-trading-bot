@@ -35,6 +35,7 @@ import traceback
 from difflib import SequenceMatcher
 from datetime import datetime
 import random
+from typing import Optional, Awaitable
 import requests
 import openpyxl
 from io import BytesIO
@@ -366,17 +367,27 @@ class UserApprovalMiddleware(BaseHandler):
     def __init__(self):
         super().__init__(self.check_update)
         
-    async def check_update(self, update: object) -> Optional[Awaitable]:
+    async def check_update(self, update: object) -> Optional[bool]:
+        """
+        Asynchronously check if user is approved to use the bot
+        Returns:
+            bool: True if allowed, False if not allowed
+            None: if update should be ignored
+        """
+        # Ignore non-Update objects
         if not isinstance(update, Update):
-            return True
+            return None
             
+        # Always allow basic commands
         if update.message and update.message.text in ['/start', '/register', '/verify', '/admin_verify']:
             return True
         
+        # Allow admin approve/reject commands
         if (update.message and update.message.text and 
             (update.message.text.startswith('/approve') or update.message.text.startswith('/reject'))):
             return True
         
+        # Always allow admin user
         if update.effective_user.id == ADMIN_CHAT_ID:
             return True
             
@@ -388,20 +399,33 @@ class UserApprovalMiddleware(BaseHandler):
                 SELECT 1 FROM pharmacies 
                 WHERE user_id = %s AND verified = TRUE
                 ''', (update.effective_user.id,))
-                if not cursor.fetchone():
-                    await update.message.reply_text(
-                        "⚠️ شما مجوز استفاده از ربات را ندارید.\n\n"
-                        "لطفا ابتدا ثبت نام کنید و منتظر تایید مدیریت بمانید.\n"
-                        "برای ثبت نام /register را ارسال کنید."
-                    )
-                    return False
-                return True
+                
+                if cursor.fetchone():
+                    return True
+                
+                # User not approved - send message if possible
+                if update.message:
+                    try:
+                        await update.message.reply_text(
+                            "⚠️ شما مجوز استفاده از ربات را ندارید.\n\n"
+                            "لطفا ابتدا ثبت نام کنید و منتظر تایید مدیریت بمانید.\n"
+                            "برای ثبت نام /register را ارسال کنید."
+                        )
+                    except Exception as msg_error:
+                        logger.error(f"Failed to send approval message: {msg_error}")
+                
+                return False
+                
         except Exception as e:
             logger.error(f"Error in approval check: {e}")
             return False
+            
         finally:
             if conn:
-                conn.close()
+                try:
+                    conn.close()
+                except Exception as close_error:
+                    logger.error(f"Error closing connection: {close_error}")
 
 async def ensure_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
