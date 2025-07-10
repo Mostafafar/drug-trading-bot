@@ -3388,6 +3388,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log errors and send a more friendly message to users."""
     logger.error("Exception while handling an update:", exc_info=context.error)
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Log errors with memory information"""
+    logger.error(f"Memory before cleanup: {tracemalloc.get_traced_memory()}")
     
     # Log the full traceback
     tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
@@ -3397,6 +3400,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Don't send error messages for callback queries if update is None
     if update is None:
         logger.error("Update is None, can't send error message to user")
+        gc.collect()
+    logger.error(f"Memory after cleanup: {tracemalloc.get_traced_memory()}")
+    logger.error(f"Garbage collected: {gc.get_count()}")
         return
     
     try:
