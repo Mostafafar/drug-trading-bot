@@ -1034,7 +1034,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
     return States.SELECT_ITEMS
 
 async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handle item selection with proper v20+ typing"""
+    """Handle item selection with proper memory management"""
     query = update.callback_query
     await query.answer()
 
