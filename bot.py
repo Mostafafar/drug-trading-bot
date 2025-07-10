@@ -3412,7 +3412,7 @@ def main():
             States.COMPENSATION_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_compensation_quantity)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=False
+        per_message=True
     )
 
     # Drug addition handler
@@ -3425,7 +3425,7 @@ def main():
             States.ADD_DRUG_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=False
+        per_message=True
     )
 
     # Medical categories setup handler
@@ -3438,7 +3438,7 @@ def main():
             CallbackQueryHandler(save_categories, pattern="^save_categories$"),
             CommandHandler('cancel', cancel)
         ],
-        per_message=False
+        per_message=True
     )
 
     # Need addition handler
@@ -3450,7 +3450,7 @@ def main():
             States.ADD_NEED_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=False
+        per_message=True
     )
 
     # Registration handler
@@ -3466,7 +3466,7 @@ def main():
             States.VERIFICATION_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=False
+        per_message=True
     )
 
     # Verification handler
@@ -3477,7 +3477,7 @@ def main():
             States.VERIFICATION_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=False
+        per_message=True
     )
 
     # Admin verification handler
@@ -3490,7 +3490,7 @@ def main():
             States.ADMIN_VERIFICATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=False
+        per_message=True
     )
 
     # Admin Excel upload handler
@@ -3503,7 +3503,7 @@ def main():
             ],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=False
+        per_message=True
     )
 
     # Edit items handler
@@ -3525,7 +3525,7 @@ def main():
             ],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=False
+        per_message=True
     )
 
     # Add all handlers
