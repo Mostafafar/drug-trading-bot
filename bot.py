@@ -357,7 +357,7 @@ async def initialize_db():
         if conn:
             conn.close()
 
-asyncio.get_event_loop().run_until_complete(initialize_db())
+asyncio.new_event_loop().run_until_complete(initialize_db())
 load_drug_data()
 
 class UserApprovalMiddleware(BaseHandler):
