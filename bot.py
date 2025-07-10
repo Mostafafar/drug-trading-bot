@@ -246,7 +246,7 @@ async def initialize_db():
                 verified BOOLEAN DEFAULT FALSE,
                 verified_at TIMESTAMP,
                 admin_id BIGINT REFERENCES users(id)
-            ''')
+            )''')
             
             # Drug items table
             cursor.execute('''
@@ -389,7 +389,7 @@ class UserApprovalMiddleware(BaseHandler):
             return True
         
         # Always allow admin user
-        if update.effective_user.id == ADMIN_CHAT_ID:
+        if update.effective_user and update.effective_user.id == ADMIN_CHAT_ID:
             return True
             
         conn = None
@@ -1026,7 +1026,6 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         await update.callback_query.edit_message_text(
             text=message,
             reply_markup=InlineKeyboardMarkup(keyboard)
-        )
     else:
         await update.message.reply_text(
             text=message,
@@ -1106,9 +1105,8 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             ]
         
         await query.edit_message_text(
-            text=message,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard))
         return States.CONFIRM_TOTALS
 
     elif query.data == "compensate":
@@ -1136,7 +1134,10 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                     SELECT id, name, price, quantity 
                     FROM drug_items 
                     WHERE user_id = %s AND quantity > 0 AND id NOT IN %s
-                    ''', (update.effective_user.id, tuple(selected_drug_ids) if selected_drug_ids else (None,)))
+                    ''', (
+                        update.effective_user.id, 
+                        tuple(selected_drug_ids) if selected_drug_ids else (None,)
+                    ))
                     
                     remaining_drugs = cursor.fetchall()
                     
@@ -1188,7 +1189,10 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                     SELECT id, name, price, quantity 
                     FROM drug_items 
                     WHERE user_id = %s AND quantity > 0 AND id NOT IN %s
-                    ''', (context.user_data['selected_pharmacy']['id'], tuple(selected_drug_ids) if selected_drug_ids else (None,)))
+                    ''', (
+                        context.user_data['selected_pharmacy']['id'], 
+                        tuple(selected_drug_ids) if selected_drug_ids else (None,)
+                    ))
                     
                     remaining_drugs = cursor.fetchall()
                     
@@ -1226,9 +1230,6 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                 if conn:
                     conn.close()
 
-    elif query.data == "back_to_items":
-        return await show_two_column_selection(update, context)
-        
     elif query.data == "back_to_totals":
         # Recalculate totals
         selected_items = context.user_data.get('selected_items', [])
@@ -1523,6 +1524,7 @@ async def handle_compensation_quantity(update: Update, context: ContextTypes.DEF
                                 f"{drug['name']} ({drug['price']}) - موجودی: {drug['quantity']}", 
                                 callback_data=f"comp_{drug['id']}"
                             )])
+                        
                         keyboard.append([InlineKeyboardButton("اتمام انتخاب", callback_data="comp_finish")])
                         keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_totals")])
                         
@@ -3375,7 +3377,6 @@ async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         if conn:
             conn.close()
-
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message:
         await update.message.reply_text("عملیات لغو شد.", reply_markup=ReplyKeyboardRemove())
@@ -3385,9 +3386,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     return ConversationHandler.END
 
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Log errors and send a more friendly message to users."""
-    logger.error("Exception while handling an update:", exc_info=context.error)
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log errors with memory information"""
     logger.error(f"Memory before cleanup: {tracemalloc.get_traced_memory()}")
@@ -3401,34 +3399,34 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update is None:
         logger.error("Update is None, can't send error message to user")
         gc.collect()
+    else:
+        try:
+            # Different error handling for different error types
+            if isinstance(context.error, TimedOut):
+                error_msg = "⏳ زمان پاسخگویی به درخواست شما به پایان رسید. لطفا دوباره تلاش کنید."
+            elif isinstance(context.error, psycopg2.Error):
+                error_msg = "⚠️ خطایی در ارتباط با پایگاه داده رخ داد. لطفا چند لحظه صبر کنید و دوباره تلاش کنید."
+            elif isinstance(context.error, ValueError):
+                error_msg = "⚠️ مقدار وارد شده نامعتبر است. لطفا اطلاعات را بررسی کرده و مجددا ارسال نمایید."
+            else:
+                error_msg = "⚠️ خطایی رخ داده است. لطفا دوباره تلاش کنید."
+            
+            # Send appropriate message to user
+            if update.callback_query:
+                await update.callback_query.answer(error_msg, show_alert=True)
+            elif update.message:
+                await update.message.reply_text(error_msg)
+                
+        except Exception as e:
+            logger.error(f"Failed to handle error: {e}")
+            try:
+                if update.message:
+                    await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+            except Exception as fallback_error:
+                logger.error(f"Even fallback error handling failed: {fallback_error}")
+    
     logger.error(f"Memory after cleanup: {tracemalloc.get_traced_memory()}")
     logger.error(f"Garbage collected: {gc.get_count()}")
-        return
-    
-    try:
-        # Different error handling for different error types
-        if isinstance(context.error, TimedOut):
-            error_msg = "⏳ زمان پاسخگویی به درخواست شما به پایان رسید. لطفا دوباره تلاش کنید."
-        elif isinstance(context.error, psycopg2.Error):
-            error_msg = "⚠️ خطایی در ارتباط با پایگاه داده رخ داد. لطفا چند لحظه صبر کنید و دوباره تلاش کنید."
-        elif isinstance(context.error, ValueError):
-            error_msg = "⚠️ مقدار وارد شده نامعتبر است. لطفا اطلاعات را بررسی کرده و مجددا ارسال نمایید."
-        else:
-            error_msg = "⚠️ خطایی رخ داده است. لطفا دوباره تلاش کنید."
-        
-        # Send appropriate message to user
-        if update.callback_query:
-            await update.callback_query.answer(error_msg, show_alert=True)
-        elif update.message:
-            await update.message.reply_text(error_msg)
-            
-    except Exception as e:
-        logger.error(f"Failed to handle error: {e}")
-        try:
-            if update.message:
-                await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        except Exception as fallback_error:
-            logger.error(f"Even fallback error handling failed: {fallback_error}")
 
 def main():
     application = Application.builder().token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4").build()
@@ -3605,7 +3603,6 @@ def main():
     # Start the bot
     application.run_polling()
 
-# Replace the database initialization at the bottom of your file:
 if __name__ == '__main__':
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
