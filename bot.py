@@ -3264,6 +3264,7 @@ def setup_handlers(application):
             # Admin states
             States.ADMIN_UPLOAD_EXCEL: [
                 MessageHandler(filters.Document.ALL | (filters.TEXT & ~filters.COMMAND), handle_excel_upload)
+            ]
 async def run_bot(application):
     """Async function to initialize and run the bot"""
     try:
