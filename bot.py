@@ -3158,8 +3158,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Add error handler
     application.add_error_handler(error_handler)
     
-    # Initialize database and run bot with modern asyncio
-    async def run_bot():
+    async def run_bot(application):
+    """Async function to initialize and run the bot"""
+    try:
         # Initialize database first
         await initialize_db()
         
@@ -3171,12 +3172,13 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             allowed_updates=Update.ALL_TYPES,
             close_loop=False
         )
+    except Exception as e:
+        logging.error(f"Bot runtime error: {e}")
+        raise
 
-    def main():
-        # Create application
-        application = Application.builder().token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4").build()
-
-    # Add conversation handler with the states
+def setup_handlers(application):
+    """Configure all handlers for the bot"""
+    # Conversation handler with all states
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -3278,44 +3280,58 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
-
     application.add_handler(conv_handler)
     
-    # Add command handlers
+    # Additional command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("cancel", cancel))
     
-    # Add callback query handlers
-    application.add_handler(CallbackQueryHandler(handle_offer_response, pattern="^offer_"))
+    # Callback query handlers
+    application.add_handler(CallbackQueryHandler(
+        handle_offer_response, 
+        pattern="^offer_",
+        per_message=True
+    ))
     
-    # Add message handlers
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    # Message handlers
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND, 
+        handle_text
+    ))
     
-    # Add error handler
+    # Error handler
     application.add_error_handler(error_handler)
-    
-    # Initialize database
-    asyncio.get_event_loop().run_until_complete(initialize_db())
-    
-    # Load drug data
-    load_drug_data()
 
-        # Start the bot
-        asyncio.run(run_bot())
-
-    if __name__ == "__main__":
-        # Configure logging
-        logging.basicConfig(
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            level=logging.INFO
-        )
+def main():
+    """Main entry point for the bot"""
+    # Configure logging
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO,
+        handlers=[
+            logging.FileHandler('bot.log'),
+            logging.StreamHandler()
+        ]
+    )
+    
+    try:
+        # Create application
+        application = Application.builder() \
+            .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
+            .build()
         
-        # Run main function
-        try:
-            main()
-        except KeyboardInterrupt:
-            print("Bot stopped by user")
-        except Exception as e:
-            logging.error(f"Fatal error: {e}")
-            raise
+        # Setup all handlers
+        setup_handlers(application)
+        
+        # Start the bot
+        asyncio.run(run_bot(application))
+        
+    except KeyboardInterrupt:
+        logging.info("Bot stopped by user")
+    except Exception as e:
+        logging.error(f"Fatal error in main: {e}")
+        raise
+
+if __name__ == "__main__":
+    main()
       
