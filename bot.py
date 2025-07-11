@@ -3142,10 +3142,39 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.error(f"Error notifying user: {e}")
 
-def main() -> None:
-    """Run the bot."""
-    # Create the Application and pass it your bot's token.
-    application = Application.builder().token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4").build()
+# Add callback query handlers with per_message=True
+    application.add_handler(CallbackQueryHandler(
+        handle_offer_response, 
+        pattern="^offer_",
+        per_message=True
+    ))
+    
+    # Add message handlers
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND, 
+        handle_text
+    ))
+    
+    # Add error handler
+    application.add_error_handler(error_handler)
+    
+    # Initialize database and run bot with modern asyncio
+    async def run_bot():
+        # Initialize database first
+        await initialize_db()
+        
+        # Load drug data
+        load_drug_data()
+        
+        # Run the bot until Ctrl-C
+        await application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            close_loop=False
+        )
+
+    def main():
+        # Create application
+        application = Application.builder().token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4").build()
 
     # Add conversation handler with the states
     conv_handler = ConversationHandler(
@@ -3271,9 +3300,22 @@ def main() -> None:
     # Load drug data
     load_drug_data()
 
-    # Run the bot until the user presses Ctrl-C
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+        # Start the bot
+        asyncio.run(run_bot())
 
-if __name__ == "__main__":
-    main()
+    if __name__ == "__main__":
+        # Configure logging
+        logging.basicConfig(
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            level=logging.INFO
+        )
+        
+        # Run main function
+        try:
+            main()
+        except KeyboardInterrupt:
+            print("Bot stopped by user")
+        except Exception as e:
+            logging.error(f"Fatal error: {e}")
+            raise
       
