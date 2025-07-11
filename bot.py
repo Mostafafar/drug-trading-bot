@@ -3320,6 +3320,167 @@ def main():
             .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
             .build()
         
+async def run_bot(application):
+    """Async function to initialize and run the bot"""
+    try:
+        # Initialize database first
+        await initialize_db()
+        
+        # Load drug data
+        load_drug_data()
+        
+        # Run the bot until Ctrl-C
+        await application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            close_loop=False
+        )
+    except Exception as e:
+        logging.error(f"Bot runtime error: {e}")
+        raise
+
+def setup_handlers(application):
+    """Configure all handlers for the bot"""
+    # Conversation handler with all states
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            # Registration states
+            States.ADMIN_VERIFICATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
+            ],
+            States.REGISTER_PHARMACY_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, register_pharmacy_name)
+            ],
+            States.REGISTER_FOUNDER_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, register_founder_name)
+            ],
+            States.REGISTER_NATIONAL_CARD: [
+                MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_national_card)
+            ],
+            States.REGISTER_LICENSE: [
+                MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license)
+            ],
+            States.REGISTER_MEDICAL_CARD: [
+                MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card)
+            ],
+            States.REGISTER_PHONE: [
+                MessageHandler(filters.CONTACT | (filters.TEXT & ~filters.COMMAND), register_phone)
+            ],
+            States.REGISTER_ADDRESS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, register_address)
+            ],
+            States.REGISTER_LOCATION: [
+                MessageHandler(filters.LOCATION, register_location)
+            ],
+            States.VERIFICATION_CODE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)
+            ],
+            
+            # Drug search and offer states
+            States.SEARCH_DRUG: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
+            ],
+            States.SELECT_PHARMACY: [
+                CallbackQueryHandler(select_pharmacy)
+            ],
+            States.SELECT_ITEMS: [
+                CallbackQueryHandler(select_items)
+            ],
+            States.COMPENSATION_SELECTION: [
+                CallbackQueryHandler(handle_compensation_selection)
+            ],
+            States.COMPENSATION_QUANTITY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_compensation_quantity)
+            ],
+            States.CONFIRM_TOTALS: [
+                CallbackQueryHandler(confirm_totals)
+            ],
+            
+            # Drug addition states
+            States.SEARCH_DRUG_FOR_ADDING: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
+            ],
+            States.SELECT_DRUG_FOR_ADDING: [
+                CallbackQueryHandler(select_drug_for_adding)
+            ],
+            States.ADD_DRUG_DATE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
+                CallbackQueryHandler(add_drug_date)
+            ],
+            States.ADD_DRUG_QUANTITY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
+                CallbackQueryHandler(save_drug_item)
+            ],
+            
+            # Need addition states
+            States.ADD_NEED_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)
+            ],
+            States.ADD_NEED_DESC: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)
+            ],
+            States.ADD_NEED_QUANTITY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
+            ],
+            
+            # Admin states
+            States.ADMIN_UPLOAD_EXCEL: [
+                MessageHandler(filters.Document.ALL | (filters.TEXT & ~filters.COMMAND), handle_excel_upload)
+            ],
+            
+            # Edit states
+            States.EDIT_ITEM: [
+                CallbackQueryHandler(edit_drug_item),
+                CallbackQueryHandler(edit_need_item),
+                CallbackQueryHandler(handle_drug_edit_action),
+                CallbackQueryHandler(handle_need_edit_action),
+                CallbackQueryHandler(handle_drug_deletion),
+                CallbackQueryHandler(handle_need_deletion),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
+            ]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    application.add_handler(conv_handler)
+    
+    # Additional command handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("cancel", cancel))
+    
+    # Callback query handlers
+    application.add_handler(CallbackQueryHandler(
+        handle_offer_response, 
+        pattern="^offer_"
+    ))
+    
+    # Message handlers
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND, 
+        handle_text
+    ))
+    
+    # Error handler
+    application.add_error_handler(error_handler)
+
+def main():
+    """Main entry point for the bot"""
+    # Configure logging
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO,
+        handlers=[
+            logging.FileHandler('bot.log'),
+            logging.StreamHandler()
+        ]
+    )
+    
+    try:
+        # Create application
+        application = Application.builder() \
+            .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
+            .build()
+        
         # Setup all handlers
         setup_handlers(application)
         
