@@ -3243,7 +3243,7 @@ def setup_handlers(application):
             ],
             States.ADD_DRUG_DATE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
-                CallbackQueryHandler(add_drug_date, per_message=True)
+                CallbackQueryHandler(add_drug_date)
             ],
             States.ADD_DRUG_QUANTITY: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
