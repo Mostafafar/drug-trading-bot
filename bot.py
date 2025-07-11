@@ -3,7 +3,7 @@ import re
 import psycopg2
 from psycopg2 import sql, extras
 from telegram.ext import BaseHandler
-from typing import Optional, Awaitable
+from typing import Optional, Awaitable,Union
 import gc
 from telegram.ext import BaseHandler, ContextTypes
 from telegram import Update
