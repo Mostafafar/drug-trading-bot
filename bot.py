@@ -28,7 +28,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes
 )
-from telegram.error import TimedOut
+from telegram.error import TimedOut, NetworkError
 from enum import Enum, auto
 import os
 from pathlib import Path
@@ -360,75 +360,6 @@ async def initialize_db():
     finally:
         if conn:
             conn.close()
-
-asyncio.new_event_loop().run_until_complete(initialize_db())
-load_drug_data()
-
-class UserApprovalMiddleware(BaseHandler):
-    def __init__(self):
-        super().__init__(self.check_update)
-        
-    async def check_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool | Awaitable[bool] | None:
-        """
-        Asynchronously check if user is approved to use the bot.
-        Returns:
-            bool | None | Awaitable[bool]: 
-                - True if allowed
-                - False if not allowed
-                - None if update should be ignored
-        """
-        # Ignore non-Update objects
-        if not isinstance(update, Update):
-            return None
-            
-        # Always allow basic commands
-        if update.message and update.message.text in ['/start', '/register', '/verify', '/admin_verify']:
-            return True
-        
-        # Allow admin approve/reject commands
-        if (update.message and update.message.text and 
-            (update.message.text.startswith('/approve') or update.message.text.startswith('/reject'))):
-            return True
-        
-        # Always allow admin user
-        if update.effective_user and update.effective_user.id == ADMIN_CHAT_ID:
-            return True
-            
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                cursor.execute('''
-                SELECT 1 FROM pharmacies 
-                WHERE user_id = %s AND verified = TRUE
-                ''', (update.effective_user.id,))
-                
-                if cursor.fetchone():
-                    return True
-                
-                # User not approved - send message if possible
-                if update.message:
-                    try:
-                        await update.message.reply_text(
-                            "⚠️ شما مجوز استفاده از ربات را ندارید.\n\n"
-                            "لطفا ابتدا ثبت نام کنید و منتظر تایید مدیریت بمانید.\n"
-                            "برای ثبت نام /register را ارسال کنید."
-                        )
-                    except Exception as msg_error:
-                        logger.error(f"Failed to send approval message: {msg_error}")
-                
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error in approval check: {e}")
-            return False
-            
-        finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception as close_error:
-                    logger.error(f"Error closing connection: {close_error}")
 
 async def ensure_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -1014,8 +945,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_pharmacies"),
         InlineKeyboardButton("❌ لغو", callback_data="cancel")
     ])
-
-    # Create message text
+# Create message text
     message = (
         f"🔹 داروخانه: {pharmacy.get('name', '')}\n\n"
         "💊 داروهای داروخانه | 📝 داروهای شما برای تبادل\n\n"
@@ -1162,6 +1092,7 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                             callback_data=f"comp_{drug['id']}"
                         )])
                     
+                    keyboard.append([InlineKeyboardButton("اتمام انتخاب", callback_data="comp_finish")])
                     keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_totals")])
                     
                     await query.edit_message_text(
@@ -1217,6 +1148,7 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
                             callback_data=f"comp_{drug['id']}"
                         )])
                     
+                    keyboard.append([InlineKeyboardButton("اتمام انتخاب", callback_data="comp_finish")])
                     keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_totals")])
                     
                     await query.edit_message_text(
@@ -1630,7 +1562,8 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # Prepare notification message for pharmacy
                 offer_message = f"📬 پیشنهاد جدید از {buyer.first_name}:\n\n"
-             # Pharmacy drugs
+                
+                # Pharmacy drugs
                 pharmacy_drugs = [
                     item for item in selected_items 
                     if item.get('type') == 'pharmacy_drug'
@@ -2417,6 +2350,7 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         finally:
             if conn:
                 conn.close()
+
 async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2834,8 +2768,7 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطا در ویرایش. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
     
-    # Validate inputs
-    if edit_field == 'quantity':
+            if edit_field == 'quantity':
         try:
             new_value = int(new_value)
             if new_value <= 0:
@@ -2927,841 +2860,197 @@ async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
     
     return await list_my_needs(update, context)
 
-async def handle_match_view(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data.startswith("view_match_"):
-        parts = query.data.split("_")
-        drug_id = int(parts[2])
-        need_id = int(parts[3])
-        
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                
-                # Get drug details
-                cursor.execute('''
-                SELECT di.*, 
-                       p.name AS pharmacy_name
-                FROM drug_items di
-                JOIN pharmacies p ON di.user_id = p.user_id
-                WHERE di.id = %s
-                ''', (drug_id,))
-                drug = cursor.fetchone()
-                
-                if not drug:
-                    await query.edit_message_text("دارو یافت نشد.")
-                    return
-                
-                # Get need details
-                cursor.execute('''
-                SELECT * FROM user_needs WHERE id = %s
-                ''', (need_id,))
-                need = cursor.fetchone()
-                
-                if not need:
-                    await query.edit_message_text("نیاز یافت نشد.")
-                    return
-                
-                # Prepare message
-                message = (
-                    "🔔 تطابق یافت شده:\n\n"
-                    f"نیاز شما: {need['name']}\n"
-                    f"توضیحات نیاز: {need['description'] or 'بدون توضیح'}\n"
-                    f"تعداد مورد نیاز: {need['quantity']}\n\n"
-                    f"داروی موجود: {drug['name']}\n"
-                    f"قیمت: {drug['price']}\n"
-                    f"تاریخ انقضا: {drug['date']}\n"
-                    f"موجودی: {drug['quantity']}\n"
-                    f"داروخانه: {drug['pharmacy_name']}\n\n"
-                    "آیا مایل به تبادل این دارو هستید؟"
-                )
-                
-                keyboard = [
-                    [InlineKeyboardButton("تبادل این دارو", callback_data=f"buy_match_{drug_id}")],
-                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
-                ]
-                
-                await query.edit_message_text(
-                    message,
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-                
-                # Store drug and need in context for purchase flow
-                context.user_data['matched_drug'] = dict(drug)
-                context.user_data['matched_need'] = dict(need)
-                
-        except Exception as e:
-            logger.error(f"Error handling match view: {e}")
-            await query.edit_message_text("خطا در نمایش اطلاعات تطابق.")
-        finally:
-            if conn:
-                conn.close()
-
-async def handle_match_purchase(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "back":
-        await cancel(update, context)
-        return
-
-    if query.data.startswith("buy_match_"):
-        drug_id = int(query.data.split("_")[2])
-        drug = context.user_data.get('matched_drug')
-        need = context.user_data.get('matched_need')
-        
-        if not drug or not need:
-            await query.edit_message_text("خطا در اطلاعات تبادل. لطفا دوباره تلاش کنید.")
-            return
-        
-        # Set up the purchase flow similar to regular search
-        context.user_data['selected_pharmacy'] = {
-            'id': drug['user_id'],
-            'name': drug['pharmacy_name']
-        }
-        
-        # Get pharmacy's drugs (just the matched one)
-        context.user_data['pharmacy_drugs'] = [{
-            'id': drug['id'],
-            'user_id': drug['user_id'],
-            'name': drug['name'],
-            'price': drug['price'],
-            'date': drug['date'],
-            'quantity': drug['quantity']
-        }]
-        
-        # Get buyer's drugs
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                cursor.execute('''
-                SELECT id, name, price, quantity 
-                FROM drug_items 
-                WHERE user_id = %s AND quantity > 0
-                ''', (update.effective_user.id,))
-                buyer_drugs = cursor.fetchall()
-                context.user_data['buyer_drugs'] = [dict(row) for row in buyer_drugs]
-                
-                # Get pharmacy's medical categories
-                cursor.execute('''
-                SELECT mc.id, mc.name 
-                FROM user_categories uc
-                JOIN medical_categories mc ON uc.category_id = mc.id
-                WHERE uc.user_id = %s
-                ''', (drug['user_id'],))
-                pharmacy_categories = cursor.fetchall()
-                context.user_data['pharmacy_categories'] = [dict(row) for row in pharmacy_categories]
-                
-        except Exception as e:
-            logger.error(f"Error fetching data for purchase: {e}")
-            context.user_data['buyer_drugs'] = []
-            context.user_data['pharmacy_categories'] = []
-        finally:
-            if conn:
-                conn.close()
-        
-        # Auto-select the matched drug
-        context.user_data['selected_items'] = [{
-            'id': drug['id'],
-            'name': drug['name'],
-            'price': drug['price'],
-            'quantity': drug['quantity'],
-            'type': 'pharmacy_drug',
-            'selected_quantity': min(need['quantity'], drug['quantity'])
-        }]
-        
-        return await show_two_column_selection(update, context)
-
-async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await ensure_user(update, context)
-    await update.message.reply_text("لطفا نام داروخانه را وارد کنید:")
-    return States.REGISTER_PHARMACY_NAME
-
-async def register_pharmacy_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['pharmacy_name'] = update.message.text
-    await update.message.reply_text("لطفا نام مسئول داروخانه را وارد کنید:")
-    return States.REGISTER_FOUNDER_NAME
-
-async def register_founder_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['founder_name'] = update.message.text
-    await update.message.reply_text("لطفا تصویر کارت ملی را ارسال کنید:")
-    return States.REGISTER_NATIONAL_CARD
-
-async def register_national_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.photo:
-        await update.message.reply_text("لطفا تصویر کارت ملی را ارسال کنید.")
-        return States.REGISTER_NATIONAL_CARD
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancels and ends the conversation."""
+    user = update.message.from_user
+    logger.info("User %s canceled the conversation.", user.first_name)
     
-    file = await context.bot.get_file(update.message.photo[-1].file_id)
-    file_path = await download_file(file, "national_card", update.effective_user.id)
-    context.user_data['national_card_image'] = file_path
-    
-    await update.message.reply_text("لطفا تصویر پروانه کسب را ارسال کنید:")
-    return States.REGISTER_LICENSE
-
-async def register_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.photo:
-        await update.message.reply_text("لطفا تصویر پروانه کسب را ارسال کنید.")
-        return States.REGISTER_LICENSE
-    
-    file = await context.bot.get_file(update.message.photo[-1].file_id)
-    file_path = await download_file(file, "license", update.effective_user.id)
-    context.user_data['license_image'] = file_path
-    
-    await update.message.reply_text("لطفا تصویر کارت نظام پزشکی را ارسال کنید:")
-    return States.REGISTER_MEDICAL_CARD
-
-async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.photo:
-        await update.message.reply_text("لطفا تصویر کارت نظام پزشکی را ارسال کنید.")
-        return States.REGISTER_MEDICAL_CARD
-    
-    file = await context.bot.get_file(update.message.photo[-1].file_id)
-    file_path = await download_file(file, "medical_card", update.effective_user.id)
-    context.user_data['medical_card_image'] = file_path
-    
-    await update.message.reply_text("لطفا شماره تلفن همراه را وارد کنید:")
-    return States.REGISTER_PHONE
-
-async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    phone = update.message.text
-    if not re.match(r'^09\d{9}$', phone):
-        await update.message.reply_text("شماره تلفن نامعتبر است. لطفا شماره را به صورت 09123456789 وارد کنید.")
-        return States.REGISTER_PHONE
-    
-    context.user_data['phone'] = phone
-    
-    # Generate verification code
-    verification_code = str(random.randint(100000, 999999))
-    verification_codes[update.effective_user.id] = verification_code
+    keyboard = [
+        ['اضافه کردن دارو', 'جستجوی دارو'],
+        ['تنظیم شاخه‌های دارویی', 'لیست داروهای من'],
+        ['ثبت نیاز جدید', 'لیست نیازهای من']
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
     
     await update.message.reply_text(
-        f"کد تایید شما: {verification_code}\n\n"
-        "لطفا این کد را برای فروشنده ارسال کرده و پس از تایید، کد را برای ما ارسال کنید."
+        "عملیات کنسل شد. لطفا یک گزینه را انتخاب کنید:",
+        reply_markup=reply_markup
     )
-    return States.VERIFICATION_CODE
-
-async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_code = update.message.text
-    correct_code = verification_codes.get(update.effective_user.id)
     
-    if user_code == correct_code:
-        # Save registration data
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                # Generate unique admin code for pharmacy
-                admin_code = str(random.randint(100000, 999999))
-                
-                cursor.execute('''
-                INSERT INTO pharmacies (
-                    user_id, name, founder_name, national_card_image,
-                    license_image, medical_card_image, phone, admin_code
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ''', (
-                    update.effective_user.id,
-                    context.user_data['pharmacy_name'],
-                    context.user_data['founder_name'],
-                    context.user_data['national_card_image'],
-                    context.user_data['license_image'],
-                    context.user_data['medical_card_image'],
-                    context.user_data['phone'],
-                    admin_code
-                ))
-                
-                # Mark user as verified
-                cursor.execute('''
-                UPDATE users 
-                SET is_verified = TRUE, verification_method = 'code'
-                WHERE id = %s
-                ''', (update.effective_user.id,))
-                
-                conn.commit()
-                
-                await update.message.reply_text(
-                    "✅ اطلاعات شما با موفقیت ثبت شد!\n\n"
-                    f"کد ادمین داروخانه شما: {admin_code}\n\n"
-                    "در حال حاضر حساب شما در انتظار تایید مدیریت است. پس از تایید می‌توانید از ربات استفاده کنید."
-                )
-                
-                # Notify admin
-                try:
-                    await context.bot.send_message(
-                        chat_id=ADMIN_CHAT_ID,
-                        text=f"📝 درخواست ثبت نام جدید:\n\n"
-                             f"🔹 کاربر: @{update.effective_user.username}\n"
-                             f"🔹 داروخانه: {context.user_data['pharmacy_name']}\n"
-                             f"🔹 مسئول: {context.user_data['founder_name']}\n"
-                             f"🔹 کد ادمین: {admin_code}\n\n"
-                             f"برای تایید:\n"
-                             f"/approve_{update.effective_user.id}\n\n"
-                             f"برای رد:\n"
-                             f"/reject_{update.effective_user.id}"
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to notify admin: {e}")
-                
-        except Exception as e:
-            logger.error(f"Error saving registration: {e}")
-            await update.message.reply_text("خطا در ثبت اطلاعات. لطفا دوباره تلاش کنید.")
-        finally:
-            if conn:
-                conn.close()
-        
-        return ConversationHandler.END
-    else:
-        await update.message.reply_text("کد تایید نامعتبر است. لطفا دوباره تلاش کنید.")
-        return States.VERIFICATION_CODE
-
-async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("لطفا شماره تلفن همراه را وارد کنید:")
-    return States.REGISTER_PHONE
-
-async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    conn = None
-    try:
-        conn = get_db_connection()
-        with conn.cursor() as cursor:
-            cursor.execute('''
-            SELECT is_admin FROM users WHERE id = %s
-            ''', (update.effective_user.id,))
-            result = cursor.fetchone()
-            
-            if not result or not result[0]:
-                await update.message.reply_text("شما مجوز انجام این کار را ندارید.")
-                return
-    
-    except Exception as e:
-        logger.error(f"Error checking admin status: {e}")
-        await update.message.reply_text("خطا در بررسی مجوزها.")
-        return
-    finally:
-        if conn:
-            conn.close()
-    
-    parts = update.message.text.split('_')
-    if len(parts) != 2:
-        await update.message.reply_text("فرمت دستور نامعتبر است.")
-        return
-    
-    user_id = int(parts[1])
-    
-    conn = None
-    try:
-        conn = get_db_connection()
-        with conn.cursor() as cursor:
-            # Check if already approved
-            cursor.execute('''
-            SELECT verified FROM pharmacies WHERE user_id = %s
-            ''', (user_id,))
-            result = cursor.fetchone()
-            
-            if result and result[0]:
-                await update.message.reply_text("این داروخانه قبلا تایید شده است.")
-                return
-            
-            # Approve pharmacy
-            cursor.execute('''
-            UPDATE pharmacies 
-            SET verified = TRUE, verified_at = CURRENT_TIMESTAMP, admin_id = %s
-            WHERE user_id = %s
-            ''', (update.effective_user.id, user_id))
-            
-            # Update user verification status
-            cursor.execute('''
-            UPDATE users 
-            SET is_verified = TRUE 
-            WHERE id = %s
-            ''', (user_id,))
-            
-            conn.commit()
-            
-            # Get pharmacy info for notification
-            cursor.execute('''
-            SELECT name, admin_code FROM pharmacies WHERE user_id = %s
-            ''', (user_id,))
-            pharmacy = cursor.fetchone()
-            
-            if pharmacy:
-                # Notify user
-                try:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text=f"✅ داروخانه {pharmacy[0]} توسط مدیریت تایید شد!\n\n"
-                             f"کد ادمین شما: {pharmacy[1]}\n\n"
-                             f"اکنون می‌توانید از تمام امکانات ربات استفاده کنید."
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to notify user: {e}")
-            
-            await update.message.reply_text(f"داروخانه با شناسه {user_id} تایید شد.")
-            
-    except Exception as e:
-        logger.error(f"Error approving user: {e}")
-        await update.message.reply_text("خطا در تایید کاربر.")
-    finally:
-        if conn:
-            conn.close()
-
-async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    conn = None
-    try:
-        conn = get_db_connection()
-        with conn.cursor() as cursor:
-            cursor.execute('''
-            SELECT is_admin FROM users WHERE id = %s
-            ''', (update.effective_user.id,))
-            result = cursor.fetchone()
-            
-            if not result or not result[0]:
-                await update.message.reply_text("شما مجوز انجام این کار را ندارید.")
-                return
-    
-    except Exception as e:
-        logger.error(f"Error checking admin status: {e}")
-        await update.message.reply_text("خطا در بررسی مجوزها.")
-        return
-    finally:
-        if conn:
-            conn.close()
-    
-    parts = update.message.text.split('_')
-    if len(parts) != 2:
-        await update.message.reply_text("فرمت دستور نامعتبر است.")
-        return
-    
-    user_id = int(parts[1])
-    
-    conn = None
-    try:
-        conn = get_db_connection()
-        with conn.cursor() as cursor:
-            # Get pharmacy info before deleting
-            cursor.execute('''
-            SELECT name FROM pharmacies WHERE user_id = %s
-            ''', (user_id,))
-            pharmacy = cursor.fetchone()
-            
-            # Delete pharmacy registration
-            cursor.execute('''
-            DELETE FROM pharmacies WHERE user_id = %s
-            ''', (user_id,))
-            
-            # Reset user verification
-            cursor.execute('''
-            UPDATE users 
-            SET is_verified = FALSE, verification_method = NULL
-            WHERE id = %s
-            ''', (user_id,))
-            
-            conn.commit()
-            
-            # Notify user
-            if pharmacy:
-                try:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text=f"❌ درخواست ثبت نام داروخانه {pharmacy[0]} رد شد.\n\n"
-                             "لطفا برای اطلاعات بیشتر با پشتیبانی تماس بگیرید."
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to notify user: {e}")
-            
-            await update.message.reply_text(f"کاربر با شناسه {user_id} رد شد.")
-            
-    except Exception as e:
-        logger.error(f"Error rejecting user: {e}")
-        await update.message.reply_text("خطا در رد کاربر.")
-    finally:
-        if conn:
-            conn.close()
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message:
-        await update.message.reply_text("عملیات لغو شد.", reply_markup=ReplyKeyboardRemove())
-    elif update.callback_query:
-        await update.callback_query.edit_message_text("عملیات لغو شد.")
-    
+    # Clear user data
     context.user_data.clear()
+    
     return ConversationHandler.END
 
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Log errors with memory information"""
-    logger.error(f"Memory before cleanup: {tracemalloc.get_traced_memory()}")
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log the error and send a telegram message if possible."""
+    logger.error("Exception while handling an update:", exc_info=context.error)
     
-    # Log the full traceback
-    tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
-    tb_string = ''.join(tb_list)
-    logger.error(f"Full traceback:\n{tb_string}")
+    # Try to send error message to admin
+    try:
+        tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
+        tb_string = ''.join(tb_list)
+        
+        error_message = (
+            f"An exception was raised while handling an update\n"
+            f"<pre>update = {html.escape(json.dumps(update.to_dict(), indent=2, ensure_ascii=False))}"
+            "</pre>\n\n"
+            f"<pre>context.chat_data = {html.escape(str(context.chat_data))}</pre>\n\n"
+            f"<pre>context.user_data = {html.escape(str(context.user_data))}</pre>\n\n"
+            f"<pre>{html.escape(tb_string)}</pre>"
+        )
+        
+        # Split long messages
+        for i in range(0, len(error_message), 4096):
+            await context.bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                text=error_message[i:i+4096],
+                parse_mode=ParseMode.HTML
+            )
+    except Exception as e:
+        logger.error(f"Error sending error message: {e}")
     
-    # Don't send error messages for callback queries if update is None
-    if update is None:
-        logger.error("Update is None, can't send error message to user")
-        gc.collect()
-    else:
-        try:
-            # Different error handling for different error types
-            if isinstance(context.error, TimedOut):
-                error_msg = "⏳ زمان پاسخگویی به درخواست شما به پایان رسید. لطفا دوباره تلاش کنید."
-            elif isinstance(context.error, psycopg2.Error):
-                error_msg = "⚠️ خطایی در ارتباط با پایگاه داده رخ داد. لطفا چند لحظه صبر کنید و دوباره تلاش کنید."
-            elif isinstance(context.error, ValueError):
-                error_msg = "⚠️ مقدار وارد شده نامعتبر است. لطفا اطلاعات را بررسی کرده و مجددا ارسال نمایید."
-            else:
-                error_msg = "⚠️ خطایی رخ داده است. لطفا دوباره تلاش کنید."
-            
-            # Send appropriate message to user
-            if update.callback_query:
-                await update.callback_query.answer(error_msg, show_alert=True)
-            elif update.message:
-                await update.message.reply_text(error_msg)
-                
-        except Exception as e:
-            logger.error(f"Failed to handle error: {e}")
-            try:
-                if update.message:
-                    await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-            except Exception as fallback_error:
-                logger.error(f"Even fallback error handling failed: {fallback_error}")
-    
-    logger.error(f"Memory after cleanup: {tracemalloc.get_traced_memory()}")
-    logger.error(f"Garbage collected: {gc.get_count()}")
+    # Try to notify user
+    try:
+        if update and update.effective_message:
+            await update.effective_message.reply_text(
+                "⚠️ خطایی رخ داده است. لطفا دوباره تلاش کنید."
+            )
+    except Exception as e:
+        logger.error(f"Error notifying user: {e}")
 
-async def main():
+def main() -> None:
+    """Run the bot."""
+    # Create the Application and pass it your bot's token.
     application = Application.builder().token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4").build()
-    await application.bot.initialize()
-    # Add middleware
-    application.add_handler(UserApprovalMiddleware(), group=-1)
-    
-    # Drug search and trading handler
-    trade_conv = ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.Regex('^جستجوی دارو$'), search_drug),
-            CallbackQueryHandler(handle_match_purchase, pattern=r"^buy_match_\d+$")
-        ],
-        states={
-            States.SEARCH_DRUG: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)],
-            States.SELECT_PHARMACY: [CallbackQueryHandler(select_pharmacy)],
-            States.SELECT_ITEMS: [CallbackQueryHandler(select_items)],
-            States.CONFIRM_TOTALS: [CallbackQueryHandler(confirm_totals)],
-            States.COMPENSATION_SELECTION: [CallbackQueryHandler(handle_compensation_selection)],
-            States.COMPENSATION_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_compensation_quantity)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=True
-    )
 
-    # Drug addition handler
-    add_drug_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item)],
+    # Add conversation handler with the states
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
         states={
-            States.SEARCH_DRUG_FOR_ADDING: [MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)],
-            States.SELECT_DRUG_FOR_ADDING: [CallbackQueryHandler(select_drug_for_adding)],
-            States.ADD_DRUG_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date)],
-            States.ADD_DRUG_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=True
-    )
-
-    # Medical categories setup handler
-    categories_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex('^تنظیم شاخه‌های دارویی$'), setup_medical_categories)],
-        states={
-            States.SELECT_NEED_CATEGORY: [CallbackQueryHandler(toggle_category)],
-        },
-        fallbacks=[
-            CallbackQueryHandler(save_categories, pattern="^save_categories$"),
-            CommandHandler('cancel', cancel)
-        ],
-        per_message=True
-    )
-
-    # Need addition handler
-    need_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex('^ثبت نیاز جدید$'), add_need)],
-        states={
-            States.ADD_NEED_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)],
-            States.ADD_NEED_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)],
-            States.ADD_NEED_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=True
-    )
-
-    # Registration handler
-    registration_conv = ConversationHandler(
-        entry_points=[CommandHandler('register', register)],
-        states={
-            States.REGISTER_PHARMACY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_pharmacy_name)],
-            States.REGISTER_FOUNDER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_founder_name)],
-            States.REGISTER_NATIONAL_CARD: [MessageHandler(filters.PHOTO, register_national_card)],
-            States.REGISTER_LICENSE: [MessageHandler(filters.PHOTO, register_license)],
-            States.REGISTER_MEDICAL_CARD: [MessageHandler(filters.PHOTO, register_medical_card)],
-            States.REGISTER_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_phone)],
-            States.VERIFICATION_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=True
-    )
-
-    # Verification handler
-    verification_conv = ConversationHandler(
-        entry_points=[CommandHandler('verify', verify_command)],
-        states={
-            States.REGISTER_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_phone)],
-            States.VERIFICATION_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=True
-    )
-
-    # Admin verification handler
-    admin_verify_conv = ConversationHandler(
-        entry_points=[
-            CommandHandler('admin_verify', admin_verify_start),
-            CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$")
-        ],
-        states={
-            States.ADMIN_VERIFICATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=True
-    )
-
-    # Admin Excel upload handler
-    admin_excel_conv = ConversationHandler(
-        entry_points=[CommandHandler('upload_excel', upload_excel_start)],
-        states={
+            # Registration states
+            States.ADMIN_VERIFICATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
+            ],
+            States.REGISTER_PHARMACY_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, register_pharmacy_name)
+            ],
+            States.REGISTER_FOUNDER_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, register_founder_name)
+            ],
+            States.REGISTER_NATIONAL_CARD: [
+                MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_national_card)
+            ],
+            States.REGISTER_LICENSE: [
+                MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license)
+            ],
+            States.REGISTER_MEDICAL_CARD: [
+                MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card)
+            ],
+            States.REGISTER_PHONE: [
+                MessageHandler(filters.CONTACT | (filters.TEXT & ~filters.COMMAND), register_phone)
+            ],
+            States.REGISTER_ADDRESS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, register_address)
+            ],
+            States.REGISTER_LOCATION: [
+                MessageHandler(filters.LOCATION, register_location)
+            ],
+            States.VERIFICATION_CODE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)
+            ],
+            
+            # Drug search and offer states
+            States.SEARCH_DRUG: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
+            ],
+            States.SELECT_PHARMACY: [
+                CallbackQueryHandler(select_pharmacy)
+            ],
+            States.SELECT_ITEMS: [
+                CallbackQueryHandler(select_items)
+            ],
+            States.COMPENSATION_SELECTION: [
+                CallbackQueryHandler(handle_compensation_selection)
+            ],
+            States.COMPENSATION_QUANTITY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_compensation_quantity)
+            ],
+            States.CONFIRM_TOTALS: [
+                CallbackQueryHandler(confirm_totals)
+            ],
+            
+            # Drug addition states
+            States.SEARCH_DRUG_FOR_ADDING: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
+            ],
+            States.SELECT_DRUG_FOR_ADDING: [
+                CallbackQueryHandler(select_drug_for_adding)
+            ],
+            States.ADD_DRUG_DATE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
+                CallbackQueryHandler(add_drug_date)
+            ],
+            States.ADD_DRUG_QUANTITY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
+                CallbackQueryHandler(save_drug_item)
+            ],
+            
+            # Need addition states
+            States.ADD_NEED_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)
+            ],
+            States.ADD_NEED_DESC: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)
+            ],
+            States.ADD_NEED_QUANTITY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
+            ],
+            
+            # Admin states
             States.ADMIN_UPLOAD_EXCEL: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_excel_upload),
-                MessageHandler(filters.Document.ALL, handle_excel_upload)
+                MessageHandler(filters.Document.ALL | (filters.TEXT & ~filters.COMMAND), handle_excel_upload)
             ],
+            
+            # Edit states
+            States.EDIT_ITEM: [
+                CallbackQueryHandler(edit_drug_item),
+                CallbackQueryHandler(edit_need_item),
+                CallbackQueryHandler(handle_drug_edit_action),
+                CallbackQueryHandler(handle_need_edit_action),
+                CallbackQueryHandler(handle_drug_deletion),
+                CallbackQueryHandler(handle_need_deletion),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
+            ]
         },
-        fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=True
+        fallbacks=[CommandHandler("cancel", cancel)],
     )
 
-    # Edit items handler
-    edit_conv = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
-            CallbackQueryHandler(edit_needs, pattern="^edit_needs$")
-        ]),
-        
-async def main():
-    """Main async function to initialize and run the bot."""
-    try:
-        # Initialize database
-        await initialize_db()
-        
-        # Load drug data
-        load_drug_data()
-
-        # Create application with bot token
-        application = Application.builder() \
-            .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
-            .build()
-
-        # Initialize the bot explicitly
-        await application.bot.initialize()
-
-        # Add middleware
-        application.add_handler(UserApprovalMiddleware(), group=-1)
-
-        # ========= CONVERSATION HANDLERS =========
-
-        # Drug search and trading handler
-        trade_conv = ConversationHandler(
-            entry_points=[
-                MessageHandler(filters.Regex('^جستجوی دارو$'), search_drug),
-                CallbackQueryHandler(handle_match_purchase, pattern=r"^buy_match_\d+$")
-            ],
-            states={
-                States.SEARCH_DRUG: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)],
-                States.SELECT_PHARMACY: [CallbackQueryHandler(select_pharmacy)],
-                States.SELECT_ITEMS: [CallbackQueryHandler(select_items)],
-                States.CONFIRM_TOTALS: [CallbackQueryHandler(confirm_totals)],
-                States.COMPENSATION_SELECTION: [CallbackQueryHandler(handle_compensation_selection)],
-                States.COMPENSATION_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_compensation_quantity)],
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            per_message=True
-        )
-
-        # Drug addition handler
-        add_drug_conv = ConversationHandler(
-            entry_points=[MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item)],
-            states={
-                States.SEARCH_DRUG_FOR_ADDING: [MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)],
-                States.SELECT_DRUG_FOR_ADDING: [CallbackQueryHandler(select_drug_for_adding)],
-                States.ADD_DRUG_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date)],
-                States.ADD_DRUG_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item)],
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            per_message=True
-        )
-
-        # Medical categories setup handler
-        categories_conv = ConversationHandler(
-            entry_points=[MessageHandler(filters.Regex('^تنظیم شاخه‌های دارویی$'), setup_medical_categories)],
-            states={
-                States.SELECT_NEED_CATEGORY: [CallbackQueryHandler(toggle_category)],
-            },
-            fallbacks=[
-                CallbackQueryHandler(save_categories, pattern="^save_categories$"),
-                CommandHandler('cancel', cancel)
-            ],
-            per_message=True
-        )
-
-        # Need addition handler
-        need_conv = ConversationHandler(
-            entry_points=[MessageHandler(filters.Regex('^ثبت نیاز جدید$'), add_need)],
-            states={
-                States.ADD_NEED_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)],
-                States.ADD_NEED_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)],
-                States.ADD_NEED_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)],
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            per_message=True
-        )
-
-        # Registration handler
-        registration_conv = ConversationHandler(
-            entry_points=[CommandHandler('register', register)],
-            states={
-                States.REGISTER_PHARMACY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_pharmacy_name)],
-                States.REGISTER_FOUNDER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_founder_name)],
-                States.REGISTER_NATIONAL_CARD: [MessageHandler(filters.PHOTO, register_national_card)],
-                States.REGISTER_LICENSE: [MessageHandler(filters.PHOTO, register_license)],
-                States.REGISTER_MEDICAL_CARD: [MessageHandler(filters.PHOTO, register_medical_card)],
-                States.REGISTER_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_phone)],
-                States.VERIFICATION_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)],
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            per_message=True
-        )
-
-        # Verification handler
-        verification_conv = ConversationHandler(
-            entry_points=[CommandHandler('verify', verify_command)],
-            states={
-                States.REGISTER_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_phone)],
-                States.VERIFICATION_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)],
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            per_message=True
-        )
-
-        # Admin verification handler
-        admin_verify_conv = ConversationHandler(
-            entry_points=[
-                CommandHandler('admin_verify', admin_verify_start),
-                CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$")
-            ],
-            states={
-                States.ADMIN_VERIFICATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)],
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            per_message=True
-        )
-
-        # Admin Excel upload handler
-        admin_excel_conv = ConversationHandler(
-            entry_points=[CommandHandler('upload_excel', upload_excel_start)],
-            states={
-                States.ADMIN_UPLOAD_EXCEL: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_excel_upload),
-                    MessageHandler(filters.Document.ALL, handle_excel_upload)
-                ],
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            per_message=True
-        )
-
-        # Edit items handler
-        edit_conv = ConversationHandler(
-            entry_points=[
-                CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
-                CallbackQueryHandler(edit_needs, pattern="^edit_needs$")
-            ],
-            states={
-                States.EDIT_ITEM: [
-                    CallbackQueryHandler(edit_drug_item, pattern=r"^edit_drug_\d+$"),
-                    CallbackQueryHandler(edit_need_item, pattern=r"^edit_need_\d+$"),
-                    CallbackQueryHandler(handle_drug_edit_action),
-                    CallbackQueryHandler(handle_need_edit_action),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit),
-                    CallbackQueryHandler(handle_drug_deletion, pattern=r"^confirm_delete$"),
-                    CallbackQueryHandler(handle_need_deletion, pattern=r"^confirm_need_delete$")
-                ],
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            per_message=True
-        )
-
-        # ========= REGULAR HANDLERS =========
-
-        # Command handlers
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("approve", approve_user))
-        application.add_handler(CommandHandler("reject", reject_user))
-
-        # Conversation handlers
-        application.add_handler(trade_conv)
-        application.add_handler(add_drug_conv)
-        application.add_handler(categories_conv)
-        application.add_handler(need_conv)
-        application.add_handler(registration_conv)
-        application.add_handler(verification_conv)
-        application.add_handler(admin_verify_conv)
-        application.add_handler(admin_excel_conv)
-        application.add_handler(edit_conv)
-
-        # Message handlers
-        application.add_handler(MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs))
-        application.add_handler(MessageHandler(filters.Regex('^لیست نیازهای من$'), list_my_needs))
-
-        # Callback query handlers
-        application.add_handler(CallbackQueryHandler(
-            handle_offer_response, 
-            pattern=r"^offer_(accept|reject)_\d+$"
-        ))
-        application.add_handler(CallbackQueryHandler(
-            handle_match_view,
-            pattern=r"^view_match_\d+_\d+$"
-        ))
-
-        # Error handler
-        application.add_error_handler(error_handler)
-        
-        # Start polling
-        await application.run_polling()
-
-    except Exception as e:
-        logging.critical(f"Fatal error in main: {e}")
-        raise
-
-if __name__ == '__main__':
-    # Configure logging
-    logging.basicConfig(
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.INFO,
-        filename='bot.log',
-        filemode='a'
-    )
-    logger = logging.getLogger(__name__)
+    application.add_handler(conv_handler)
     
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
-    except Exception as e:
-        logger.critical(f"Unhandled exception: {e}")
-        raise
+    # Add command handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("cancel", cancel))
+    
+    # Add callback query handlers
+    application.add_handler(CallbackQueryHandler(handle_offer_response, pattern="^offer_"))
+    
+    # Add message handlers
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    
+    # Add error handler
+    application.add_error_handler(error_handler)
+    
+    # Initialize database
+    asyncio.get_event_loop().run_until_complete(initialize_db())
+    
+    # Load drug data
+    load_drug_data()
+
+    # Run the bot until the user presses Ctrl-C
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    main()
+      
