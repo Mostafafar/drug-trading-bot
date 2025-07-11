@@ -3433,7 +3433,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     application = Application.builder().token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4").build()
-    
+    await application.bot.initialize()
     # Add middleware
     application.add_handler(UserApprovalMiddleware(), group=-1)
     
