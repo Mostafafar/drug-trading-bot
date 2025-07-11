@@ -964,6 +964,19 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await ensure_user(update, context)
     await update.message.reply_text("لطفا نام دارویی که می‌خواهید جستجو کنید را وارد کنید:")
     return States.SEARCH_DRUG
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle regular text messages that aren't part of any conversation"""
+    await update.message.reply_text(
+        "لطفا از منوی اصلی یکی از گزینه‌ها را انتخاب کنید.",
+        reply_markup=ReplyKeyboardMarkup(
+            [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['تنظیم شاخه‌های دارویی', 'لیست داروهای من'],
+                ['ثبت نیاز جدید', 'لیست نیازهای من']
+            ],
+            resize_keyboard=True
+        )
+    )
 
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
