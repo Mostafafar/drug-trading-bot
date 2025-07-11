@@ -42,6 +42,9 @@ import openpyxl
 from io import BytesIO
 import asyncio
 import tracemalloc
+import html
+from telegram.constants import ParseMode
+
 tracemalloc.start()
 
 logger = logging.getLogger(__name__)
@@ -615,6 +618,7 @@ async def admin_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         if conn:
             conn.close()
+
 async def register_pharmacy_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Stores the pharmacy name and asks for founder name."""
     pharmacy_name = update.message.text
@@ -964,6 +968,7 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await ensure_user(update, context)
     await update.message.reply_text("لطفا نام دارویی که می‌خواهید جستجو کنید را وارد کنید:")
     return States.SEARCH_DRUG
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle regular text messages that aren't part of any conversation"""
     await update.message.reply_text(
@@ -1168,7 +1173,8 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_pharmacies"),
         InlineKeyboardButton("❌ لغو", callback_data="cancel")
     ])
-# Create message text
+
+    # Create message text
     message = (
         f"🔹 داروخانه: {pharmacy.get('name', '')}\n\n"
         "💊 داروهای داروخانه | 📝 داروهای شما برای تبادل\n\n"
@@ -1616,7 +1622,6 @@ async def handle_compensation_quantity(update: Update, context: ContextTypes.DEF
                 f"لطفا عددی بین 1 و {current_item.get('quantity', 0)} وارد کنید."
             )
             return States.COMPENSATION_QUANTITY
-        
         # Calculate compensation value
         comp_value = parse_price(current_item['price']) * quantity
         
@@ -1841,8 +1846,7 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"💵 تفاوت نهایی: {abs(difference):,}\n\n"
                     f"🆔 کد پیشنهاد: {offer_id}\n"
                     "برای پاسخ به این پیشنهاد از دکمه‌های زیر استفاده کنید:"
-                )
-                
+                    )
                 # Create response keyboard
                 keyboard = [
                     [InlineKeyboardButton("✅ قبول", callback_data=f"offer_accept_{offer_id}")],
@@ -2269,8 +2273,7 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-            
-            # Get all available categories
+           # Get all available categories
             cursor.execute('SELECT id, name FROM medical_categories')
             all_categories = cursor.fetchall()
             
@@ -3142,22 +3145,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.error(f"Error notifying user: {e}")
 
-# Add callback query handlers with per_message=True
-    application.add_handler(CallbackQueryHandler(
-        handle_offer_response, 
-        pattern="^offer_",
-        per_message=True
-    ))
-    
-    # Add message handlers
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND, 
-        handle_text
-    ))
-    
-    # Add error handler
-    application.add_error_handler(error_handler)
-
 async def run_bot(application):
     """Async function to initialize and run the bot"""
     try:
@@ -3249,8 +3236,7 @@ def setup_handlers(application):
                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
                 CallbackQueryHandler(save_drug_item)
             ],
-            
-            # Need addition states
+              # Need addition states
             States.ADD_NEED_NAME: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)
             ],
