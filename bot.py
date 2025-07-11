@@ -3431,7 +3431,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Memory after cleanup: {tracemalloc.get_traced_memory()}")
     logger.error(f"Garbage collected: {gc.get_count()}")
 
-def main():
+async def main():
     application = Application.builder().token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4").build()
     await application.bot.initialize()
     # Add middleware
@@ -3601,13 +3601,30 @@ def main():
     ))
     
     # Add error handler
-    application.add_error_handler(error_handler)
-    
-    # Start the bot
-    await application.run_polling()
+        application.add_error_handler(error_handler)
+        
+        # Start polling
+        await application.run_polling()
+
+    except Exception as e:
+        logging.critical(f"Fatal error in main: {e}")
+        raise
 
 if __name__ == '__main__':
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(initialize_db())
-    main()
+    # Configure logging
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO,
+        filename='bot.log',
+        filemode='a'
+    )
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Run the main async function
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.critical(f"Unhandled exception: {e}")
+        raise
