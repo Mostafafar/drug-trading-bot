@@ -2765,18 +2765,18 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     need = context.user_data.get('editing_need')
     
     if not edit_field or not need:
-        await update.message.reply_text("خطا در ویرایش. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
-    
-            if edit_field == 'quantity':
-        try:
-            new_value = int(new_value)
-            if new_value <= 0:
-                await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
-                return States.EDIT_ITEM
-        except ValueError:
-            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
+    await update.message.reply_text("خطا در ویرایش. لطفا دوباره تلاش کنید.")
+    return ConversationHandler.END
+
+if edit_field == 'quantity':
+    try:
+        new_value = int(new_value)
+        if new_value <= 0:
+            await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
             return States.EDIT_ITEM
+    except ValueError:
+        await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
+        return States.EDIT_ITEM
     
     conn = None
     try:
