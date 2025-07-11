@@ -3,7 +3,7 @@ import re
 import psycopg2
 from psycopg2 import sql, extras
 from telegram.ext import BaseHandler
-from typing import Optional, Awaitable,Union
+from typing import Optional, Awaitable
 import gc
 from telegram.ext import BaseHandler, ContextTypes
 from telegram import Update
@@ -368,12 +368,14 @@ class UserApprovalMiddleware(BaseHandler):
     def __init__(self):
         super().__init__(self.check_update)
         
-    async def check_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[Union[bool, Awaitable[bool]]]:
+    async def check_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool | Awaitable[bool] | None:
         """
-        Asynchronously check if user is approved to use the bot
+        Asynchronously check if user is approved to use the bot.
         Returns:
-            bool: True if allowed, False if not allowed
-            None: if update should be ignored
+            bool | None | Awaitable[bool]: 
+                - True if allowed
+                - False if not allowed
+                - None if update should be ignored
         """
         # Ignore non-Update objects
         if not isinstance(update, Update):
