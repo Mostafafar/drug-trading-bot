@@ -368,7 +368,7 @@ class UserApprovalMiddleware(BaseHandler):
     def __init__(self):
         super().__init__(self.check_update)
         
-    async def check_update(self, update: object) -> Optional[bool]:
+    async def check_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[Union[bool, Awaitable[bool]]]:
         """
         Asynchronously check if user is approved to use the bot
         Returns:
