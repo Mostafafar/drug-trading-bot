@@ -3219,19 +3219,19 @@ def setup_handlers(application):
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
             ],
             States.SELECT_PHARMACY: [
-                CallbackQueryHandler(select_pharmacy, per_message=True)
+                CallbackQueryHandler(select_pharmacy)
             ],
             States.SELECT_ITEMS: [
-                CallbackQueryHandler(select_items, per_message=True)
+                CallbackQueryHandler(select_items)
             ],
             States.COMPENSATION_SELECTION: [
-                CallbackQueryHandler(handle_compensation_selection, per_message=True)
+                CallbackQueryHandler(handle_compensation_selection)
             ],
             States.COMPENSATION_QUANTITY: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_compensation_quantity)
             ],
             States.CONFIRM_TOTALS: [
-                CallbackQueryHandler(confirm_totals, per_message=True)
+                CallbackQueryHandler(confirm_totals)
             ],
             
             # Drug addition states
@@ -3239,7 +3239,7 @@ def setup_handlers(application):
                 MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
             ],
             States.SELECT_DRUG_FOR_ADDING: [
-                CallbackQueryHandler(select_drug_for_adding, per_message=True)
+                CallbackQueryHandler(select_drug_for_adding)
             ],
             States.ADD_DRUG_DATE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
@@ -3247,7 +3247,7 @@ def setup_handlers(application):
             ],
             States.ADD_DRUG_QUANTITY: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
-                CallbackQueryHandler(save_drug_item, per_message=True)
+                CallbackQueryHandler(save_drug_item)
             ],
             
             # Need addition states
@@ -3268,12 +3268,12 @@ def setup_handlers(application):
             
             # Edit states
             States.EDIT_ITEM: [
-                CallbackQueryHandler(edit_drug_item, per_message=True),
-                CallbackQueryHandler(edit_need_item, per_message=True),
-                CallbackQueryHandler(handle_drug_edit_action, per_message=True),
-                CallbackQueryHandler(handle_need_edit_action, per_message=True),
-                CallbackQueryHandler(handle_drug_deletion, per_message=True),
-                CallbackQueryHandler(handle_need_deletion, per_message=True),
+                CallbackQueryHandler(edit_drug_item),
+                CallbackQueryHandler(edit_need_item),
+                CallbackQueryHandler(handle_drug_edit_action),
+                CallbackQueryHandler(handle_need_edit_action),
+                CallbackQueryHandler(handle_drug_deletion),
+                CallbackQueryHandler(handle_need_deletion),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
             ]
