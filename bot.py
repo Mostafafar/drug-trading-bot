@@ -3290,7 +3290,6 @@ def setup_handlers(application):
     application.add_handler(CallbackQueryHandler(
         handle_offer_response, 
         pattern="^offer_",
-        per_message=True
     ))
     
     # Message handlers
