@@ -3604,7 +3604,7 @@ def main():
     application.add_error_handler(error_handler)
     
     # Start the bot
-    application.run_polling()
+    await application.run_polling()
 
 if __name__ == '__main__':
     loop = asyncio.new_event_loop()
