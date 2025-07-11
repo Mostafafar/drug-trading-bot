@@ -3552,9 +3552,9 @@ async def main():
             CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
             CallbackQueryHandler(edit_needs, pattern="^edit_needs$")
         ]),
-        states={
+        states=
 async def main():
-    """Main async function to initialize and run the bot."""}
+    """Main async function to initialize and run the bot."""
     try:
         # Initialize database
         await initialize_db()
