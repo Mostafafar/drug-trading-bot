@@ -3157,7 +3157,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     # Add error handler
     application.add_error_handler(error_handler)
-    
 
 async def run_bot(application):
     """Async function to initialize and run the bot"""
