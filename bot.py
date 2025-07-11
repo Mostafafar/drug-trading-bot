@@ -615,6 +615,216 @@ async def admin_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         if conn:
             conn.close()
+async def register_pharmacy_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stores the pharmacy name and asks for founder name."""
+    pharmacy_name = update.message.text
+    context.user_data['pharmacy_name'] = pharmacy_name
+    
+    await update.message.reply_text(
+        "لطفا نام مالک/مدیر داروخانه را وارد کنید:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return States.REGISTER_FOUNDER_NAME
+
+async def register_founder_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stores the founder name and asks for national card photo."""
+    founder_name = update.message.text
+    context.user_data['founder_name'] = founder_name
+    
+    await update.message.reply_text(
+        "لطفا تصویر کارت ملی را ارسال کنید:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return States.REGISTER_NATIONAL_CARD
+
+async def register_national_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stores the national card photo and asks for license photo."""
+    photo_file = await update.message.photo[-1].get_file()
+    file_path = await download_file(photo_file, "national_card", update.effective_user.id)
+    context.user_data['national_card'] = file_path
+    
+    await update.message.reply_text(
+        "لطفا تصویر پروانه داروخانه را ارسال کنید:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return States.REGISTER_LICENSE
+
+async def register_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stores the license photo and asks for medical card photo."""
+    photo_file = await update.message.photo[-1].get_file()
+    file_path = await download_file(photo_file, "license", update.effective_user.id)
+    context.user_data['license'] = file_path
+    
+    await update.message.reply_text(
+        "لطفا تصویر کارت نظام پزشکی را ارسال کنید:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return States.REGISTER_MEDICAL_CARD
+
+async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stores the medical card photo and asks for phone number."""
+    photo_file = await update.message.photo[-1].get_file()
+    file_path = await download_file(photo_file, "medical_card", update.effective_user.id)
+    context.user_data['medical_card'] = file_path
+    
+    keyboard = [[KeyboardButton("اشتراک گذاری شماره تلفن", request_contact=True)]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    
+    await update.message.reply_text(
+        "لطفا شماره تلفن خود را با استفاده از دکمه زیر ارسال کنید:",
+        reply_markup=reply_markup
+    )
+    return States.REGISTER_PHONE
+
+async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stores the phone number and asks for address."""
+    if update.message.contact:
+        phone = update.message.contact.phone_number
+    else:
+        phone = update.message.text
+    
+    context.user_data['phone'] = phone
+    
+    await update.message.reply_text(
+        "لطفا آدرس داروخانه را وارد کنید:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return States.REGISTER_ADDRESS
+
+async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stores the address and asks for location."""
+    address = update.message.text
+    context.user_data['address'] = address
+    
+    keyboard = [[KeyboardButton("اشتراک گذاری موقعیت مکانی", request_location=True)]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    
+    await update.message.reply_text(
+        "لطفا موقعیت مکانی داروخانه را با استفاده از دکمه زیر ارسال کنید:",
+        reply_markup=reply_markup
+    )
+    return States.REGISTER_LOCATION
+
+async def register_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stores the location and completes registration."""
+    location = update.message.location
+    context.user_data['location_lat'] = location.latitude
+    context.user_data['location_lng'] = location.longitude
+    
+    # Generate verification code
+    verification_code = str(random.randint(1000, 9999))
+    context.user_data['verification_code'] = verification_code
+    
+    # Save to database (incomplete registration)
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute('''
+            INSERT INTO users (id, first_name, last_name, username, phone, verification_code)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                username = EXCLUDED.username,
+                phone = EXCLUDED.phone,
+                verification_code = EXCLUDED.verification_code
+            ''', (
+                update.effective_user.id,
+                update.effective_user.first_name,
+                update.effective_user.last_name,
+                update.effective_user.username,
+                context.user_data.get('phone'),
+                verification_code
+            ))
+            
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Error saving user: {e}")
+        await update.message.reply_text("خطا در ثبت اطلاعات. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+    finally:
+        if conn:
+            conn.close()
+    
+    await update.message.reply_text(
+        f"کد تایید شما: {verification_code}\n\n"
+        "لطفا این کد را برای تکمیل ثبت نام وارد کنید:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return States.VERIFICATION_CODE
+
+async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Verifies the code and completes registration."""
+    user_code = update.message.text.strip()
+    stored_code = context.user_data.get('verification_code')
+    
+    if user_code == stored_code:
+        # Complete registration in database
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                # Save pharmacy info
+                cursor.execute('''
+                INSERT INTO pharmacies (
+                    user_id, name, founder_name, national_card_image,
+                    license_image, medical_card_image, phone, address,
+                    location_lat, location_lng, verified
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ''', (
+                    update.effective_user.id,
+                    context.user_data.get('pharmacy_name'),
+                    context.user_data.get('founder_name'),
+                    context.user_data.get('national_card'),
+                    context.user_data.get('license'),
+                    context.user_data.get('medical_card'),
+                    context.user_data.get('phone'),
+                    context.user_data.get('address'),
+                    context.user_data.get('location_lat'),
+                    context.user_data.get('location_lng'),
+                    False  # Needs admin verification
+                ))
+                
+                # Mark user as verified
+                cursor.execute('''
+                UPDATE users 
+                SET is_verified = TRUE 
+                WHERE id = %s
+                ''', (update.effective_user.id,))
+                
+                conn.commit()
+                
+                await update.message.reply_text(
+                    "✅ ثبت نام شما با موفقیت انجام شد!\n\n"
+                    "اطلاعات شما برای تایید نهایی به ادمین ارسال شد. پس از تایید می‌توانید از تمام امکانات ربات استفاده کنید."
+                )
+                
+                # Notify admin
+                try:
+                    await context.bot.send_message(
+                        chat_id=ADMIN_CHAT_ID,
+                        text=f"📌 درخواست ثبت نام جدید:\n\n"
+                             f"داروخانه: {context.user_data.get('pharmacy_name')}\n"
+                             f"مدیر: {context.user_data.get('founder_name')}\n"
+                             f"تلفن: {context.user_data.get('phone')}\n"
+                             f"آدرس: {context.user_data.get('address')}\n\n"
+                             f"برای تایید از دستور /verify_{update.effective_user.id} استفاده کنید."
+                    )
+                except Exception as e:
+                    logger.error(f"Error notifying admin: {e}")
+                
+        except Exception as e:
+            logger.error(f"Error completing registration: {e}")
+            await update.message.reply_text("خطا در تکمیل ثبت نام. لطفا دوباره تلاش کنید.")
+        finally:
+            if conn:
+                conn.close()
+        
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text("کد تایید نامعتبر است. لطفا دوباره تلاش کنید.")
+        return States.VERIFICATION_CODE
 
 async def upload_excel_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = None
