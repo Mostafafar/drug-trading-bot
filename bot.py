@@ -3316,6 +3316,9 @@ def main():
     except Exception as e:
         logging.error(f"Fatal error in main: {e}")
         raise
+def main():
+ """Entry point"""
+ asyncio.run(main_async())
 
 if __name__ == "__main__":
     main()
