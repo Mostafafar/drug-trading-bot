@@ -2,6 +2,9 @@ import time
 import re
 import psycopg2
 from psycopg2 import sql, extras
+import warnings
+from telegram.warnings import PTBUserWarning
+warnings.filterwarnings("ignore", category=PTBUserWarning)
 from telegram.ext import BaseHandler
 from typing import Optional, Awaitable
 import gc
