@@ -2932,6 +2932,7 @@ def setup_handlers(application):
             ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
+        per_message=True  # Add this line to address the warning
     )
     application.add_handler(conv_handler)
     
