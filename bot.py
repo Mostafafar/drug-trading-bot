@@ -66,9 +66,8 @@ DB_CONFIG = {
 # Ensure directories exist
 Path(PHOTO_STORAGE).mkdir(exist_ok=True)
 
-# ======== STATES ENUM ========
+# States Enum
 class States(Enum):
-    # Registration states
     REGISTER_PHARMACY_NAME = auto()
     REGISTER_FOUNDER_NAME = auto()
     REGISTER_NATIONAL_CARD = auto()
@@ -79,38 +78,26 @@ class States(Enum):
     REGISTER_LOCATION = auto()
     VERIFICATION_CODE = auto()
     ADMIN_VERIFICATION = auto()
-    
-    # Drug search and offer states
     SEARCH_DRUG = auto()
     SELECT_PHARMACY = auto()
     SELECT_ITEMS = auto()
     SELECT_QUANTITY = auto()
     CONFIRM_OFFER = auto()
     CONFIRM_TOTALS = auto()
-    
-    # Need addition states
     SELECT_NEED_CATEGORY = auto()
     ADD_NEED_NAME = auto()
     ADD_NEED_DESC = auto()
     ADD_NEED_QUANTITY = auto()
     SEARCH_DRUG_FOR_NEED = auto()
     SELECT_DRUG_FOR_NEED = auto()
-    
-    # Compensation states
     COMPENSATION_SELECTION = auto()
     COMPENSATION_QUANTITY = auto()
-    
-    # Drug addition states
     ADD_DRUG_DATE = auto()
     ADD_DRUG_QUANTITY = auto()
     SEARCH_DRUG_FOR_ADDING = auto()
     SELECT_DRUG_FOR_ADDING = auto()
-    
-    # Admin states
     ADMIN_UPLOAD_EXCEL = auto()
     EDIT_ITEM = auto()
-
-# ======== END OF STATES ENUM ========
 
 # Configure logging
 logging.basicConfig(
@@ -119,25 +106,14 @@ logging.basicConfig(
     filename='bot.log',
     filemode='a'
 )
-logger = logging.getLogger(__name__)
 
 # Verification codes storage
 verification_codes = {}
-admin_codes = {}  # Stores admin verification codes
+admin_codes = {}
+ADMIN_CHAT_ID = 6680287530
 
-# Admin chat ID - replace with your actual admin chat ID
-ADMIN_CHAT_ID = 6680287530  # Example admin ID
-
-# File download helper
-async def download_file(file, file_type, user_id):
-    """Download a file from Telegram and return the saved path"""
-    file_name = f"{user_id}_{file_type}{os.path.splitext(file.file_path)[1]}"
-    file_path = os.path.join(PHOTO_STORAGE, file_name)
-    await file.download_to_drive(file_path)
-    return file_path
-
-def get_db_connection(max_retries: int = 3, retry_delay: float = 1.0):
-    """Get a database connection with retry logic and validation"""
+# Database functions
+def get_db_connection(max_retries=3, retry_delay=1.0):
     conn = None
     last_error = None
     
@@ -147,9 +123,7 @@ def get_db_connection(max_retries: int = 3, retry_delay: float = 1.0):
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
                 cursor.execute("SET TIME ZONE 'Asia/Tehran'")
-            
             return conn
-            
         except psycopg2.Error as e:
             last_error = e
             logger.error(f"DB connection attempt {attempt + 1} failed: {str(e)}")
@@ -158,7 +132,6 @@ def get_db_connection(max_retries: int = 3, retry_delay: float = 1.0):
                     conn.close()
                 except:
                     pass
-                    
             if attempt < max_retries - 1:
                 time.sleep(retry_delay * (attempt + 1))
                 
@@ -167,12 +140,16 @@ def get_db_connection(max_retries: int = 3, retry_delay: float = 1.0):
         raise last_error
     raise psycopg2.Error("Unknown database connection error")
 
+async def download_file(file, file_type, user_id):
+    file_name = f"{user_id}_{file_type}{os.path.splitext(file.file_path)[1]}"
+    file_path = os.path.join(PHOTO_STORAGE, file_name)
+    await file.download_to_drive(file_path)
+    return file_path
+
 def load_drug_data():
-    """Load drug data from Excel file or GitHub"""
     global drug_list
     
     try:
-        # First try to load from local file
         if excel_file.exists():
             df = pd.read_excel(excel_file, sheet_name="Sheet1")
             df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
@@ -181,18 +158,14 @@ def load_drug_data():
             logger.info(f"Successfully loaded {len(drug_list)} drugs from local Excel file")
             return True
         
-        # If local file doesn't exist, try to load from GitHub
         github_url = "https://raw.githubusercontent.com/yourusername/yourrepo/main/DrugPrices.xlsx"
         response = requests.get(github_url)
         if response.status_code == 200:
-            # Load the Excel file from GitHub
             excel_data = BytesIO(response.content)
             df = pd.read_excel(excel_data)
             df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
             drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
             drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
-            
-            # Save locally for future use
             df.to_excel(excel_file, index=False)
             logger.info(f"Successfully loaded {len(drug_list)} drugs from GitHub and saved locally")
             return True
@@ -204,7 +177,6 @@ def load_drug_data():
     except Exception as e:
         logger.error(f"Error loading drug data: {e}")
         drug_list = []
-        # Create backup if file exists but is corrupted
         if excel_file.exists():
             backup_file = current_dir / f"DrugPrices_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
             excel_file.rename(backup_file)
@@ -216,7 +188,6 @@ async def initialize_db():
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            # Users table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id BIGINT PRIMARY KEY,
@@ -232,7 +203,6 @@ async def initialize_db():
                 is_admin BOOLEAN DEFAULT FALSE
             )''')
             
-            # Pharmacy info table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS pharmacies (
                 user_id BIGINT PRIMARY KEY REFERENCES users(id),
@@ -251,7 +221,6 @@ async def initialize_db():
                 admin_id BIGINT REFERENCES users(id)
             )''')
             
-            # Drug items table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS drug_items (
                 id SERIAL PRIMARY KEY,
@@ -263,14 +232,12 @@ async def initialize_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''')
             
-            # Medical categories table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS medical_categories (
                 id SERIAL PRIMARY KEY,
                 name TEXT UNIQUE
             )''')
             
-            # User categories (many-to-many)
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS user_categories (
                 user_id BIGINT REFERENCES users(id),
@@ -278,7 +245,6 @@ async def initialize_db():
                 PRIMARY KEY (user_id, category_id)
             )''')
             
-            # Offers table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS offers (
                 id SERIAL PRIMARY KEY,
@@ -289,7 +255,6 @@ async def initialize_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''')
             
-            # Offer items table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS offer_items (
                 id SERIAL PRIMARY KEY,
@@ -300,7 +265,6 @@ async def initialize_db():
                 item_type TEXT DEFAULT 'drug'
             )''')
             
-            # Compensation items table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS compensation_items (
                 id SERIAL PRIMARY KEY,
@@ -309,7 +273,6 @@ async def initialize_db():
                 quantity INTEGER
             )''')
             
-            # User needs table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS user_needs (
                 id SERIAL PRIMARY KEY,
@@ -320,7 +283,6 @@ async def initialize_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''')
             
-            # Auto-match notifications table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS match_notifications (
                 id SERIAL PRIMARY KEY,
@@ -331,7 +293,6 @@ async def initialize_db():
                 notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''')
             
-            # Admin settings table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS admin_settings (
                 id SERIAL PRIMARY KEY,
@@ -339,7 +300,6 @@ async def initialize_db():
                 last_updated TIMESTAMP
             )''')
             
-            # Insert default medical categories
             default_categories = ['اعصاب', 'قلب', 'ارتوپد', 'زنان', 'گوارش', 'پوست', 'اطفال']
             for category in default_categories:
                 cursor.execute('''
@@ -348,7 +308,6 @@ async def initialize_db():
                 ON CONFLICT (name) DO NOTHING
                 ''', (category,))
             
-            # Create admin user if not exists
             cursor.execute('''
             INSERT INTO users (id, is_admin, is_verified)
             VALUES (%s, TRUE, TRUE)
@@ -400,13 +359,10 @@ def similarity(a, b):
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
 async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Check if there are any matches between user's needs and available drugs"""
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-            
-            # Get user's needs
             cursor.execute('''
             SELECT id, name, quantity 
             FROM user_needs 
@@ -417,7 +373,6 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
             if not needs:
                 return
             
-            # Get all available drugs from pharmacies
             cursor.execute('''
             SELECT di.id, di.name, di.price, di.quantity, 
                    u.id as pharmacy_id, 
@@ -433,11 +388,9 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
             if not drugs:
                 return
             
-            # Find matches
             matches = []
             for need in needs:
                 for drug in drugs:
-                    # Check if already notified
                     cursor.execute('''
                     SELECT id FROM match_notifications 
                     WHERE user_id = %s AND drug_id = %s AND need_id = %s
@@ -445,9 +398,8 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                     if cursor.fetchone():
                         continue
                     
-                    # Calculate similarity
                     sim_score = similarity(need['name'], drug['name'])
-                    if sim_score >= 0.7:  # Threshold for match
+                    if sim_score >= 0.7:
                         matches.append({
                             'need': dict(need),
                             'drug': dict(drug),
@@ -457,10 +409,8 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
             if not matches:
                 return
             
-            # Send notifications and record in database
             for match in matches:
                 try:
-                    # Create notification message
                     message = (
                         "🔔 یک داروی مطابق با نیاز شما پیدا شد!\n\n"
                         f"نیاز شما: {match['need']['name']} (تعداد: {match['need']['quantity']})\n"
@@ -479,14 +429,12 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                     ]]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
-                    # Send notification
                     await context.bot.send_message(
                         chat_id=user_id,
                         text=message,
                         reply_markup=reply_markup
                     )
                     
-                    # Record notification in database
                     cursor.execute('''
                     INSERT INTO match_notifications (
                         user_id, drug_id, need_id, similarity_score
@@ -538,7 +486,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if conn:
             conn.close()
     
-    # Check for matches in background
     context.application.create_task(check_for_matches(update.effective_user.id, context))
     
     keyboard = [
@@ -575,7 +522,6 @@ async def admin_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if result:
                 pharmacy_id = result[0]
                 
-                # Check if user already has a pharmacy
                 cursor.execute('''
                 SELECT 1 FROM pharmacies WHERE user_id = %s
                 ''', (update.effective_user.id,))
@@ -585,7 +531,6 @@ async def admin_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return ConversationHandler.END
                 
-                # Add user to pharmacy
                 cursor.execute('''
                 INSERT INTO users (id, first_name, last_name, username, is_verified)
                 VALUES (%s, %s, %s, %s, TRUE)
@@ -620,7 +565,6 @@ async def admin_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn.close()
 
 async def register_pharmacy_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stores the pharmacy name and asks for founder name."""
     pharmacy_name = update.message.text
     context.user_data['pharmacy_name'] = pharmacy_name
     
@@ -631,7 +575,6 @@ async def register_pharmacy_name(update: Update, context: ContextTypes.DEFAULT_T
     return States.REGISTER_FOUNDER_NAME
 
 async def register_founder_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stores the founder name and asks for national card photo."""
     founder_name = update.message.text
     context.user_data['founder_name'] = founder_name
     
@@ -642,7 +585,6 @@ async def register_founder_name(update: Update, context: ContextTypes.DEFAULT_TY
     return States.REGISTER_NATIONAL_CARD
 
 async def register_national_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stores the national card photo and asks for license photo."""
     photo_file = await update.message.photo[-1].get_file()
     file_path = await download_file(photo_file, "national_card", update.effective_user.id)
     context.user_data['national_card'] = file_path
@@ -654,7 +596,6 @@ async def register_national_card(update: Update, context: ContextTypes.DEFAULT_T
     return States.REGISTER_LICENSE
 
 async def register_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stores the license photo and asks for medical card photo."""
     photo_file = await update.message.photo[-1].get_file()
     file_path = await download_file(photo_file, "license", update.effective_user.id)
     context.user_data['license'] = file_path
@@ -666,7 +607,6 @@ async def register_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return States.REGISTER_MEDICAL_CARD
 
 async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stores the medical card photo and asks for phone number."""
     photo_file = await update.message.photo[-1].get_file()
     file_path = await download_file(photo_file, "medical_card", update.effective_user.id)
     context.user_data['medical_card'] = file_path
@@ -681,7 +621,6 @@ async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TY
     return States.REGISTER_PHONE
 
 async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stores the phone number and asks for address."""
     if update.message.contact:
         phone = update.message.contact.phone_number
     else:
@@ -694,9 +633,7 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardRemove()
     )
     return States.REGISTER_ADDRESS
-
 async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stores the address and asks for location."""
     address = update.message.text
     context.user_data['address'] = address
     
@@ -710,16 +647,13 @@ async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return States.REGISTER_LOCATION
 
 async def register_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stores the location and completes registration."""
     location = update.message.location
     context.user_data['location_lat'] = location.latitude
     context.user_data['location_lng'] = location.longitude
     
-    # Generate verification code
     verification_code = str(random.randint(1000, 9999))
     context.user_data['verification_code'] = verification_code
     
-    # Save to database (incomplete registration)
     conn = None
     try:
         conn = get_db_connection()
@@ -759,17 +693,14 @@ async def register_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return States.VERIFICATION_CODE
 
 async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Verifies the code and completes registration."""
     user_code = update.message.text.strip()
     stored_code = context.user_data.get('verification_code')
     
     if user_code == stored_code:
-        # Complete registration in database
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                # Save pharmacy info
                 cursor.execute('''
                 INSERT INTO pharmacies (
                     user_id, name, founder_name, national_card_image,
@@ -787,10 +718,9 @@ async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data.get('address'),
                     context.user_data.get('location_lat'),
                     context.user_data.get('location_lng'),
-                    False  # Needs admin verification
+                    False
                 ))
                 
-                # Mark user as verified
                 cursor.execute('''
                 UPDATE users 
                 SET is_verified = TRUE 
@@ -804,7 +734,6 @@ async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "اطلاعات شما برای تایید نهایی به ادمین ارسال شد. پس از تایید می‌توانید از تمام امکانات ربات استفاده کنید."
                 )
                 
-                # Notify admin
                 try:
                     await context.bot.send_message(
                         chat_id=ADMIN_CHAT_ID,
@@ -860,18 +789,15 @@ async def upload_excel_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.document:
-        # Handle document upload
         file = await context.bot.get_file(update.message.document.file_id)
         file_path = await download_file(file, "drug_prices", "admin")
         
         try:
-            # Try to read the Excel file
             df = pd.read_excel(file_path)
             df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
             drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
             drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
             
-            # Save to local file
             df.to_excel(excel_file, index=False)
             
             await update.message.reply_text(
@@ -880,7 +806,6 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
                 f"برای استفاده از داده‌های جدید، ربات را ریستارت کنید."
             )
             
-            # Save to database
             conn = None
             try:
                 conn = get_db_connection()
@@ -906,20 +831,17 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             
     elif update.message.text and update.message.text.startswith('http'):
-        # Handle GitHub URL
         github_url = update.message.text.strip()
         
         try:
             response = requests.get(github_url)
             if response.status_code == 200:
-                # Load the Excel file from GitHub
                 excel_data = BytesIO(response.content)
                 df = pd.read_excel(excel_data)
                 df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
                 drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
                 drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
                 
-                # Save locally
                 df.to_excel(excel_file, index=False)
                 
                 await update.message.reply_text(
@@ -928,7 +850,6 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
                     f"برای استفاده از داده‌های جدید، ربات را ریستارت کنید."
                 )
                 
-                # Save to database
                 conn = None
                 try:
                     conn = get_db_connection()
@@ -970,7 +891,6 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return States.SEARCH_DRUG
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle regular text messages that aren't part of any conversation"""
     await update.message.reply_text(
         "لطفا از منوی اصلی یکی از گزینه‌ها را انتخاب کنید.",
         reply_markup=ReplyKeyboardMarkup(
@@ -995,8 +915,6 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-            
-            # Get all matching drugs from database (with highest price for each name)
             cursor.execute('''
             SELECT 
                 di.id, 
@@ -1089,7 +1007,6 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['pharmacy_drugs'] = pharmacy_data['items']
             context.user_data['selected_items'] = []
             
-            # Get buyer's (current user) drugs
             conn = None
             try:
                 conn = get_db_connection()
@@ -1102,7 +1019,6 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     buyer_drugs = cursor.fetchall()
                     context.user_data['buyer_drugs'] = [dict(row) for row in buyer_drugs]
                     
-                    # Get pharmacy's medical categories
                     cursor.execute('''
                     SELECT mc.id, mc.name 
                     FROM user_categories uc
@@ -1123,19 +1039,16 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await show_two_column_selection(update, context)
 
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Show the drug selection interface with proper v20+ syntax"""
     pharmacy = context.user_data.get('selected_pharmacy', {})
     pharmacy_drugs = context.user_data.get('pharmacy_drugs', [])
     buyer_drugs = context.user_data.get('buyer_drugs', [])
     selected_items = context.user_data.get('selected_items', [])
     
-    # Create keyboard
     keyboard = []
     max_length = max(len(pharmacy_drugs), len(buyer_drugs))
     
     for i in range(max_length):
         row = []
-        # Pharmacy drugs column
         if i < len(pharmacy_drugs):
             drug = pharmacy_drugs[i]
             is_selected = any(
@@ -1150,7 +1063,6 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         else:
             row.append(InlineKeyboardButton(" ", callback_data="none"))
         
-        # Buyer drugs column
         if i < len(buyer_drugs):
             drug = buyer_drugs[i]
             is_selected = any(
@@ -1167,14 +1079,12 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         
         keyboard.append(row)
 
-    # Add control buttons
     keyboard.append([
         InlineKeyboardButton("💰 محاسبه جمع", callback_data="finish_selection"),
         InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_pharmacies"),
         InlineKeyboardButton("❌ لغو", callback_data="cancel")
     ])
 
-    # Create message text
     message = (
         f"🔹 داروخانه: {pharmacy.get('name', '')}\n\n"
         "💊 داروهای داروخانه | 📝 داروهای شما برای تبادل\n\n"
@@ -1182,12 +1092,10 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         "پس از انتخاب موارد، روی «محاسبه جمع» کلیک کنید"
     )
 
-    # Send or update message
     if update.callback_query:
         await update.callback_query.edit_message_text(
             text=message,
             reply_markup=InlineKeyboardMarkup(keyboard)
-        )
     else:
         await update.message.reply_text(
             text=message,
@@ -1196,7 +1104,6 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
     return States.SELECT_ITEMS
 
 async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handle item selection with proper memory management"""
     query = update.callback_query
     await query.answer()
 
@@ -1205,7 +1112,6 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return ConversationHandler.END
 
     if query.data == "back_to_pharmacies":
-        # Go back to pharmacy selection
         search_term = context.user_data.get('search_term', '')
         message = f"نتایج جستجو برای '{search_term}':\n\n"
         
@@ -1230,7 +1136,6 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             await query.answer("لطفا حداقل یک مورد را انتخاب کنید", show_alert=True)
             return States.SELECT_ITEMS
         
-        # Calculate totals
         pharmacy_total = sum(
             parse_price(item['price']) * item.get('selected_quantity', 1)
             for item in selected_items if item.get('type') == 'pharmacy_drug'
@@ -1271,180 +1176,12 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             reply_markup=InlineKeyboardMarkup(keyboard))
         return States.CONFIRM_TOTALS
 
-    elif query.data == "compensate":
-        difference = sum(
-            parse_price(item['price']) * item.get('selected_quantity', 1)
-            for item in context.user_data['selected_items'] 
-            if item.get('type') == 'pharmacy_drug'
-        ) - sum(
-            parse_price(item['price']) * item.get('selected_quantity', 1)
-            for item in context.user_data['selected_items'] 
-            if item.get('type') == 'buyer_drug'
-        )
-        
-        if difference > 0:  # Pharmacy has more value, buyer needs to compensate
-            selected_drug_ids = [
-                item['id'] for item in context.user_data['selected_items'] 
-                if item.get('type') == 'buyer_drug'
-            ]
-            
-            conn = None
-            try:
-                conn = get_db_connection()
-                with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                    cursor.execute('''
-                    SELECT id, name, price, quantity 
-                    FROM drug_items 
-                    WHERE user_id = %s AND quantity > 0 AND id NOT IN %s
-                    ''', (
-                        update.effective_user.id, 
-                        tuple(selected_drug_ids) if selected_drug_ids else (None,)
-                    ))
-                    
-                    remaining_drugs = cursor.fetchall()
-                    
-                    if not remaining_drugs:
-                        await query.answer("داروی دیگری برای جبران ندارید!", show_alert=True)
-                        return States.SELECT_ITEMS
-                    
-                    context.user_data['compensation'] = {
-                        'difference': difference,
-                        'remaining_diff': difference,
-                        'selected_items': [],
-                        'compensating_user': 'buyer'
-                    }
-                    
-                    keyboard = []
-                    for drug in remaining_drugs:
-                        keyboard.append([InlineKeyboardButton(
-                            f"{drug['name']} ({drug['price']}) - موجودی: {drug['quantity']}", 
-                            callback_data=f"comp_{drug['id']}"
-                        )])
-                    
-                    keyboard.append([InlineKeyboardButton("اتمام انتخاب", callback_data="comp_finish")])
-                    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_totals")])
-                    
-                    await query.edit_message_text(
-                        text=f"🔻 نیاز به جبران: {difference:,}\n\n"
-                             f"لطفا از داروهای خود برای جبران تفاوت انتخاب کنید:",
-                        reply_markup=InlineKeyboardMarkup(keyboard))
-                    return States.COMPENSATION_SELECTION
-                    
-            except Exception as e:
-                logger.error(f"Error getting remaining drugs: {e}")
-                await query.edit_message_text("خطا در دریافت داروها")
-                return States.SELECT_ITEMS
-            finally:
-                if conn:
-                    conn.close()
-                
-        else:  # Buyer has more value, pharmacy needs to compensate
-            selected_drug_ids = [
-                item['id'] for item in context.user_data['selected_items'] 
-                if item.get('type') == 'pharmacy_drug'
-            ]
-            
-            conn = None
-            try:
-                conn = get_db_connection()
-                with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                    cursor.execute('''
-                    SELECT id, name, price, quantity 
-                    FROM drug_items 
-                    WHERE user_id = %s AND quantity > 0 AND id NOT IN %s
-                    ''', (
-                        context.user_data['selected_pharmacy']['id'], 
-                        tuple(selected_drug_ids) if selected_drug_ids else (None,)
-                    ))
-                    
-                    remaining_drugs = cursor.fetchall()
-                    
-                    if not remaining_drugs:
-                        await query.answer("داروخانه داروی دیگری برای جبران ندارد!", show_alert=True)
-                        return States.SELECT_ITEMS
-                    
-                    context.user_data['compensation'] = {
-                        'difference': abs(difference),
-                        'remaining_diff': abs(difference),
-                        'selected_items': [],
-                        'compensating_user': 'pharmacy'
-                    }
-                    
-                    keyboard = []
-                    for drug in remaining_drugs:
-                        keyboard.append([InlineKeyboardButton(
-                            f"{drug['name']} ({drug['price']}) - موجودی: {drug['quantity']}", 
-                            callback_data=f"comp_{drug['id']}"
-                        )])
-                    
-                    keyboard.append([InlineKeyboardButton("اتمام انتخاب", callback_data="comp_finish")])
-                    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_totals")])
-                    
-                    await query.edit_message_text(
-                        text=f"🔻 نیاز به جبران: {abs(difference):,}\n\n"
-                             f"لطفا از داروهای داروخانه برای جبران تفاوت انتخاب کنید:",
-                        reply_markup=InlineKeyboardMarkup(keyboard))
-                    return States.COMPENSATION_SELECTION
-                    
-            except Exception as e:
-                logger.error(f"Error getting remaining drugs: {e}")
-                await query.edit_message_text("خطا در دریافت داروها")
-                return States.SELECT_ITEMS
-            finally:
-                if conn:
-                    conn.close()
-
-    elif query.data == "back_to_totals":
-        # Recalculate totals
-        selected_items = context.user_data.get('selected_items', [])
-        pharmacy_total = sum(
-            parse_price(item['price']) * item.get('selected_quantity', 1)
-            for item in selected_items if item.get('type') == 'pharmacy_drug'
-        )
-        
-        buyer_total = sum(
-            parse_price(item['price']) * item.get('selected_quantity', 1)
-            for item in selected_items if item.get('type') == 'buyer_drug'
-        )
-        
-        difference = pharmacy_total - buyer_total
-        
-        message = (
-            "📊 جمع کل انتخاب‌ها:\n\n"
-            f"💊 جمع داروهای داروخانه: {pharmacy_total:,}\n"
-            f"📝 جمع داروهای شما: {buyer_total:,}\n"
-            f"💰 تفاوت: {abs(difference):,} ({'به نفع شما' if difference < 0 else 'به نفع داروخانه'})\n\n"
-        )
-        
-        if difference != 0:
-            message += "برای جبران تفاوت می‌توانید از دکمه زیر استفاده کنید:\n"
-            keyboard = [
-                [InlineKeyboardButton("➕ جبران تفاوت", callback_data="compensate")],
-                [InlineKeyboardButton("✅ تایید نهایی", callback_data="confirm_totals")],
-                [InlineKeyboardButton("✏️ ویرایش", callback_data="edit_selection")],
-                [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_items")]
-            ]
-        else:
-            message += "آیا مایل به ادامه هستید؟"
-            keyboard = [
-                [InlineKeyboardButton("✅ تایید نهایی", callback_data="confirm_totals")],
-                [InlineKeyboardButton("✏️ ویرایش", callback_data="edit_selection")],
-                [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_items")]
-            ]
-        
-        await query.edit_message_text(
-            message,
-            reply_markup=InlineKeyboardMarkup(keyboard))
-        return States.CONFIRM_TOTALS
-
-    # Handle drug selection/deselection
-    if query.data.startswith(("pharmacydrug_", "buyerdrug_")):
+    elif query.data.startswith(("pharmacydrug_", "buyerdrug_")):
         item_type, item_id = query.data.split("_")
         item_id = int(item_id)
         
         selected_items = context.user_data.get('selected_items', [])
         
-        # Toggle selection with proper memory management
         existing_idx = next(
             (i for i, item in enumerate(selected_items) 
              if item.get('id') == item_id and 
@@ -1453,18 +1190,15 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             ), None)
         
         if existing_idx is not None:
-            # Explicitly delete the item
             removed_item = selected_items.pop(existing_idx)
-            del removed_item  # Ensure proper cleanup
+            del removed_item
         else:
-            # Find the item with proper resource handling
             source = (context.user_data.get('pharmacy_drugs', []) 
                      if item_type == "pharmacydrug" 
                      else context.user_data.get('buyer_drugs', []))
             
             item = next((i for i in source if i['id'] == item_id), None)
             if item:
-                # Create a clean copy
                 item_copy = {
                     'id': item['id'],
                     'name': item['name'],
@@ -1489,7 +1223,6 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
             await query.answer("لطفا حداقل یک مورد را انتخاب کنید", show_alert=True)
             return
         
-        # Add compensation items to selected items
         selected_items = context.user_data.get('selected_items', [])
         for item in comp_data['selected_items']:
             item_copy = item.copy()
@@ -1498,7 +1231,6 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
         
         context.user_data['selected_items'] = selected_items
         
-        # Recalculate totals
         pharmacy_total = sum(
             parse_price(item['price']) * item.get('selected_quantity', 1)
             for item in selected_items 
@@ -1533,7 +1265,6 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
         return States.CONFIRM_TOTALS
     
     elif query.data == "back_to_totals":
-        # Recalculate totals
         selected_items = context.user_data.get('selected_items', [])
         pharmacy_total = sum(
             parse_price(item['price']) * item.get('selected_quantity', 1)
@@ -1575,10 +1306,9 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
             reply_markup=InlineKeyboardMarkup(keyboard))
         return States.CONFIRM_TOTALS
     
-    elif query.data.startswith("comp_"):  # Item selected
+    elif query.data.startswith("comp_"):
         item_id = int(query.data.split("_")[1])
         
-        # Get item details
         conn = None
         try:
             conn = get_db_connection()
@@ -1610,7 +1340,6 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
         finally:
             if conn:
                 conn.close()
-
 async def handle_compensation_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         quantity = int(update.message.text)
@@ -1622,10 +1351,9 @@ async def handle_compensation_quantity(update: Update, context: ContextTypes.DEF
                 f"لطفا عددی بین 1 و {current_item.get('quantity', 0)} وارد کنید."
             )
             return States.COMPENSATION_QUANTITY
-        # Calculate compensation value
+        
         comp_value = parse_price(current_item['price']) * quantity
         
-        # Add to selected items
         comp_data['selected_items'].append({
             'id': current_item['id'],
             'name': current_item['name'],
@@ -1634,12 +1362,10 @@ async def handle_compensation_quantity(update: Update, context: ContextTypes.DEF
             'comp_value': comp_value
         })
         
-        # Update remaining difference
         comp_data['remaining_diff'] = max(0, comp_data['difference'] - sum(
             item['comp_value'] for item in comp_data['selected_items']
         ))
         
-        # Show updated status
         selected_text = "\n".join(
             f"{item['name']} x{item['selected_quantity']} = {item['comp_value']:,}" 
             for item in comp_data['selected_items']
@@ -1652,7 +1378,6 @@ async def handle_compensation_quantity(update: Update, context: ContextTypes.DEF
             "می‌توانید اقلام بیشتری انتخاب کنید یا «اتمام انتخاب» را بزنید."
         )
         
-        # Show remaining items if needed
         if comp_data['remaining_diff'] > 0:
             conn = None
             try:
@@ -1702,7 +1427,6 @@ async def handle_compensation_quantity(update: Update, context: ContextTypes.DEF
                 if conn:
                     conn.close()
         
-        # If difference is covered or no more items
         keyboard = [
             [InlineKeyboardButton("اتمام انتخاب", callback_data="comp_finish")],
             [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_totals")]
@@ -1731,7 +1455,6 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         conn = None
         try:
-            # Calculate totals
             pharmacy_total = sum(
                 parse_price(item['price']) * item.get('selected_quantity', 1)
                 for item in selected_items 
@@ -1748,7 +1471,6 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                # Insert offer
                 cursor.execute('''
                 INSERT INTO offers (pharmacy_id, buyer_id, status, total_price)
                 VALUES (%s, %s, %s, %s)
@@ -1761,7 +1483,6 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ))
                 offer_id = cursor.fetchone()[0]
                 
-                # Insert offer items
                 for item in selected_items:
                     if item['type'] in ('pharmacy_drug', 'buyer_drug'):
                         cursor.execute('''
@@ -1788,10 +1509,8 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 conn.commit()
                 
-                # Prepare notification message for pharmacy
                 offer_message = f"📬 پیشنهاد جدید از {buyer.first_name}:\n\n"
                 
-                # Pharmacy drugs
                 pharmacy_drugs = [
                     item for item in selected_items 
                     if item.get('type') == 'pharmacy_drug'
@@ -1808,7 +1527,6 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                     offer_message += f"💰 جمع کل: {sum(parse_price(i['price'])*i.get('selected_quantity',1) for i in pharmacy_drugs):,}\n\n"
                 
-                # Buyer drugs
                 buyer_drugs = [
                     item for item in selected_items 
                     if item.get('type') == 'buyer_drug'
@@ -1825,7 +1543,6 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                     offer_message += f"💰 جمع کل: {sum(parse_price(i['price'])*i.get('selected_quantity',1) for i in buyer_drugs):,}\n\n"
                 
-                # Compensation items
                 comp_items = [
                     item for item in selected_items 
                     if item.get('type') in ('pharmacy_comp', 'buyer_comp')
@@ -1847,14 +1564,13 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"🆔 کد پیشنهاد: {offer_id}\n"
                     "برای پاسخ به این پیشنهاد از دکمه‌های زیر استفاده کنید:"
                     )
-                # Create response keyboard
+                
                 keyboard = [
                     [InlineKeyboardButton("✅ قبول", callback_data=f"offer_accept_{offer_id}")],
                     [InlineKeyboardButton("❌ رد", callback_data=f"offer_reject_{offer_id}")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
-                # Send notification to pharmacy
                 try:
                     await context.bot.send_message(
                         chat_id=pharmacy['id'],
@@ -1864,7 +1580,6 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception as e:
                     logger.error(f"Failed to notify pharmacy: {e}")
                 
-                # Prepare success message for buyer
                 success_msg = "✅ پیشنهاد شما با موفقیت ارسال شد!\n\n"
                 if pharmacy_drugs:
                     success_msg += f"💊 جمع داروهای داروخانه: {sum(parse_price(i['price'])*i.get('selected_quantity',1) for i in pharmacy_drugs):,}\n"
@@ -1903,15 +1618,13 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
 
     if query.data.startswith("offer_"):
         parts = query.data.split("_")
-        action = parts[1]  # accept or reject
+        action = parts[1]
         offer_id = int(parts[2])
         
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                
-                # Get offer details
                 cursor.execute('''
                 SELECT o.*, 
                        u.first_name || ' ' || COALESCE(u.last_name, '') AS buyer_name,
@@ -1929,13 +1642,11 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                     return
                 
                 if action == "reject":
-                    # Update offer status
                     cursor.execute('''
                     UPDATE offers SET status = 'rejected' WHERE id = %s
                     ''', (offer_id,))
                     conn.commit()
                     
-                    # Notify buyer
                     try:
                         await context.bot.send_message(
                             chat_id=offer['buyer_id'],
@@ -1948,12 +1659,10 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                     return
                 
                 elif action == "accept":
-                    # Update offer status
                     cursor.execute('''
                     UPDATE offers SET status = 'accepted' WHERE id = %s
                     ''', (offer_id,))
                     
-                    # Process drug items
                     cursor.execute('''
                     SELECT drug_name, price, quantity, item_type 
                     FROM offer_items 
@@ -1963,7 +1672,6 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                     
                     for item in items:
                         if item['item_type'] == 'pharmacy_drug':
-                            # Deduct from pharmacy's inventory
                             cursor.execute('''
                             UPDATE drug_items 
                             SET quantity = quantity - %s
@@ -1975,7 +1683,6 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                                 item['price']
                             ))
                         elif item['item_type'] == 'buyer_drug':
-                            # Deduct from buyer's inventory
                             cursor.execute('''
                             UPDATE drug_items 
                             SET quantity = quantity - %s
@@ -1987,7 +1694,6 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                                 item['price']
                             ))
                     
-                    # Process compensation items
                     cursor.execute('''
                     SELECT ci.quantity, di.name, di.price, di.user_id
                     FROM compensation_items ci
@@ -1997,7 +1703,6 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                     comp_items = cursor.fetchall()
                     
                     for item in comp_items:
-                        # Deduct from owner's inventory
                         cursor.execute('''
                         UPDATE drug_items 
                         SET quantity = quantity - %s
@@ -2009,7 +1714,6 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                     
                     conn.commit()
                     
-                    # Prepare notification messages
                     buyer_msg = (
                         f"✅ پیشنهاد شما با کد {offer_id} پذیرفته شد!\n\n"
                         "جزئیات معامله:\n"
@@ -2020,7 +1724,6 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                         "جزئیات معامله:\n"
                     )
                     
-                    # Add items to messages
                     cursor.execute('''
                     SELECT oi.drug_name, oi.price, oi.quantity, oi.item_type
                     FROM offer_items oi
@@ -2040,7 +1743,6 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                         else:
                             pharmacy_msg += line
                     
-                    # Add compensation items
                     cursor.execute('''
                     SELECT di.name, di.price, ci.quantity
                     FROM compensation_items ci
@@ -2062,11 +1764,9 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                             buyer_msg += line
                             pharmacy_msg += line
                     
-                    # Add contact info
                     buyer_msg += f"\n✉️ تماس با داروخانه: @{offer['buyer_name']}"
                     pharmacy_msg += f"\n✉️ تماس با خریدار: @{offer['buyer_name']}"
                     
-                    # Send notifications
                     await context.bot.send_message(
                         chat_id=offer['buyer_id'],
                         text=buyer_msg
@@ -2229,7 +1929,6 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            
             cursor.execute('''
             INSERT INTO drug_items (
                 user_id, name, price, date, quantity
@@ -2251,7 +1950,6 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"تعداد: {quantity}"
             )
             
-            # Check for matches with other users' needs
             context.application.create_task(check_for_matches(user.id, context))
             
     except ValueError:
@@ -2273,11 +1971,9 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-           # Get all available categories
             cursor.execute('SELECT id, name FROM medical_categories')
             all_categories = cursor.fetchall()
             
-            # Get user's current categories
             cursor.execute('''
             SELECT mc.id, mc.name 
             FROM user_categories uc
@@ -2288,7 +1984,6 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
             
             user_category_ids = [c['id'] for c in user_categories]
             
-            # Create keyboard
             keyboard = []
             for category in all_categories:
                 is_selected = category['id'] in user_category_ids
@@ -2333,7 +2028,6 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
         category_id = int(query.data.split("_")[1])
         
         if 'selected_categories' not in context.user_data:
-            # Initialize with user's current categories
             conn = None
             try:      
                 conn = get_db_connection()
@@ -2356,7 +2050,6 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             context.user_data['selected_categories'].append(category_id)
         
-        # Refresh the category selection view
         conn = None
         try:
             conn = get_db_connection()
@@ -2388,7 +2081,6 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
         finally:
             if conn:
                 conn.close()
-
 async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2401,13 +2093,10 @@ async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            
-            # Clear existing categories
             cursor.execute('''
             DELETE FROM user_categories WHERE user_id = %s
             ''', (update.effective_user.id,))
             
-            # Add selected categories
             for category_id in context.user_data['selected_categories']:
                 cursor.execute('''
                 INSERT INTO user_categories (user_id, category_id)
@@ -2416,7 +2105,6 @@ async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             conn.commit()
             
-            # Get category names for message
             cursor.execute('''
             SELECT name FROM medical_categories WHERE id = ANY(%s)
             ''', (context.user_data['selected_categories'],))
@@ -2641,7 +2329,6 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطا در ویرایش. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
     
-    # Validate inputs
     if edit_field == 'quantity':
         try:
             new_value = int(new_value)
@@ -2675,7 +2362,6 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"فیلد {edit_field} به {new_value} تغییر یافت."
             )
             
-            # Update the context drug data
             drug[edit_field] = new_value
             
     except Exception as e:
@@ -2685,7 +2371,6 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if conn:
             conn.close()
     
-    # Return to edit menu
     keyboard = [
         [InlineKeyboardButton("✏️ ویرایش نام", callback_data="edit_name")],
         [InlineKeyboardButton("✏️ ویرایش قیمت", callback_data="edit_price")],
@@ -2785,7 +2470,6 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"تعداد: {quantity}"
                 )
                 
-                # Check for matches with available drugs
                 context.application.create_task(check_for_matches(update.effective_user.id, context))
                 
         except Exception as e:
@@ -3023,7 +2707,6 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"فیلد {edit_field} به {new_value} تغییر یافت."
             )
             
-            # Update the context need data
             need[edit_field] = new_value
             
     except Exception as e:
@@ -3033,7 +2716,6 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if conn:
             conn.close()
     
-    # Return to edit menu
     keyboard = [
         [InlineKeyboardButton("✏️ ویرایش نام", callback_data="edit_need_name")],
         [InlineKeyboardButton("✏️ ویرایش توضیحات", callback_data="edit_need_desc")],
@@ -3087,7 +2769,6 @@ async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
     return await list_my_needs(update, context)
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancels and ends the conversation."""
     user = update.message.from_user
     logger.info("User %s canceled the conversation.", user.first_name)
     
@@ -3103,16 +2784,13 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         reply_markup=reply_markup
     )
     
-    # Clear user data
     context.user_data.clear()
     
     return ConversationHandler.END
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Log the error and send a telegram message if possible."""
     logger.error("Exception while handling an update:", exc_info=context.error)
     
-    # Try to send error message to admin
     try:
         tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
         tb_string = ''.join(tb_list)
@@ -3126,7 +2804,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"<pre>{html.escape(tb_string)}</pre>"
         )
         
-        # Split long messages
         for i in range(0, len(error_message), 4096):
             await context.bot.send_message(
                 chat_id=ADMIN_CHAT_ID,
@@ -3136,7 +2813,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.error(f"Error sending error message: {e}")
     
-    # Try to notify user
     try:
         if update and update.effective_message:
             await update.effective_message.reply_text(
@@ -3146,15 +2822,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         logger.error(f"Error notifying user: {e}")
 
 async def run_bot(application):
-    """Async function to initialize and run the bot"""
     try:
-        # Initialize database first
         await initialize_db()
-        
-        # Load drug data
         load_drug_data()
-        
-        # Run the bot until Ctrl-C
         await application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             close_loop=False
@@ -3164,12 +2834,9 @@ async def run_bot(application):
         raise
 
 def setup_handlers(application):
-    """Configure all handlers for the bot"""
-    # Conversation handler with all states
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            # Registration states
             States.ADMIN_VERIFICATION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
             ],
@@ -3200,8 +2867,6 @@ def setup_handlers(application):
             States.VERIFICATION_CODE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)
             ],
-            
-            # Drug search and offer states
             States.SEARCH_DRUG: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
             ],
@@ -3220,8 +2885,6 @@ def setup_handlers(application):
             States.CONFIRM_TOTALS: [
                 CallbackQueryHandler(confirm_totals)
             ],
-            
-            # Drug addition states
             States.SEARCH_DRUG_FOR_ADDING: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
             ],
@@ -3236,7 +2899,6 @@ def setup_handlers(application):
                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
                 CallbackQueryHandler(save_drug_item)
             ],
-              # Need addition states
             States.ADD_NEED_NAME: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)
             ],
@@ -3246,13 +2908,9 @@ def setup_handlers(application):
             States.ADD_NEED_QUANTITY: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
             ],
-            
-            # Admin states
             States.ADMIN_UPLOAD_EXCEL: [
                 MessageHandler(filters.Document.ALL | (filters.TEXT & ~filters.COMMAND), handle_excel_upload)
             ],
-            
-            # Edit states
             States.EDIT_ITEM: [
                 CallbackQueryHandler(edit_drug_item),
                 CallbackQueryHandler(edit_need_item),
@@ -3268,28 +2926,22 @@ def setup_handlers(application):
     )
     application.add_handler(conv_handler)
     
-    # Additional command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("cancel", cancel))
     
-    # Callback query handlers
     application.add_handler(CallbackQueryHandler(
         handle_offer_response, 
         pattern="^offer_",
     ))
     
-    # Message handlers
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND, 
         handle_text
     ))
     
-    # Error handler
     application.add_error_handler(error_handler)
 
 def main():
-    """Main entry point for the bot"""
-    # Configure logging
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         level=logging.INFO,
@@ -3300,15 +2952,12 @@ def main():
     )
     
     try:
-        # Create application
         application = Application.builder() \
             .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
             .build()
         
-        # Setup all handlers
         setup_handlers(application)
         
-        # Start the bot
         asyncio.run(run_bot(application))
         
     except KeyboardInterrupt:
@@ -3316,9 +2965,6 @@ def main():
     except Exception as e:
         logging.error(f"Fatal error in main: {e}")
         raise
-def main():
- """Entry point"""
- asyncio.run(main_async())
 
 if __name__ == "__main__":
     main()
