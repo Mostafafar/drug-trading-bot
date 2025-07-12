@@ -78,6 +78,7 @@ class States(Enum):
     REGISTER_LOCATION = auto()
     VERIFICATION_CODE = auto()
     ADMIN_VERIFICATION = auto()
+    SIMPLE_VERIFICATION = auto()  # New state for simple verification
     SEARCH_DRUG = auto()
     SELECT_PHARMACY = auto()
     SELECT_ITEMS = auto()
@@ -109,6 +110,7 @@ logging.basicConfig(
 
 # Verification codes storage
 verification_codes = {}
+simple_codes = {}  # For 5-digit simple verification
 admin_codes = {}
 ADMIN_CHAT_ID = 6680287530
 
@@ -200,7 +202,8 @@ async def initialize_db():
                 is_verified BOOLEAN DEFAULT FALSE,
                 verification_code TEXT,
                 verification_method TEXT,
-                is_admin BOOLEAN DEFAULT FALSE
+                is_admin BOOLEAN DEFAULT FALSE,
+                simple_code TEXT
             )''')
             
             cursor.execute('''
@@ -298,6 +301,14 @@ async def initialize_db():
                 id SERIAL PRIMARY KEY,
                 excel_url TEXT,
                 last_updated TIMESTAMP
+            )''')
+            
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS simple_codes (
+                code TEXT PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                used_by BIGINT[] DEFAULT array[]::BIGINT[],
+                max_uses INTEGER DEFAULT 5
             )''')
             
             default_categories = ['اعصاب', 'قلب', 'ارتوپد', 'زنان', 'گوارش', 'پوست', 'اطفال']
@@ -466,13 +477,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = get_db_connection()
         with conn.cursor() as cursor:
             cursor.execute('''
-            SELECT 1 FROM pharmacies 
-            WHERE user_id = %s AND verified = TRUE
+            SELECT is_verified FROM users WHERE id = %s
             ''', (update.effective_user.id,))
-            if not cursor.fetchone():
+            result = cursor.fetchone()
+            
+            if not result or not result[0]:
                 keyboard = [
                     [InlineKeyboardButton("ثبت نام با کد ادمین", callback_data="admin_verify")],
-                    [InlineKeyboardButton("ثبت نام با مدارک", callback_data="register")]
+                    [InlineKeyboardButton("ثبت نام با مدارک", callback_data="register")],
+                    [InlineKeyboardButton("ورود با کد ساده", callback_data="simple_verify")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(
@@ -481,7 +494,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
     except Exception as e:
-        logger.error(f"Error checking pharmacy status: {e}")
+        logger.error(f"Error checking verification status: {e}")
     finally:
         if conn:
             conn.close()
@@ -498,6 +511,73 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "به ربات تبادل دارو خوش آمدید! لطفا یک گزینه را انتخاب کنید:",
         reply_markup=reply_markup
     )
+
+async def simple_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "لطفا کد تایید 5 رقمی خود را وارد کنید:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return States.SIMPLE_VERIFICATION
+
+async def simple_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_code = update.message.text.strip()
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute('''
+            SELECT code, used_by, max_uses 
+            FROM simple_codes 
+            WHERE code = %s AND array_length(used_by, 1) < max_uses
+            ''', (user_code,))
+            result = cursor.fetchone()
+            
+            if result:
+                code, used_by, max_uses = result
+                used_by = used_by or []
+                
+                if update.effective_user.id in used_by:
+                    await update.message.reply_text(
+                        "شما قبلاً با این کد ثبت نام کرده‌اید."
+                    )
+                    return ConversationHandler.END
+                
+                # Update the used_by array
+                cursor.execute('''
+                UPDATE simple_codes 
+                SET used_by = array_append(used_by, %s)
+                WHERE code = %s
+                ''', (update.effective_user.id, user_code))
+                
+                # Mark user as verified
+                cursor.execute('''
+                UPDATE users 
+                SET is_verified = TRUE, 
+                    verification_method = 'simple_code',
+                    simple_code = %s
+                WHERE id = %s
+                ''', (user_code, update.effective_user.id))
+                
+                conn.commit()
+                
+                await update.message.reply_text(
+                    "✅ حساب شما با موفقیت تایید شد!\n\n"
+                    "شما می‌توانید از امکانات پایه ربات استفاده کنید."
+                )
+                
+                return await start(update, context)
+            else:
+                await update.message.reply_text("کد تایید نامعتبر است یا به حداکثر استفاده رسیده است.")
+                return States.SIMPLE_VERIFICATION
+                
+    except Exception as e:
+        logger.error(f"Error in simple verification: {e}")
+        await update.message.reply_text("خطا در تایید حساب. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+    finally:
+        if conn:
+            conn.close()
 
 async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -532,13 +612,14 @@ async def admin_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return ConversationHandler.END
                 
                 cursor.execute('''
-                INSERT INTO users (id, first_name, last_name, username, is_verified)
-                VALUES (%s, %s, %s, %s, TRUE)
+                INSERT INTO users (id, first_name, last_name, username, is_verified, verification_method)
+                VALUES (%s, %s, %s, %s, TRUE, 'admin_code')
                 ON CONFLICT (id) DO UPDATE SET
                     first_name = EXCLUDED.first_name,
                     last_name = EXCLUDED.last_name,
                     username = EXCLUDED.username,
-                    is_verified = TRUE
+                    is_verified = TRUE,
+                    verification_method = 'admin_code'
                 ''', (
                     update.effective_user.id,
                     update.effective_user.first_name,
@@ -633,6 +714,7 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardRemove()
     )
     return States.REGISTER_ADDRESS
+
 async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     address = update.message.text
     context.user_data['address'] = address
@@ -659,14 +741,15 @@ async def register_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = get_db_connection()
         with conn.cursor() as cursor:
             cursor.execute('''
-            INSERT INTO users (id, first_name, last_name, username, phone, verification_code)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO users (id, first_name, last_name, username, phone, verification_code, verification_method)
+            VALUES (%s, %s, %s, %s, %s, %s, 'full_registration')
             ON CONFLICT (id) DO UPDATE SET
                 first_name = EXCLUDED.first_name,
                 last_name = EXCLUDED.last_name,
                 username = EXCLUDED.username,
                 phone = EXCLUDED.phone,
-                verification_code = EXCLUDED.verification_code
+                verification_code = EXCLUDED.verification_code,
+                verification_method = 'full_registration'
             ''', (
                 update.effective_user.id,
                 update.effective_user.first_name,
@@ -915,7 +998,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-            cursor.execute('''
+           cursor.execute('''
             SELECT 
                 di.id, 
                 di.user_id,
@@ -1096,7 +1179,6 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         await update.callback_query.edit_message_text(
             text=message,
             reply_markup=InlineKeyboardMarkup(keyboard)
-        )
     else:
         await update.message.reply_text(
             text=message,
@@ -1341,6 +1423,7 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
         finally:
             if conn:
                 conn.close()
+
 async def handle_compensation_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         quantity = int(update.message.text)
@@ -1440,7 +1523,6 @@ async def handle_compensation_quantity(update: Update, context: ContextTypes.DEF
     except ValueError:
         await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
         return States.COMPENSATION_QUANTITY
-
 async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1964,7 +2046,6 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn.close()
     
     return ConversationHandler.END
-
 async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await ensure_user(update, context)
     
@@ -2082,6 +2163,7 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
         finally:
             if conn:
                 conn.close()
+
 async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2390,7 +2472,6 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "لطفا گزینه مورد نظر را انتخاب کنید:",
         reply_markup=InlineKeyboardMarkup(keyboard))
     return States.EDIT_ITEM
-
 async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2821,25 +2902,125 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
     except Exception as e:
         logger.error(f"Error notifying user: {e}")
-async def run_bot():
-    """Main async function to run the bot"""
+
+async def generate_simple_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to generate a simple verification code"""
+    conn = None
     try:
-        await initialize_db()
-        load_drug_data()
-        
-        application = Application.builder() \
-            .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
-            .build()
-        
-        setup_handlers(application)
-        
-        await application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            close_loop=False
-        )
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute('''
+            SELECT is_admin FROM users WHERE id = %s
+            ''', (update.effective_user.id,))
+            result = cursor.fetchone()
+            
+            if not result or not result[0]:
+                await update.message.reply_text("شما مجوز انجام این کار را ندارید.")
+                return
+    
     except Exception as e:
-        logging.error(f"Bot runtime error: {e}")
-        raise
+        logger.error(f"Error checking admin status: {e}")
+        await update.message.reply_text("خطا در بررسی مجوزها.")
+        return
+    finally:
+        if conn:
+            conn.close()
+    
+    # Generate a 5-digit code
+    code = str(random.randint(10000, 99999))
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute('''
+            INSERT INTO simple_codes (code, max_uses)
+            VALUES (%s, %s)
+            ON CONFLICT (code) DO UPDATE SET max_uses = EXCLUDED.max_uses
+            ''', (code, 5))
+            conn.commit()
+            
+            await update.message.reply_text(
+                f"✅ کد تایید ساده ایجاد شد:\n\n"
+                f"کد: {code}\n"
+                f"حداکثر استفاده: 5 کاربر\n\n"
+                "این کد را می‌توانید به دیگران بدهید تا بدون ثبت مدارک از ربات استفاده کنند."
+            )
+    except Exception as e:
+        logger.error(f"Error generating simple code: {e}")
+        await update.message.reply_text("خطا در ایجاد کد تایید.")
+    finally:
+        if conn:
+            conn.close()
+
+async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to verify a pharmacy"""
+    if not update.message.text.startswith('/verify_'):
+        return
+    
+    try:
+        pharmacy_id = int(update.message.text.split('_')[1])
+    except (IndexError, ValueError):
+        await update.message.reply_text("فرمت دستور نادرست است. از /verify_12345 استفاده کنید.")
+        return
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # Verify the pharmacy
+            cursor.execute('''
+            UPDATE pharmacies 
+            SET verified = TRUE, 
+                verified_at = CURRENT_TIMESTAMP,
+                admin_id = %s
+            WHERE user_id = %s
+            RETURNING name
+            ''', (update.effective_user.id, pharmacy_id))
+            
+            result = cursor.fetchone()
+            if not result:
+                await update.message.reply_text("داروخانه با این شناسه یافت نشد.")
+                return
+            
+            # Generate an admin code for the pharmacy
+            admin_code = str(random.randint(10000, 99999))
+            cursor.execute('''
+            UPDATE pharmacies 
+            SET admin_code = %s
+            WHERE user_id = %s
+            ''', (admin_code, pharmacy_id))
+            
+            # Mark user as verified
+            cursor.execute('''
+            UPDATE users 
+            SET is_verified = TRUE 
+            WHERE id = %s
+            ''', (pharmacy_id,))
+            
+            conn.commit()
+            
+            await update.message.reply_text(
+                f"✅ داروخانه {result[0]} با موفقیت تایید شد!\n\n"
+                f"کد ادمین برای این داروخانه: {admin_code}\n"
+                "این کد را می‌توانید به داروخانه بدهید تا دیگران با آن ثبت نام کنند."
+            )
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=pharmacy_id,
+                    text=f"✅ داروخانه شما توسط ادمین تایید شد!\n\n"
+                         f"شما اکنون می‌توانید از تمام امکانات ربات استفاده کنید."
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify pharmacy: {e}")
+                
+    except Exception as e:
+        logger.error(f"Error verifying pharmacy: {e}")
+        await update.message.reply_text("خطا در تایید داروخانه.")
+    finally:
+        if conn:
+            conn.close()
 
 def setup_handlers(application):
     """Setup all handlers for the bot"""
@@ -2848,6 +3029,9 @@ def setup_handlers(application):
         states={
             States.ADMIN_VERIFICATION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
+            ],
+            States.SIMPLE_VERIFICATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
             ],
             States.REGISTER_PHARMACY_NAME: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, register_pharmacy_name)
@@ -2932,23 +3116,92 @@ def setup_handlers(application):
             ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        per_message=True  # This addresses the warning
+        per_message=True
     )
+    
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("cancel", cancel))
+    application.add_handler(CommandHandler("generate_code", generate_simple_code))
     
+    # Handle callback queries for offer responses
     application.add_handler(CallbackQueryHandler(
         handle_offer_response, 
         pattern="^offer_",
     ))
     
+    # Handle simple verification button
+    application.add_handler(CallbackQueryHandler(
+        simple_verify_start, 
+        pattern="^simple_verify$",
+    ))
+    
+    # Handle admin verification button
+    application.add_handler(CallbackQueryHandler(
+        admin_verify_start, 
+        pattern="^admin_verify$",
+    ))
+    
+    # Handle register button
+    application.add_handler(CallbackQueryHandler(
+        register_pharmacy_name, 
+        pattern="^register$",
+    ))
+    
+    # Handle text messages
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND, 
         handle_text
     ))
     
+    # Handle admin verify commands
+    application.add_handler(MessageHandler(
+        filters.Regex(r'^/verify_\d+$') & filters.User(ADMIN_CHAT_ID),
+        verify_pharmacy
+    ))
+    
     application.add_error_handler(error_handler)
+
+async def run_bot():
+    """Main async function to run the bot"""
+    try:
+        # Initialize database and load drug data
+        await initialize_db()
+        if not load_drug_data():
+            logger.error("Failed to load drug data on startup")
+        
+        # Create application
+        application = Application.builder() \
+            .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
+            .build()
+        
+        # Setup handlers
+        setup_handlers(application)
+        
+        # Start polling
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(
+            allowed_updates=Update.ALL_TYPES,
+            timeout=30,
+            read_latency=5
+        )
+        
+        # Keep the bot running
+        while True:
+            await asyncio.sleep(3600)  # Sleep for 1 hour
+            
+    except asyncio.CancelledError:
+        logger.info("Bot received shutdown signal")
+    except Exception as e:
+        logger.error(f"Bot runtime error: {e}")
+        raise
+    finally:
+        # Cleanup
+        if 'application' in locals():
+            await application.updater.stop()
+            await application.stop()
+            await application.shutdown()
 
 def main():
     """Main entry point"""
@@ -2961,22 +3214,26 @@ def main():
         ]
     )
     
-    # Create new event loop
+    # Create and run event loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
     try:
-        # Create task and run - THIS BLOCK MUST BE INDENTED
-        task = loop.create_task(run_bot())
-        loop.run_until_complete(task)
+        # Run the bot
+        loop.run_until_complete(run_bot())
     except KeyboardInterrupt:
-        logging.info("Bot stopped by user")
-        # Cancel all running tasks
-        for task in asyncio.all_tasks(loop):
-            task.cancel()
-        # Run cleanup
-        loop.run_until_complete(asyncio.gather(*asyncio.all_tasks(loop), return_exceptions=True))
+        logger.info("Bot stopped by user")
     except Exception as e:
-        logging.error(f"Fatal error: {e}")
+        logger.error(f"Fatal error: {e}")
     finally:
+        # Cleanup
+        tasks = asyncio.all_tasks(loop)
+        for task in tasks:
+            task.cancel()
+        
+        # Run cleanup tasks
+        loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
         loop.close()
+
+if __name__ == '__main__':
+    main()
