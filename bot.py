@@ -1,6 +1,7 @@
 import time
 import re
 import psycopg2
+import ssl
 from psycopg2 import sql, extras
 from telegram.ext import BaseHandler
 from typing import Optional, Awaitable
@@ -32,6 +33,7 @@ from telegram.error import TimedOut, NetworkError
 from enum import Enum, auto
 import os
 from pathlib import Path
+from typing import Dict, List, Optional
 import traceback
 from difflib import SequenceMatcher
 from datetime import datetime
