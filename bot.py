@@ -1,7 +1,6 @@
 import time
 import re
 import psycopg2
-import ssl
 from psycopg2 import sql, extras
 from telegram.ext import BaseHandler
 from typing import Optional, Awaitable
@@ -33,7 +32,6 @@ from telegram.error import TimedOut, NetworkError
 from enum import Enum, auto
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
 import traceback
 from difflib import SequenceMatcher
 from datetime import datetime
@@ -2823,34 +2821,14 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
     except Exception as e:
         logger.error(f"Error notifying user: {e}")
-
 async def run_bot(application):
     try:
         await initialize_db()
         load_drug_data()
-        
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                await application.initialize()
-                await application.start()
-                await application.updater.start_polling(
-                    allowed_updates=Update.ALL_TYPES,
-                    timeout=30
-                )
-                break
-            except (ssl.SSLWantReadError, asyncio.TimeoutError) as e:
-                if attempt == max_retries - 1:
-                    raise
-                await asyncio.sleep(5 * (attempt + 1))
-        
-        while True:
-            await asyncio.sleep(1)
-            
-    except asyncio.CancelledError:
-        await application.updater.stop()
-        await application.stop()
-        await application.shutdown()
+        await application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            close_loop=False
+        )
     except Exception as e:
         logging.error(f"Bot runtime error: {e}")
         raise
@@ -2945,14 +2923,22 @@ def setup_handlers(application):
             ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        per_message=False
     )
-    
     application.add_handler(conv_handler)
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("cancel", cancel))
-    application.add_handler(CallbackQueryHandler(handle_offer_response, pattern="^offer_"))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    
+    application.add_handler(CallbackQueryHandler(
+        handle_offer_response, 
+        pattern="^offer_",
+    ))
+    
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND, 
+        handle_text
+    ))
+    
     application.add_error_handler(error_handler)
 
 def main():
@@ -2966,35 +2952,19 @@ def main():
     )
     
     try:
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        
         application = Application.builder() \
             .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
-            .get_updates_request({'ssl_context': ssl_context}) \
             .build()
         
         setup_handlers(application)
         
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        asyncio.run(run_bot(application))
         
-        try:
-            loop.run_until_complete(run_bot(application))
-        except KeyboardInterrupt:
-            logging.info("Bot stopped by user")
-        finally:
-            loop.close()
-            asyncio.set_event_loop(None)
-            
+    except KeyboardInterrupt:
+        logging.info("Bot stopped by user")
     except Exception as e:
         logging.error(f"Fatal error in main: {e}")
         raise
 
 if __name__ == "__main__":
-    import certifi
-    import os
-    os.environ['SSL_CERT_FILE'] = certifi.where()
-    
     main()
