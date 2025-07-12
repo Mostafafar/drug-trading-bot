@@ -40,6 +40,8 @@ from typing import Optional, Awaitable
 import requests
 import openpyxl
 from io import BytesIO
+import nest_asyncio
+nest_asyncio.apply()
 import asyncio
 import tracemalloc
 import html
