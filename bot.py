@@ -3125,10 +3125,10 @@ def setup_handlers(application):
           per_message=False  # Changed from True to False
     )
     
-    application.add_handler(conv_handler)
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("cancel", cancel))
-    application.add_handler(CommandHandler("generate_code", generate_simple_code))
+     application.add_handler(conv_handler)
+     application.add_handler(CommandHandler("start", start))
+     application.add_handler(CommandHandler("cancel", cancel))
+     application.add_handler(CommandHandler("generate_code", generate_simple_code))
     
     # Handle callback queries for offer responses
     application.add_handler(CallbackQueryHandler(
