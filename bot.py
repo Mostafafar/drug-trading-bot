@@ -2951,20 +2951,25 @@ def main():
         ]
     )
     
+    # Explicit event loop management for Termux
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
     try:
         application = Application.builder() \
             .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
             .build()
         
         setup_handlers(application)
-        
-        asyncio.run(run_bot(application))
+        loop.run_until_complete(run_bot(application))
         
     except KeyboardInterrupt:
         logging.info("Bot stopped by user")
     except Exception as e:
         logging.error(f"Fatal error in main: {e}")
         raise
+    finally:
+        loop.close()
 
 if __name__ == "__main__":
     main()
