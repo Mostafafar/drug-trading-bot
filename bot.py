@@ -3023,9 +3023,9 @@ async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if conn:
             conn.close()
 
-  def setup_handlers(application):
-    """Setup all handlers for the bot"""
-    conv_handler = ConversationHandler(
+def setup_handlers(application):
+        """Setup all handlers for the bot"""
+        conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("start", start),
             CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
