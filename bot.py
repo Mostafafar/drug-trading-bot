@@ -2951,27 +2951,32 @@ def setup_handlers(application):
     application.add_error_handler(error_handler)
 
 def main():
-    logging.basicConfig(...)  # Same logging setup
+    """Main entry point"""
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO,
+        handlers=[
+            logging.FileHandler('bot.log'),
+            logging.StreamHandler()
+        ]
+    )
     
     # Create new event loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
     try:
-    # Create task and run
-    task = loop.create_task(run_bot())
-    loop.run_until_complete(task)
-except KeyboardInterrupt:
-    logging.info("Bot stopped by user")
-    # Cancel all running tasks
-    for task in asyncio.all_tasks(loop):
-        task.cancel()
-    # Run cleanup - THIS IS THE FIXED LINE:
-    loop.run_until_complete(asyncio.gather(*asyncio.all_tasks(loop), return_exceptions=True))
-except Exception as e:
-    logging.error(f"Fatal error: {e}")
-finally:
-    loop.close()
-
-if __name__ == "__main__":
-    main()
+        # Create task and run - THIS BLOCK MUST BE INDENTED
+        task = loop.create_task(run_bot())
+        loop.run_until_complete(task)
+    except KeyboardInterrupt:
+        logging.info("Bot stopped by user")
+        # Cancel all running tasks
+        for task in asyncio.all_tasks(loop):
+            task.cancel()
+        # Run cleanup
+        loop.run_until_complete(asyncio.gather(*asyncio.all_tasks(loop), return_exceptions=True))
+    except Exception as e:
+        logging.error(f"Fatal error: {e}")
+    finally:
+        loop.close()
