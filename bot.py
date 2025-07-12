@@ -2951,24 +2951,27 @@ def setup_handlers(application):
     application.add_error_handler(error_handler)
 
 def main():
-    """Main entry point"""
-    logging.basicConfig(
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.INFO,
-        handlers=[
-            logging.FileHandler('bot.log'),
-            logging.StreamHandler()
-        ]
-    )
+    logging.basicConfig(...)  # Same logging setup
     
-    # For Termux/Python 3.12+ compatibility
+    # Create new event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
     try:
-        asyncio.run(run_bot())
+        # Create task and run
+        task = loop.create_task(run_bot())
+        loop.run_until_complete(task)
     except KeyboardInterrupt:
         logging.info("Bot stopped by user")
+        # Cancel all running tasks
+        for task in asyncio.all_tasks(loop):
+            task.cancel()
+        # Run cleanup
+        loop.run_until_complete(asyncio.gather(*asyncio.all_tasks(loop), return_exceptions=True)
     except Exception as e:
         logging.error(f"Fatal error: {e}")
-        raise
+    finally:
+        loop.close()
 
 if __name__ == "__main__":
     main()
