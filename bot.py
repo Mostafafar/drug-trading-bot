@@ -998,7 +998,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-           cursor.execute('''
+            cursor.execute('''
             SELECT 
                 di.id, 
                 di.user_id,
