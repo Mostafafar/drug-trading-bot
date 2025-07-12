@@ -2821,10 +2821,18 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
     except Exception as e:
         logger.error(f"Error notifying user: {e}")
-async def run_bot(application):
+async def run_bot():
+    """Main async function to run the bot"""
     try:
         await initialize_db()
         load_drug_data()
+        
+        application = Application.builder() \
+            .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
+            .build()
+        
+        setup_handlers(application)
+        
         await application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             close_loop=False
@@ -2834,6 +2842,7 @@ async def run_bot(application):
         raise
 
 def setup_handlers(application):
+    """Setup all handlers for the bot"""
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -2923,9 +2932,9 @@ def setup_handlers(application):
             ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
+        per_message=True  # This addresses the warning
     )
     application.add_handler(conv_handler)
-    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("cancel", cancel))
     
@@ -2942,6 +2951,7 @@ def setup_handlers(application):
     application.add_error_handler(error_handler)
 
 def main():
+    """Main entry point"""
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         level=logging.INFO,
@@ -2951,25 +2961,14 @@ def main():
         ]
     )
     
-    # Explicit event loop management for Termux
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
+    # For Termux/Python 3.12+ compatibility
     try:
-        application = Application.builder() \
-            .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
-            .build()
-        
-        setup_handlers(application)
-        loop.run_until_complete(run_bot(application))
-        
+        asyncio.run(run_bot())
     except KeyboardInterrupt:
         logging.info("Bot stopped by user")
     except Exception as e:
-        logging.error(f"Fatal error in main: {e}")
+        logging.error(f"Fatal error: {e}")
         raise
-    finally:
-        loop.close()
 
 if __name__ == "__main__":
     main()
