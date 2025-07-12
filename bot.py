@@ -3,6 +3,7 @@ import re
 import psycopg2
 from psycopg2 import sql, extras
 import warnings
+from telegram.warnings import PTBUserWarning
 from telegram.ext import BaseHandler
 from typing import Optional, Awaitable
 import gc
@@ -45,6 +46,7 @@ import asyncio
 import tracemalloc
 import html
 from telegram.constants import ParseMode
+warnings.filterwarnings("ignore", category=PTBUserWarning, message=".*per_message=False.*")
 
 tracemalloc.start()
 
@@ -3136,7 +3138,7 @@ async def run_bot():
             fallbacks=[CommandHandler("cancel", cancel)],
             per_chat=True,
             per_user=True,
-            per_message=False
+            
             
         )
 
