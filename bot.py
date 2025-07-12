@@ -2972,7 +2972,7 @@ def main():
         
         application = Application.builder() \
             .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
-            .get_updates_request_kwargs({'ssl_context': ssl_context}) \
+            .get_updates_request({'ssl_context': ssl_context}) \
             .build()
         
         setup_handlers(application)
