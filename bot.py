@@ -3133,7 +3133,7 @@ async def run_bot():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=True
+            per_message=False
         )
 
         # Add all handlers
