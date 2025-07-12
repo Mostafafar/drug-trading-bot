@@ -3022,134 +3022,6 @@ async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         if conn:
             conn.close()
-
-def setup_handlers(application):
-        """Setup all handlers for the bot"""
-        conv_handler = ConversationHandler(
-        entry_points=[
-            CommandHandler("start", start),
-            CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
-            CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$"),
-            CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
-        ],
-        states={
-            States.ADMIN_VERIFICATION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
-            ],
-            States.SIMPLE_VERIFICATION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
-            ],
-            States.REGISTER_PHARMACY_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, register_pharmacy_name)
-            ],
-            States.REGISTER_FOUNDER_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, register_founder_name)
-            ],
-            States.REGISTER_NATIONAL_CARD: [
-                MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_national_card)
-            ],
-            States.REGISTER_LICENSE: [
-                MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license)
-            ],
-            States.REGISTER_MEDICAL_CARD: [
-                MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card)
-            ],
-            States.REGISTER_PHONE: [
-                MessageHandler(filters.CONTACT | (filters.TEXT & ~filters.COMMAND), register_phone)
-            ],
-            States.REGISTER_ADDRESS: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, register_address)
-            ],
-            States.REGISTER_LOCATION: [
-                MessageHandler(filters.LOCATION, register_location)
-            ],
-            States.VERIFICATION_CODE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)
-            ],
-            States.SEARCH_DRUG: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
-            ],
-            States.SELECT_PHARMACY: [
-                CallbackQueryHandler(select_pharmacy)
-            ],
-            States.SELECT_ITEMS: [
-                CallbackQueryHandler(select_items)
-            ],
-            States.COMPENSATION_SELECTION: [
-                CallbackQueryHandler(handle_compensation_selection)
-            ],
-            States.COMPENSATION_QUANTITY: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_compensation_quantity)
-            ],
-            States.CONFIRM_TOTALS: [
-                CallbackQueryHandler(confirm_totals)
-            ],
-            States.SEARCH_DRUG_FOR_ADDING: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
-            ],
-            States.SELECT_DRUG_FOR_ADDING: [
-                CallbackQueryHandler(select_drug_for_adding)
-            ],
-            States.ADD_DRUG_DATE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
-                CallbackQueryHandler(add_drug_date)
-            ],
-            States.ADD_DRUG_QUANTITY: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
-                CallbackQueryHandler(save_drug_item)
-            ],
-            States.ADD_NEED_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)
-            ],
-            States.ADD_NEED_DESC: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)
-            ],
-            States.ADD_NEED_QUANTITY: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
-            ],
-            States.ADMIN_UPLOAD_EXCEL: [
-                MessageHandler(filters.Document.ALL | (filters.TEXT & ~filters.COMMAND), handle_excel_upload)
-            ],
-                    States.EDIT_ITEM: [
-            CallbackQueryHandler(edit_drug_item),
-            CallbackQueryHandler(edit_need_item),
-            CallbackQueryHandler(handle_drug_edit_action),
-            CallbackQueryHandler(handle_need_edit_action),
-            CallbackQueryHandler(handle_drug_deletion),
-            CallbackQueryHandler(handle_need_deletion),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
-        ]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-    per_message=False  # Changed from True to False
-)
-
-application.add_handler(conv_handler)
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("cancel", cancel))
-application.add_handler(CommandHandler("generate_code", generate_simple_code))
-
-# Handle callback queries for offer responses
-application.add_handler(CallbackQueryHandler(
-    handle_offer_response, 
-    pattern="^offer_",
-))
-    
-# Handle text messages
-application.add_handler(MessageHandler(
-    filters.TEXT & ~filters.COMMAND, 
-    handle_text
-))
-    
-# Handle admin verify commands
-application.add_handler(MessageHandler(
-    filters.Regex(r'^/verify_\d+$') & filters.User(ADMIN_CHAT_ID),
-    verify_pharmacy
-))
-    
-application.add_error_handler(error_handler)
-
 async def run_bot():
     """Main async function to run the bot"""
     try:
@@ -3163,10 +3035,118 @@ async def run_bot():
             .token("7551102128:AAEYxAtdyGh21CwmjvnvqKNq8FyR6PijHsY") \
             .build()
         
-        # Setup handlers
-        setup_handlers(application)
-        
-        # Start polling
+        # Setup all handlers
+        conv_handler = ConversationHandler(
+            entry_points=[
+                CommandHandler("start", start),
+                CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
+                CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$"),
+                CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
+            ],
+            states={
+                States.ADMIN_VERIFICATION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
+                ],
+                States.SIMPLE_VERIFICATION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
+                ],
+                States.REGISTER_PHARMACY_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, register_pharmacy_name)
+                ],
+                States.REGISTER_FOUNDER_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, register_founder_name)
+                ],
+                States.REGISTER_NATIONAL_CARD: [
+                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_national_card)
+                ],
+                States.REGISTER_LICENSE: [
+                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license)
+                ],
+                States.REGISTER_MEDICAL_CARD: [
+                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card)
+                ],
+                States.REGISTER_PHONE: [
+                    MessageHandler(filters.CONTACT | (filters.TEXT & ~filters.COMMAND), register_phone)
+                ],
+                States.REGISTER_ADDRESS: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, register_address)
+                ],
+                States.REGISTER_LOCATION: [
+                    MessageHandler(filters.LOCATION, register_location)
+                ],
+                States.VERIFICATION_CODE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)
+                ],
+                States.SEARCH_DRUG: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
+                ],
+                States.SELECT_PHARMACY: [
+                    CallbackQueryHandler(select_pharmacy)
+                ],
+                States.SELECT_ITEMS: [
+                    CallbackQueryHandler(select_items)
+                ],
+                States.COMPENSATION_SELECTION: [
+                    CallbackQueryHandler(handle_compensation_selection)
+                ],
+                States.COMPENSATION_QUANTITY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_compensation_quantity)
+                ],
+                States.CONFIRM_TOTALS: [
+                    CallbackQueryHandler(confirm_totals)
+                ],
+                States.SEARCH_DRUG_FOR_ADDING: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
+                ],
+                States.SELECT_DRUG_FOR_ADDING: [
+                    CallbackQueryHandler(select_drug_for_adding)
+                ],
+                States.ADD_DRUG_DATE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
+                    CallbackQueryHandler(add_drug_date)
+                ],
+                States.ADD_DRUG_QUANTITY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
+                    CallbackQueryHandler(save_drug_item)
+                ],
+                States.ADD_NEED_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)
+                ],
+                States.ADD_NEED_DESC: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)
+                ],
+                States.ADD_NEED_QUANTITY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
+                ],
+                States.ADMIN_UPLOAD_EXCEL: [
+                    MessageHandler(filters.Document.ALL | (filters.TEXT & ~filters.COMMAND), handle_excel_upload)
+                ],
+                States.EDIT_ITEM: [
+                    CallbackQueryHandler(edit_drug_item),
+                    CallbackQueryHandler(edit_need_item),
+                    CallbackQueryHandler(handle_drug_edit_action),
+                    CallbackQueryHandler(handle_need_edit_action),
+                    CallbackQueryHandler(handle_drug_deletion),
+                    CallbackQueryHandler(handle_need_deletion),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            per_message=False
+        )
+
+        # Add all handlers
+        application.add_handler(conv_handler)
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("cancel", cancel))
+        application.add_handler(CommandHandler("generate_code", generate_simple_code))
+        application.add_handler(CallbackQueryHandler(handle_offer_response, pattern="^offer_"))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+        application.add_handler(MessageHandler(filters.Regex(r'^/verify_\d+$') & filters.User(ADMIN_CHAT_ID), verify_pharmacy))
+        application.add_error_handler(error_handler)
+
+        # Start the bot
         await application.initialize()
         await application.start()
         await application.updater.start_polling(
@@ -3177,7 +3157,7 @@ async def run_bot():
         
         # Keep the bot running
         while True:
-            await asyncio.sleep(3600)  # Sleep for 1 hour
+            await asyncio.sleep(3600)
             
     except asyncio.CancelledError:
         logger.info("Bot received shutdown signal")
