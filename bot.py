@@ -3133,6 +3133,8 @@ async def run_bot():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
+            per_chat=True,
+            per_user=True,
             per_message=False
         )
 
