@@ -3,8 +3,6 @@ import re
 import psycopg2
 from psycopg2 import sql, extras
 import warnings
-from telegram.warnings import PTBUserWarning
-warnings.filterwarnings("ignore", category=PTBUserWarning)
 from telegram.ext import BaseHandler
 from typing import Optional, Awaitable
 import gc
@@ -3136,6 +3134,9 @@ async def run_bot():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
+            per_chat=True,
+            per_user=True,
+            per_message=False
             
         )
 
