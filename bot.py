@@ -1179,6 +1179,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         await update.callback_query.edit_message_text(
             text=message,
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
     else:
         await update.message.reply_text(
             text=message,
