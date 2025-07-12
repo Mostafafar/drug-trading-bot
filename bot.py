@@ -3023,10 +3023,15 @@ async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if conn:
             conn.close()
 
-def setup_handlers(application):
+  def setup_handlers(application):
     """Setup all handlers for the bot"""
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[
+            CommandHandler("start", start),
+            CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
+            CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$"),
+            CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
+        ],
         states={
             States.ADMIN_VERIFICATION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
@@ -3117,7 +3122,7 @@ def setup_handlers(application):
             ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        per_message=True
+        per_message=False  # Changed from True to False
     )
     
     application.add_handler(conv_handler)
@@ -3129,24 +3134,6 @@ def setup_handlers(application):
     application.add_handler(CallbackQueryHandler(
         handle_offer_response, 
         pattern="^offer_",
-    ))
-    
-    # Handle simple verification button
-    application.add_handler(CallbackQueryHandler(
-        simple_verify_start, 
-        pattern="^simple_verify$",
-    ))
-    
-    # Handle admin verification button
-    application.add_handler(CallbackQueryHandler(
-        admin_verify_start, 
-        pattern="^admin_verify$",
-    ))
-    
-    # Handle register button
-    application.add_handler(CallbackQueryHandler(
-        register_pharmacy_name, 
-        pattern="^register$",
     ))
     
     # Handle text messages
@@ -3173,7 +3160,7 @@ async def run_bot():
         
         # Create application
         application = Application.builder() \
-            .token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4") \
+            .token("7551102128:AAEYxAtdyGh21CwmjvnvqKNq8FyR6PijHsY") \
             .build()
         
         # Setup handlers
