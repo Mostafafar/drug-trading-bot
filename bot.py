@@ -40,8 +40,6 @@ from typing import Optional, Awaitable
 import requests
 import openpyxl
 from io import BytesIO
-import nest_asyncio
-nest_asyncio.apply()
 import asyncio
 import tracemalloc
 import html
@@ -2828,10 +2826,18 @@ async def run_bot(application):
     try:
         await initialize_db()
         load_drug_data()
-        await application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            close_loop=False
-        )
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
+        
+        # Keep the bot running
+        while True:
+            await asyncio.sleep(1)
+            
+    except asyncio.CancelledError:
+        await application.updater.stop()
+        await application.stop()
+        await application.shutdown()
     except Exception as e:
         logging.error(f"Bot runtime error: {e}")
         raise
@@ -2961,8 +2967,12 @@ def main():
         
         setup_handlers(application)
         
-        asyncio.run(run_bot(application))
-        
+        loop = asyncio.get_event_loop()
+        try:
+            loop.run_until_complete(run_bot(application))
+        finally:
+            loop.close()
+            
     except KeyboardInterrupt:
         logging.info("Bot stopped by user")
     except Exception as e:
