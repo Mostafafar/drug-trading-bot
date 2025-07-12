@@ -3110,45 +3110,45 @@ def setup_handlers(application):
             States.ADMIN_UPLOAD_EXCEL: [
                 MessageHandler(filters.Document.ALL | (filters.TEXT & ~filters.COMMAND), handle_excel_upload)
             ],
-            States.EDIT_ITEM: [
-                CallbackQueryHandler(edit_drug_item),
-                CallbackQueryHandler(edit_need_item),
-                CallbackQueryHandler(handle_drug_edit_action),
-                CallbackQueryHandler(handle_need_edit_action),
-                CallbackQueryHandler(handle_drug_deletion),
-                CallbackQueryHandler(handle_need_deletion),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
-            ]
-        },
-          fallbacks=[CommandHandler("cancel", cancel)],
-          per_message=False  # Changed from True to False
-    )
+                    States.EDIT_ITEM: [
+            CallbackQueryHandler(edit_drug_item),
+            CallbackQueryHandler(edit_need_item),
+            CallbackQueryHandler(handle_drug_edit_action),
+            CallbackQueryHandler(handle_need_edit_action),
+            CallbackQueryHandler(handle_drug_deletion),
+            CallbackQueryHandler(handle_need_deletion),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
+        ]
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
+    per_message=False  # Changed from True to False
+)
+
+application.add_handler(conv_handler)
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("cancel", cancel))
+application.add_handler(CommandHandler("generate_code", generate_simple_code))
+
+# Handle callback queries for offer responses
+application.add_handler(CallbackQueryHandler(
+    handle_offer_response, 
+    pattern="^offer_",
+))
     
-     application.add_handler(conv_handler)
-     application.add_handler(CommandHandler("start", start))
-     application.add_handler(CommandHandler("cancel", cancel))
-     application.add_handler(CommandHandler("generate_code", generate_simple_code))
+# Handle text messages
+application.add_handler(MessageHandler(
+    filters.TEXT & ~filters.COMMAND, 
+    handle_text
+))
     
-    # Handle callback queries for offer responses
-    application.add_handler(CallbackQueryHandler(
-        handle_offer_response, 
-        pattern="^offer_",
-    ))
+# Handle admin verify commands
+application.add_handler(MessageHandler(
+    filters.Regex(r'^/verify_\d+$') & filters.User(ADMIN_CHAT_ID),
+    verify_pharmacy
+))
     
-    # Handle text messages
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND, 
-        handle_text
-    ))
-    
-    # Handle admin verify commands
-    application.add_handler(MessageHandler(
-        filters.Regex(r'^/verify_\d+$') & filters.User(ADMIN_CHAT_ID),
-        verify_pharmacy
-    ))
-    
-    application.add_error_handler(error_handler)
+application.add_error_handler(error_handler)
 
 async def run_bot():
     """Main async function to run the bot"""
