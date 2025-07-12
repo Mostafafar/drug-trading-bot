@@ -2978,6 +2978,3 @@ def main():
     except Exception as e:
         logging.error(f"Fatal error in main: {e}")
         raise
-
-if __name__ == "__main__":
-    main()
