@@ -3358,7 +3358,6 @@ async def run_bot():
         await application.updater.start_polling(
             allowed_updates=Update.ALL_TYPES,
             timeout=30,
-            read_latency=5
         )
         
         # Keep the bot running
