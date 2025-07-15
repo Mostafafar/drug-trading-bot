@@ -39,10 +39,6 @@ import requests
 import openpyxl
 from io import BytesIO
 import asyncio
-# Configure logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
 
 logger = logging.getLogger(__name__)
 
@@ -63,51 +59,52 @@ DB_CONFIG = {
 # Ensure directories exist
 Path(PHOTO_STORAGE).mkdir(exist_ok=True)
 
-# ======== STATES CLASS ========
-class States:
+# ======== STATES ENUM ========
+class States(Enum):
     # Registration states
-    REGISTER_PHARMACY_NAME = 1
-    REGISTER_FOUNDER_NAME = 2
-    REGISTER_NATIONAL_CARD = 3
-    REGISTER_LICENSE = 4
-    REGISTER_MEDICAL_CARD = 5
-    REGISTER_PHONE = 6
-    REGISTER_ADDRESS = 7
-    REGISTER_LOCATION = 8
-    VERIFICATION_CODE = 9
-    ADMIN_VERIFICATION = 10
+    REGISTER_PHARMACY_NAME = auto()
+    REGISTER_FOUNDER_NAME = auto()
+    REGISTER_NATIONAL_CARD = auto()
+    REGISTER_LICENSE = auto()
+    REGISTER_MEDICAL_CARD = auto()
+    REGISTER_PHONE = auto()
+    REGISTER_ADDRESS = auto()
+    REGISTER_LOCATION = auto()
+    VERIFICATION_CODE = auto()
+    ADMIN_VERIFICATION = auto()
     
     # Drug search and offer states
-    SEARCH_DRUG = 11
-    SELECT_PHARMACY = 12
-    SELECT_ITEMS = 13
-    SELECT_QUANTITY = 14
-    CONFIRM_OFFER = 15
-    CONFIRM_TOTALS = 16
+    SEARCH_DRUG = auto()
+    SELECT_PHARMACY = auto()
+    SELECT_ITEMS = auto()
+    SELECT_QUANTITY = auto()
+    CONFIRM_OFFER = auto()
+    CONFIRM_TOTALS = auto()
     
     # Need addition states
-    SELECT_NEED_CATEGORY = 17
-    ADD_NEED_NAME = 18
-    ADD_NEED_DESC = 19
-    ADD_NEED_QUANTITY = 20
-    SEARCH_DRUG_FOR_NEED = 21
-    SELECT_DRUG_FOR_NEED = 22
+    SELECT_NEED_CATEGORY = auto()
+    ADD_NEED_NAME = auto()
+    ADD_NEED_DESC = auto()
+    ADD_NEED_QUANTITY = auto()
+    SEARCH_DRUG_FOR_NEED = auto()
+    SELECT_DRUG_FOR_NEED = auto()
     
     # Compensation states
-    COMPENSATION_SELECTION = 23
-    COMPENSATION_QUANTITY = 24
+    COMPENSATION_SELECTION = auto()
+    COMPENSATION_QUANTITY = auto()
     
     # Drug addition states
-    ADD_DRUG_DATE = 25
-    ADD_DRUG_QUANTITY = 26
-    SEARCH_DRUG_FOR_ADDING = 27
-    SELECT_DRUG_FOR_ADDING = 28
+    ADD_DRUG_DATE = auto()
+    ADD_DRUG_QUANTITY = auto()
+    SEARCH_DRUG_FOR_ADDING = auto()
+    SELECT_DRUG_FOR_ADDING = auto()
     
     # Admin states
-    ADMIN_UPLOAD_EXCEL = 29
-    EDIT_ITEM = 30
+    ADMIN_UPLOAD_EXCEL = auto()
+    EDIT_ITEM = auto()
 
-# ======== END OF STATES CLASS ========
+# ======== END OF STATES ENUM ========
+
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -360,6 +357,7 @@ async def initialize_db():
         if conn:
             conn.close()
 
+asyncio.get_event_loop().run_until_complete(initialize_db())
 load_drug_data()
 
 class UserApprovalMiddleware(BaseHandler):
@@ -791,6 +789,7 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
         return States.ADMIN_UPLOAD_EXCEL
     
     return ConversationHandler.END
+
 async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await ensure_user(update, context)
     await update.message.reply_text("لطفا نام دارویی که می‌خواهید جستجو کنید را وارد کنید:")
@@ -1007,7 +1006,6 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
             reply_markup=InlineKeyboardMarkup(keyboard))
     
     return States.SELECT_ITEMS
-
 async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle item selection with proper v20+ typing"""
     query = update.callback_query
@@ -1082,7 +1080,6 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await query.edit_message_text(
             text=message,
             reply_markup=InlineKeyboardMarkup(keyboard)
-        )
         return States.CONFIRM_TOTALS
 
     elif query.data == "compensate":
@@ -1700,7 +1697,6 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "edit_selection":
         context.user_data['current_item_index'] = 0
         return await show_two_column_selection(update, context)
-
 async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2285,6 +2281,7 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         if conn:
             conn.close()
+
 async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2380,7 +2377,6 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         finally:
             if conn:
                 conn.close()
-
 async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2689,6 +2685,7 @@ async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         if conn:
             conn.close()
+
 async def edit_need_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2787,7 +2784,6 @@ async def handle_need_edit_action(update: Update, context: ContextTypes.DEFAULT_
             f"آیا مطمئن هستید که می‌خواهید نیاز {need['name']} را حذف کنید؟",
             reply_markup=InlineKeyboardMarkup(keyboard))
         return States.EDIT_ITEM
-
 async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     edit_field = context.user_data.get('edit_field')
     new_value = update.message.text
@@ -3392,15 +3388,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as fallback_error:
             logger.error(f"Even fallback error handling failed: {fallback_error}")
 
-async def main():
-    await initialize_db()
-    application = Application.builder().token("7551102128:AAEYxAtdyGh21CwmjvnvqKNq8FyR6PijHsY").build()
-    try:
-        await application.run_polling()
-    except asyncio.CancelledError:
-        pass
-    finally:
-        await application.shutdown()
+def main():
+    application = Application.builder().token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4").build()
     
     # Add middleware
     application.add_handler(UserApprovalMiddleware(), group=-1)
@@ -3575,9 +3564,7 @@ async def main():
     application.run_polling()
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Bot stopped by user")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    main()
+                                                                            
+                        
+                                                        
