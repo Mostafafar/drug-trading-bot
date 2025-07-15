@@ -39,6 +39,10 @@ import requests
 import openpyxl
 from io import BytesIO
 import asyncio
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
 
 logger = logging.getLogger(__name__)
 
@@ -59,52 +63,51 @@ DB_CONFIG = {
 # Ensure directories exist
 Path(PHOTO_STORAGE).mkdir(exist_ok=True)
 
-# ======== STATES ENUM ========
-class States(Enum):
+# ======== STATES CLASS ========
+class States:
     # Registration states
-    REGISTER_PHARMACY_NAME = auto()
-    REGISTER_FOUNDER_NAME = auto()
-    REGISTER_NATIONAL_CARD = auto()
-    REGISTER_LICENSE = auto()
-    REGISTER_MEDICAL_CARD = auto()
-    REGISTER_PHONE = auto()
-    REGISTER_ADDRESS = auto()
-    REGISTER_LOCATION = auto()
-    VERIFICATION_CODE = auto()
-    ADMIN_VERIFICATION = auto()
+    REGISTER_PHARMACY_NAME = 1
+    REGISTER_FOUNDER_NAME = 2
+    REGISTER_NATIONAL_CARD = 3
+    REGISTER_LICENSE = 4
+    REGISTER_MEDICAL_CARD = 5
+    REGISTER_PHONE = 6
+    REGISTER_ADDRESS = 7
+    REGISTER_LOCATION = 8
+    VERIFICATION_CODE = 9
+    ADMIN_VERIFICATION = 10
     
     # Drug search and offer states
-    SEARCH_DRUG = auto()
-    SELECT_PHARMACY = auto()
-    SELECT_ITEMS = auto()
-    SELECT_QUANTITY = auto()
-    CONFIRM_OFFER = auto()
-    CONFIRM_TOTALS = auto()
+    SEARCH_DRUG = 11
+    SELECT_PHARMACY = 12
+    SELECT_ITEMS = 13
+    SELECT_QUANTITY = 14
+    CONFIRM_OFFER = 15
+    CONFIRM_TOTALS = 16
     
     # Need addition states
-    SELECT_NEED_CATEGORY = auto()
-    ADD_NEED_NAME = auto()
-    ADD_NEED_DESC = auto()
-    ADD_NEED_QUANTITY = auto()
-    SEARCH_DRUG_FOR_NEED = auto()
-    SELECT_DRUG_FOR_NEED = auto()
+    SELECT_NEED_CATEGORY = 17
+    ADD_NEED_NAME = 18
+    ADD_NEED_DESC = 19
+    ADD_NEED_QUANTITY = 20
+    SEARCH_DRUG_FOR_NEED = 21
+    SELECT_DRUG_FOR_NEED = 22
     
     # Compensation states
-    COMPENSATION_SELECTION = auto()
-    COMPENSATION_QUANTITY = auto()
+    COMPENSATION_SELECTION = 23
+    COMPENSATION_QUANTITY = 24
     
     # Drug addition states
-    ADD_DRUG_DATE = auto()
-    ADD_DRUG_QUANTITY = auto()
-    SEARCH_DRUG_FOR_ADDING = auto()
-    SELECT_DRUG_FOR_ADDING = auto()
+    ADD_DRUG_DATE = 25
+    ADD_DRUG_QUANTITY = 26
+    SEARCH_DRUG_FOR_ADDING = 27
+    SELECT_DRUG_FOR_ADDING = 28
     
     # Admin states
-    ADMIN_UPLOAD_EXCEL = auto()
-    EDIT_ITEM = auto()
+    ADMIN_UPLOAD_EXCEL = 29
+    EDIT_ITEM = 30
 
-# ======== END OF STATES ENUM ========
-
+# ======== END OF STATES CLASS ========
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
