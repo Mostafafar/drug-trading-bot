@@ -357,7 +357,6 @@ async def initialize_db():
         if conn:
             conn.close()
 
-asyncio.get_event_loop().run_until_complete(initialize_db())
 load_drug_data()
 
 class UserApprovalMiddleware(BaseHandler):
@@ -3390,8 +3389,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as fallback_error:
             logger.error(f"Even fallback error handling failed: {fallback_error}")
 
-def main():
-    application = Application.builder().token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4").build()
+async def main():
+    await initialize_db()
+    application = Application.builder().token("7551102128:AAEYxAtdyGh21CwmjvnvqKNq8FyR6PijHsY").build()
     
     # Add middleware
     application.add_handler(UserApprovalMiddleware(), group=-1)
@@ -3566,4 +3566,4 @@ def main():
     application.run_polling()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
