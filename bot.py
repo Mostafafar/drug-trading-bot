@@ -3572,7 +3572,7 @@ async def main():
     application.run_polling()
 
 if __name__ == '__main__':
-   try:
+    try:
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Bot stopped by user")
