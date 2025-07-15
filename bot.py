@@ -3390,7 +3390,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Even fallback error handling failed: {fallback_error}")
 
 def main():
-    application = Application.builder().token("7551102128:AAGYSOLzITvCfiCNM1i1elNTPtapIcbF8W4").build()
+    application = Application.builder().token("7551102128:AAEYxAtdyGh21CwmjvnvqKNq8FyR6PijHsY").build()
     
     # Add middleware
     application.add_handler(UserApprovalMiddleware(), group=-1)
