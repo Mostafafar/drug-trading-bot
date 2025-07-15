@@ -3392,6 +3392,12 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main():
     await initialize_db()
     application = Application.builder().token("7551102128:AAEYxAtdyGh21CwmjvnvqKNq8FyR6PijHsY").build()
+    try:
+        await application.run_polling()
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await application.shutdown()
     
     # Add middleware
     application.add_handler(UserApprovalMiddleware(), group=-1)
@@ -3568,8 +3574,7 @@ async def main():
 if __name__ == '__main__':
    try:
         asyncio.run(main())
-    except RuntimeError as e:
-        if str(e) == "Event loop is closed":
-            pass  # Ignore this specific error
-        else:
-            raise
+    except KeyboardInterrupt:
+        print("Bot stopped by user")
+    except Exception as e:
+        print(f"An error occurred: {e}")
