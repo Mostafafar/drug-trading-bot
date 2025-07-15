@@ -1080,6 +1080,7 @@ async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await query.edit_message_text(
             text=message,
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return States.CONFIRM_TOTALS
 
     elif query.data == "compensate":
