@@ -3566,4 +3566,10 @@ async def main():
     application.run_polling()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+   try:
+        asyncio.run(main())
+    except RuntimeError as e:
+        if str(e) == "Event loop is closed":
+            pass  # Ignore this specific error
+        else:
+            raise
