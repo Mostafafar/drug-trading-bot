@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 DB_CONFIG = {
     'dbname': 'drug_trading',
     'user': 'postgres',
-    'password': 'yourpassword',
+    'password': 'm13821382',
     'host': 'localhost',
     'port': '5432'
 }
