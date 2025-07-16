@@ -5,7 +5,7 @@ import json
 import logging
 import random
 import asyncio
-import psycopg2
+import psycopg
 import traceback
 import pandas as pd
 from io import BytesIO
@@ -42,7 +42,6 @@ from telegram.ext import (
     ExtBot
 )
 from telegram.constants import ParseMode
-from psycopg2 import sql, extras
 
 # Constants and Configuration
 logging.basicConfig(
@@ -118,12 +117,12 @@ def get_db_connection(max_retries=3, retry_delay=1.0):
     
     for attempt in range(max_retries):
         try:
-            conn = psycopg2.connect(**DB_CONFIG)
+            conn = psycopg.connect(**DB_CONFIG)
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
                 cursor.execute("SET TIME ZONE 'Asia/Tehran'")
             return conn
-        except psycopg2.Error as e:
+        except psycopg.Error as e:
             last_error = e
             logger.error(f"DB connection attempt {attempt + 1} failed: {str(e)}")
             if conn:
@@ -137,7 +136,7 @@ def get_db_connection(max_retries=3, retry_delay=1.0):
     logger.critical(f"Failed to connect to DB after {max_retries} attempts")
     if last_error:
         raise last_error
-    raise psycopg2.Error("Unknown database connection error")
+    raise psycopg.Error("Unknown database connection error")
 
 async def initialize_db():
     """Initialize database tables and default data"""
@@ -295,7 +294,7 @@ async def initialize_db():
             ''', (ADMIN_CHAT_ID,))
             
             conn.commit()
-    except psycopg2.Error as e:
+    except psycopg.Error as e:
         logger.error(f"Database initialization error: {e}")
         if conn:
             conn.rollback()
@@ -320,7 +319,7 @@ async def ensure_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 last_active = EXCLUDED.last_active
             ''', (user.id, user.first_name, user.last_name, user.username))
             conn.commit()
-    except psycopg2.Error as e:
+    except psycopg.Error as e:
         logger.error(f"Error ensuring user: {e}")
         if conn:
             conn.rollback()
@@ -391,7 +390,7 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     conn = None
     try:
         conn = get_db_connection()
-        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
             # Get user needs
             cursor.execute('''
             SELECT id, name, quantity 
@@ -435,8 +434,8 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                     sim_score = similarity(need['name'], drug['name'])
                     if sim_score >= 0.7:
                         matches.append({
-                            'need': dict(need),
-                            'drug': dict(drug),
+                            'need': need,
+                            'drug': drug,
                             'similarity': sim_score
                         })
             
@@ -814,7 +813,6 @@ async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardRemove()
     )
     return States.REGISTER_ADDRESS
-
 async def register_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get location in registration process"""
     address = update.message.text
@@ -828,6 +826,7 @@ async def register_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
     return States.REGISTER_LOCATION
+
 async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Verify registration code"""
     location = update.message.location
@@ -1396,7 +1395,7 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = None
     try:
         conn = get_db_connection()
-        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
             cursor.execute('''
             SELECT id, name, price, date, quantity 
             FROM drug_items 
@@ -1442,7 +1441,7 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = None
     try:
         conn = get_db_connection()
-        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
             cursor.execute('''
             SELECT id, name, price, date, quantity 
             FROM drug_items 
@@ -1491,7 +1490,7 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = None
         try:
             conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+            with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
                 cursor.execute('''
                 SELECT id, name, price, date, quantity 
                 FROM drug_items 
@@ -1503,7 +1502,7 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text("دارو یافت نشد.")
                     return ConversationHandler.END
                 
-                context.user_data['editing_drug'] = dict(drug)
+                context.user_data['editing_drug'] = drug
                 
                 keyboard = [
                     [InlineKeyboardButton("✏️ ویرایش نام", callback_data="edit_name")],
@@ -1531,7 +1530,6 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         finally:
             if conn:
                 conn.close()
-
 async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug edit action selection"""
     query = update.callback_query
@@ -1621,7 +1619,7 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 UPDATE drug_items 
                 SET {} = %s 
                 WHERE id = %s AND user_id = %s
-                ''').format(sql.Identifier(edit_field)),
+                ''').format(psycopg.sql.Identifier(edit_field)),
                 (new_value, drug['id'], update.effective_user.id)
             )
             conn.commit()
@@ -1770,7 +1768,7 @@ async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = None
     try:
         conn = get_db_connection()
-        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
             cursor.execute('''
             SELECT id, name, description, quantity 
             FROM user_needs 
@@ -1815,7 +1813,7 @@ async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = None
     try:
         conn = get_db_connection()
-        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
             cursor.execute('''
             SELECT id, name, description, quantity 
             FROM user_needs 
@@ -1864,7 +1862,7 @@ async def edit_need_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = None
         try:
             conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+            with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
                 cursor.execute('''
                 SELECT id, name, description, quantity 
                 FROM user_needs 
@@ -1876,7 +1874,7 @@ async def edit_need_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text("نیاز یافت نشد.")
                     return ConversationHandler.END
                 
-                context.user_data['editing_need'] = dict(need)
+                context.user_data['editing_need'] = need
                 
                 keyboard = [
                     [InlineKeyboardButton("✏️ ویرایش نام", callback_data="edit_need_name")],
@@ -1976,11 +1974,11 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = get_db_connection()
         with conn.cursor() as cursor:
             cursor.execute(
-                sql.SQL('''
+                psycopg.sql.SQL('''
                 UPDATE user_needs 
                 SET {} = %s 
                 WHERE id = %s AND user_id = %s
-                ''').format(sql.Identifier(edit_field)),
+                ''').format(psycopg.sql.Identifier(edit_field)),
                 (new_value, need['id'], update.effective_user.id)
             )
             conn.commit()
@@ -2053,7 +2051,6 @@ async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
             conn.close()
     
     return await list_my_needs(update, context)
-
 # Search and Trade
 async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start drug search process"""
@@ -2073,7 +2070,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = None
     try:
         conn = get_db_connection()
-        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
             cursor.execute('''
             SELECT 
                 di.id, 
@@ -2092,7 +2089,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             results = cursor.fetchall()
 
             if results:
-                context.user_data['search_results'] = [dict(row) for row in results]
+                context.user_data['search_results'] = results
                 
                 message = "نتایج جستجو (نمایش بالاترین قیمت برای هر دارو):\n\n"
                 for idx, item in enumerate(results[:5]):
@@ -2116,7 +2113,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             'items': []
                         }
                     pharmacies[pharmacy_id]['count'] += 1
-                    pharmacies[pharmacy_id]['items'].append(dict(item))
+                    pharmacies[pharmacy_id]['items'].append(item)
                 
                 context.user_data['pharmacies'] = pharmacies
                 
@@ -2138,7 +2135,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text("هیچ دارویی با این نام یافت نشد.")
                 return ConversationHandler.END
-    except psycopg2.Error as e:
+    except psycopg.Error as e:
         logger.error(f"Database error in search: {e}")
         await update.message.reply_text("خطایی در پایگاه داده رخ داده است.")
         return ConversationHandler.END
@@ -2171,7 +2168,7 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn = None
             try:
                 conn = get_db_connection()
-                with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
                     # Get buyer's drugs for potential exchange
                     cursor.execute('''
                     SELECT id, name, price, quantity 
@@ -2179,7 +2176,7 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     WHERE user_id = %s AND quantity > 0
                     ''', (update.effective_user.id,))
                     buyer_drugs = cursor.fetchall()
-                    context.user_data['buyer_drugs'] = [dict(row) for row in buyer_drugs]
+                    context.user_data['buyer_drugs'] = buyer_drugs
                     
                     # Get pharmacy's medical categories
                     cursor.execute('''
@@ -2189,7 +2186,7 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     WHERE uc.user_id = %s
                     ''', (pharmacy_id,))
                     pharmacy_categories = cursor.fetchall()
-                    context.user_data['pharmacy_categories'] = [dict(row) for row in pharmacy_categories]
+                    context.user_data['pharmacy_categories'] = pharmacy_categories
                     
             except Exception as e:
                 logger.error(f"Error fetching data: {e}")
@@ -2485,7 +2482,7 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
         conn = None
         try:
             conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+            with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
                 cursor.execute('''
                 SELECT id, name, price, quantity 
                 FROM drug_items 
@@ -2497,7 +2494,7 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
                     await query.answer("آیتم یافت نشد.")
                     return
                 
-                context.user_data['current_comp_item'] = dict(item)
+                context.user_data['current_comp_item'] = item
                 
                 await query.edit_message_text(
                     f"لطفا تعداد را برای جبران با {item['name']} وارد کنید:\n\n"
@@ -2513,6 +2510,7 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
         finally:
             if conn:
                 conn.close()
+
 async def handle_compensation_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle compensation quantity input"""
     try:
@@ -2559,7 +2557,7 @@ async def handle_compensation_quantity(update: Update, context: ContextTypes.DEF
             conn = None
             try:
                 conn = get_db_connection()
-                with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
                     
                     if comp_data.get('compensating_user') == 'buyer':
                         cursor.execute('''
@@ -2774,7 +2772,7 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 await query.edit_message_text(success_msg)
                 
-        except psycopg2.Error as e:
+        except psycopg.Error as e:
             logger.error(f"Database error: {e}")
             await query.edit_message_text(
                 "❌ خطایی در ارسال پیشنهاد رخ داد. لطفا دوباره تلاش کنید."
@@ -2793,7 +2791,6 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "edit_selection":
         context.user_data['current_item_index'] = 0
         return await show_two_column_selection(update, context)
-
 async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle offer response (accept/reject)"""
     query = update.callback_query
@@ -2807,7 +2804,7 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
         conn = None
         try:
             conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+            with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
                 cursor.execute('''
                 SELECT o.*, 
                        u.first_name || ' ' || COALESCE(u.last_name, '') AS buyer_name,
@@ -2981,7 +2978,7 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
     conn = None
     try:
         conn = get_db_connection()
-        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
             # Get all categories
             cursor.execute('SELECT id, name FROM medical_categories')
             all_categories = cursor.fetchall()
@@ -3068,7 +3065,7 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = None
         try:
             conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+            with conn.cursor(row_factory=psycopg.rows.dict_row) as cursor:
                 cursor.execute('SELECT id, name FROM medical_categories')
                 all_categories = cursor.fetchall()
                 
