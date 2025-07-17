@@ -623,20 +623,32 @@ async def simple_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start admin verification process"""
-    query = update.callback_query
-    if query:
-        await query.answer()
-        await query.edit_message_text(
-            "لطفا کد تایید داروخانه را وارد کنید:",
-            reply_markup=ReplyKeyboardRemove()
-        )
-    else:
-        await update.message.reply_text(
-            "لطفا کد تایید داروخانه را وارد کنید:",
-            reply_markup=ReplyKeyboardRemove()
-        )
-    return States.ADMIN_VERIFICATION
-
+    try:
+        query = update.callback_query
+        if query:
+            await query.answer()
+            try:
+                await query.edit_message_text(
+                    "لطفا کد تایید داروخانه را وارد کنید:",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+            except Exception as e:
+                # Fallback to sending a new message if editing fails
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text="لطفا کد تایید داروخانه را وارد کنید:",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+        else:
+            await update.message.reply_text(
+                "لطفا کد تایید داروخانه را وارد کنید:",
+                reply_markup=ReplyKeyboardRemove()
+            )
+        return States.ADMIN_VERIFICATION
+    except Exception as e:
+        logger.error(f"Error in admin_verify_start: {e}")
+        # Handle the error appropriately
+        return ConversationHandler.END
 async def admin_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Verify admin code for pharmacy registration"""
     user_code = update.message.text.strip()
