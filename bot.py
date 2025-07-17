@@ -871,6 +871,26 @@ async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("خطایی در دریافت تصویر رخ داد. لطفا دوباره تلاش کنید.")
         return States.REGISTER_LICENSE
 
+async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get phone number in registration process"""
+    try:
+        if update.message.contact:
+            phone = update.message.contact.phone_number
+        else:
+            phone = update.message.text
+        
+        context.user_data['phone'] = phone
+        
+        await update.message.reply_text(
+            "لطفا آدرس داروخانه را وارد کنید:",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return States.REGISTER_ADDRESS
+    except Exception as e:
+        logger.error(f"Error in register_phone: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+
 async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get address in registration process"""
     try:
