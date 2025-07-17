@@ -3646,10 +3646,17 @@ async def run_bot():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=False,
+            per_message=True,
             per_chat=True,
             per_user=True
         )
+# Add catch-all callback handler for debugging
+async def debug_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    logger.info(f"Unhandled callback data: {query.data}")
+    await query.message.reply_text("Button not recognized.")
+application.add_handler(CallbackQueryHandler(debug_callback))
 
         # Add all handlers
         application.add_handler(conv_handler)
