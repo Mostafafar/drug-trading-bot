@@ -1,4 +1,4 @@
-import os
+mport os
 import re
 import time
 import json
@@ -3337,7 +3337,7 @@ async def run_bot():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=False,
+            per_message=True,
             per_chat=True,
             per_user=True
         )
