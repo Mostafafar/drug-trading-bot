@@ -713,22 +713,30 @@ async def admin_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if conn:
             conn.close()
 
-# Registration Handlers
+from telegram.constants import ParseMode  # Add this import at the top of your file
+
 async def register_pharmacy_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start pharmacy registration - get pharmacy name"""
-    query = update.callback_query
-    if query:
+    """Handle pharmacy name registration"""
+    try:
+        query = update.callback_query
         await query.answer()
+        
+        # Edit the message with explicit reply_markup
         await query.edit_message_text(
-            "لطفا نام داروخانه را وارد کنید:",
-            reply_markup=ReplyKeyboardRemove()
+            "لطفا نام داروخانه خود را وارد کنید:",
+            reply_markup=None,  # Explicitly remove inline keyboard
+            parse_mode=ParseMode.HTML  # Or use parse_mode='HTML'
         )
-    else:
-        await update.message.reply_text(
-            "لطفا نام داروخانه را وارد کنید:",
-            reply_markup=ReplyKeyboardRemove()
+        return States.PHARMACY_NAME_REGISTRATION
+    except Exception as e:
+        logger.error(f"Error in register_pharmacy_name: {e}")
+        # Fallback: send new message if edit fails
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="لطفا نام داروخانه خود را وارد کنید:",
+            reply_markup=None
         )
-    return States.REGISTER_PHARMACY_NAME
+        return States.PHARMACY_NAME_REGISTRATION
 
 async def register_founder_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get founder name in registration process"""
