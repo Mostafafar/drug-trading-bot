@@ -3633,7 +3633,6 @@ async def run_bot():
             per_user=True
         )
 async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Catch-all callback handler for unprocessed button clicks.
     Logs the unrecognized callback data and informs the user.
