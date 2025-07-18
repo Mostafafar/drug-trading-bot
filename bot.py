@@ -911,24 +911,6 @@ async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-async def register_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get location in registration process"""
-    try:
-        address = update.message.text
-        context.user_data['address'] = address
-        
-        keyboard = [[KeyboardButton("اشتراک گذاری موقعیت مکانی", request_location=True)]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-        
-        await update.message.reply_text(
-            "لطفا موقعیت مکانی داروخانه را با استفاده از دکمه زیر ارسال کنید:",
-            reply_markup=reply_markup
-        )
-        return States.REGISTER_LOCATION
-    except Exception as e:
-        logger.error(f"Error in register_location: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
 
 async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Verify registration code"""
@@ -3665,6 +3647,7 @@ application.add_handler(CallbackQueryHandler(debug_callback))
         application.add_handler(CommandHandler("generate_code", generate_simple_code))
         application.add_handler(CallbackQueryHandler(handle_offer_response, pattern="^offer_"))
         application.add_handler(MessageHandler(filters.Regex(r'^/verify_\d+$') & filters.User(ADMIN_CHAT_ID), verify_pharmacy))
+        application.add_handler(CallbackQueryHandler(debug_callback))
         application.add_error_handler(error_handler)
 
         # Start the bot
