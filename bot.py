@@ -3658,7 +3658,7 @@ async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 "لطفا از منوی اصلی دوباره اقدام کنید:",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("منوی اصلی", callback_data="start")]
-                )
+                )]
             )
         except Exception as edit_error:
             logger.error(f"Failed to edit message: {edit_error}")
