@@ -3669,7 +3669,8 @@ async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                      "لطفا از دستور /start استفاده کنید:",
                 reply_markup=ReplyKeyboardRemove()
             )
-            
+def setup_handlers(application: Application) -> None:
+    """Configure all handlers for the bot"""
     except Exception as e:
         logger.critical(f"Error in debug_callback: {e}", exc_info=True)
         if update.effective_message:
