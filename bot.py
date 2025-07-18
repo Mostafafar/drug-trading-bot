@@ -3632,11 +3632,13 @@ async def run_bot():
             per_chat=True,
             per_user=True
         )
+# Add catch-all callback handler for debugging
 async def debug_callback(update, context):
     query = update.callback_query
     await query.answer()
     logger.info(f"Unhandled callback data: {query.data}")
     await query.message.reply_text("Button not recognized.")
+application.add_handler(CallbackQueryHandler(debug_callback))
 
         # Add all handlers
         application.add_handler(conv_handler)
@@ -3645,7 +3647,6 @@ async def debug_callback(update, context):
         application.add_handler(CommandHandler("generate_code", generate_simple_code))
         application.add_handler(CallbackQueryHandler(handle_offer_response, pattern="^offer_"))
         application.add_handler(MessageHandler(filters.Regex(r'^/verify_\d+$') & filters.User(ADMIN_CHAT_ID), verify_pharmacy))
-        application.add_handler(CallbackQueryHandler(debug_callback))
         application.add_error_handler(error_handler)
 
         # Start the bot
