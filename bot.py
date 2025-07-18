@@ -3678,10 +3678,6 @@ async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 "خطای سیستم. لطفا بعدا تلاش کنید.",
                 reply_markup=ReplyKeyboardRemove()
             )
-
-
-def setup_handlers(application: Application) -> None:
-    """Configure all handlers for the bot"""
         # Add all handlers
         application.add_handler(conv_handler)
         application.add_handler(CommandHandler("start", start))
