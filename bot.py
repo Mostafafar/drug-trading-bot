@@ -3515,7 +3515,7 @@ async def run_bot():
         application = Application.builder() \
             .token("7551102128:AAEYxAtdyGh21CwmjvnvqKNq8FyR6PijHsY") \
             .build()
-        
+        setup_handlers(application)  # Use the new setup function
         # Main conversation handler
         conv_handler = ConversationHandler(
             entry_points=[
@@ -3655,6 +3655,7 @@ application.add_handler(CallbackQueryHandler(debug_callback))
         await application.updater.start_polling(
             allowed_updates=Update.ALL_TYPES,
             timeout=30,
+            drop_pending_updates=True
          
         )
         
