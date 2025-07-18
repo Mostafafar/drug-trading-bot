@@ -3632,52 +3632,12 @@ async def run_bot():
             per_chat=True,
             per_user=True
         )
-async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Catch-all callback handler for unprocessed button clicks.
-    Logs the unrecognized callback data and informs the user.
-    """
-    try:
-        query = update.callback_query
-        await query.answer()  # Important to prevent loading animations
-        
-        # Log the unhandled callback with user info
-        logger.warning(
-            f"Unhandled callback from user {query.from_user.id}: {query.data}",
-            extra={
-                'user_id': query.from_user.id,
-                'first_name': query.from_user.first_name,
-                'callback_data': query.data
-            }
-        )
-        
-        try:
-            # Try to edit the original message first
-            await query.edit_message_text(
-                "⚠️ این دکمه قابل شناسایی نیست\n\n"
-                "لطفا از منوی اصلی دوباره اقدام کنید:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("منوی اصلی", callback_data="start")]
-                ])
-            )
-        except Exception as edit_error:
-            logger.error(f"Failed to edit message: {edit_error}")
-            # Fallback to sending new message if edit fails
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text="⚠️ عملیات نامعتبر\n\n"
-                     "لطفا از دستور /start استفاده کنید:",
-                reply_markup=ReplyKeyboardRemove()
-            )
-def setup_handlers(application: Application) -> None:
-    """Configure all handlers for the bot"""
-    except Exception as e:
-        logger.critical(f"Error in debug_callback: {e}", exc_info=True)
-        if update.effective_message:
-            await update.effective_message.reply_text(
-                "خطای سیستم. لطفا بعدا تلاش کنید.",
-                reply_markup=ReplyKeyboardRemove()
-            )
+async def debug_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    logger.info(f"Unhandled callback data: {query.data}")
+    await query.message.reply_text("Button not recognized.")
+
         # Add all handlers
         application.add_handler(conv_handler)
         application.add_handler(CommandHandler("start", start))
