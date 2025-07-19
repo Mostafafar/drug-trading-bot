@@ -3515,7 +3515,7 @@ async def run_bot():
         application = Application.builder() \
             .token("7551102128:AAEYxAtdyGh21CwmjvnvqKNq8FyR6PijHsY") \
             .build()
-        setup_handlers(application)  # Use the new setup function
+        
         # Main conversation handler
         conv_handler = ConversationHandler(
             entry_points=[
@@ -3605,7 +3605,7 @@ async def run_bot():
                 States.ADD_NEED_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
                 ],
-                 States.ADMIN_UPLOAD_EXCEL: [
+                States.ADMIN_UPLOAD_EXCEL: [
                     MessageHandler(filters.Document.ALL | (filters.TEXT & ~filters.COMMAND), handle_excel_upload)
                 ],
                 States.EDIT_DRUG: [
@@ -3624,79 +3624,47 @@ async def run_bot():
                 ],
                 States.SELECT_NEED_CATEGORY: [
                     CallbackQueryHandler(toggle_category),
-                    CallbackQueryHandler(save_categories)
+                    CallbackQueryHandler(save_categories, pattern="^save_categories$")
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=True,
-            per_chat=True,
-            per_user=True
+            allow_reentry=True
         )
-# Add catch-all callback handler for debugging
-async def debug_callback(update, context):
-    query = update.callback_query
-    await query.answer()
-    logger.info(f"Unhandled callback data: {query.data}")
-    await query.message.reply_text("Button not recognized.")
-application.add_handler(CallbackQueryHandler(debug_callback))
 
-        # Add all handlers
+        # Add handlers
         application.add_handler(conv_handler)
+        
+        # Add command handlers
         application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("cancel", cancel))
         application.add_handler(CommandHandler("generate_code", generate_simple_code))
+        application.add_handler(CommandHandler("upload_excel", upload_excel_start))
+        application.add_handler(MessageHandler(filters.Regex(r'^/verify_\d+$'), verify_pharmacy))
+        
+        # Add callback handlers
         application.add_handler(CallbackQueryHandler(handle_offer_response, pattern="^offer_"))
-        application.add_handler(MessageHandler(filters.Regex(r'^/verify_\d+$') & filters.User(ADMIN_CHAT_ID), verify_pharmacy))
+        
+        # Add message handlers
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+        
+        # Add error handler
         application.add_error_handler(error_handler)
-
+        
         # Start the bot
+        logger.info("Starting bot...")
         await application.initialize()
         await application.start()
-        await application.updater.start_polling(
-            allowed_updates=Update.ALL_TYPES,
-            timeout=30,
-            drop_pending_updates=True
-         
-        )
+        await application.updater.start_polling()
         
         # Keep the bot running
         while True:
             await asyncio.sleep(3600)
             
-    except asyncio.CancelledError:
-        logger.info("Bot received shutdown signal")
     except Exception as e:
-        logger.error(f"Bot runtime error: {e}")
-        raise
+        logger.error(f"Fatal error in run_bot: {e}")
     finally:
-        # Cleanup
         if 'application' in locals():
-            await application.updater.stop()
             await application.stop()
             await application.shutdown()
 
-def main():
-    """Main entry point"""
-    # Create and run event loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        # Run the bot
-        loop.run_until_complete(run_bot())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
-    except Exception as e:
-        logger.error(f"Fatal error: {e}")
-    finally:
-        # Cleanup
-        tasks = asyncio.all_tasks(loop)
-        for task in tasks:
-            task.cancel()
-        
-        # Run cleanup tasks
-        loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
-        loop.close()
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    asyncio.run(run_bot())
