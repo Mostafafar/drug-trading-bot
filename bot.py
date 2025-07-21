@@ -913,17 +913,22 @@ async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def register_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get location in registration process"""
-    address = update.message.text
-    context.user_data['address'] = address
-    
-    keyboard = [[KeyboardButton("اشتراک گذاری موقعیت مکانی", request_location=True)]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-    
-    await update.message.reply_text(
-        "لطفا موقعیت مکانی داروخانه را با استفاده از دکمه زیر ارسال کنید:",
-        reply_markup=reply_markup
-    )
-    return States.REGISTER_LOCATION
+    try:
+        address = update.message.text
+        context.user_data['address'] = address
+        
+        keyboard = [[KeyboardButton("اشتراک گذاری موقعیت مکانی", request_location=True)]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+        
+        await update.message.reply_text(
+            "لطفا موقعیت مکانی داروخانه را با استفاده از دکمه زیر ارسال کنید:",
+            reply_markup=reply_markup
+        )
+        return States.REGISTER_LOCATION
+    except Exception as e:
+        logger.error(f"Error in register_location: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
 async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Verify registration code"""
     try:
