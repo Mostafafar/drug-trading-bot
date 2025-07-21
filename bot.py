@@ -3519,6 +3519,66 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             logger.error(f"Error notifying user: {e}")
     except Exception as e:
         logger.error(f"Error in error_handler: {e}")
+async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()  # جلوگیری از نشانگر بارگذاری
+    
+    logger.info(f"Button pressed: {query.data}")
+    
+    # هندلرهای اصلی
+    if query.data == "register":
+        return await register_pharmacy_name(update, context)
+    elif query.data == "admin_verify":
+        return await admin_verify_start(update, context)
+    elif query.data == "simple_verify":
+        return await simple_verify_start(update, context)
+    
+    # هندلرهای جستجو و انتخاب
+    elif query.data.startswith("search_"):
+        return await handle_search(update, context)
+    elif query.data.startswith("select_pharmacy_"):
+        return await select_pharmacy(update, context)
+    elif query.data.startswith("select_item_"):
+        return await select_items(update, context)
+    
+    # هندلرهای جبران خسارت
+    elif query.data.startswith("compensation_"):
+        return await handle_compensation_selection(update, context)
+    elif query.data == "confirm_totals":
+        return await confirm_totals(update, context)
+    
+    # هندلرهای داروها
+    elif query.data.startswith("add_drug_"):
+        return await search_drug_for_adding(update, context)
+    elif query.data.startswith("select_drug_"):
+        return await select_drug_for_adding(update, context)
+    elif query.data.startswith("edit_drug_"):
+        return await edit_drugs(update, context)
+    elif query.data.startswith("delete_drug_"):
+        return await handle_drug_deletion(update, context)
+    
+    # هندلرهای نیازها
+    elif query.data == "add_need":
+        return await save_need_name(update, context)
+    elif query.data.startswith("edit_need_"):
+        return await edit_needs(update, context)
+    elif query.data.startswith("delete_need_"):
+        return await handle_need_deletion(update, context)
+    
+    # هندلرهای دسته‌بندی
+    elif query.data.startswith("toggle_category_"):
+        return await toggle_category(update, context)
+    elif query.data == "save_categories":
+        return await save_categories(update, context)
+    
+    # هندلرهای پیشنهادات
+    elif query.data.startswith("offer_"):
+        return await handle_offer_response(update, context)
+    
+    # پاسخ به دکمه‌های ناشناخته
+    else:
+        logger.warning(f"Unknown button pressed: {query.data}")
+        await query.edit_message_text(text="⚠️ این دکمه قابل شناسایی نیست. لطفا دوباره تلاش کنید.")
 
 async def run_bot():
     """Run the bot"""
@@ -3646,12 +3706,15 @@ async def run_bot():
             },
             fallbacks=[CommandHandler("cancel", cancel)],
             allow_reentry=True,
-            per_message=False
+            per_message=False,
+            per_chat=True,     # این را اضافه کنید
+            per_user=True      # این را اضافه کنید
         
         )
 
         # Add handlers
         application.add_handler(conv_handler)
+        application.add_handler(CallbackQueryHandler(handle_button_click))
         
         # Add command handlers
         application.add_handler(CommandHandler("start", start))
