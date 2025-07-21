@@ -3645,7 +3645,7 @@ async def run_bot():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            allow_reentry=True
+            allow_reentry=True,
             per_message=True
         
         )
