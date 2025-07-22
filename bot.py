@@ -846,31 +846,44 @@ async def register_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get medical card photo in registration process"""
-    try:
-        if update.message.photo:
-            photo_file = await update.message.photo[-1].get_file()
-        elif update.message.document:
-            photo_file = await update.message.document.get_file()
-        else:
-            await update.message.reply_text("لطفا یک تصویر ارسال کنید.")
-            return States.REGISTER_LICENSE
-        
-        file_path = await download_file(photo_file, "medical_card", update.effective_user.id)
-        context.user_data['medical_card'] = file_path
-        
-        keyboard = [[KeyboardButton("اشتراک گذاری شماره تلفن", request_contact=True)]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-        
-        await update.message.reply_text(
-            "لطفا شماره تلفن خود را با استفاده از دکمه زیر ارسال کنید:",
-            reply_markup=reply_markup
-        )
-        return States.REGISTER_PHONE
-    except Exception as e:
-        logger.error(f"Error in register_medical_card: {e}")
-        await update.message.reply_text("خطایی در دریافت تصویر رخ داد. لطفا دوباره تلاش کنید.")
+    if update.message.photo:
+        photo_file = await update.message.photo[-1].get_file()
+    elif update.message.document:
+        photo_file = await update.message.document.get_file()
+    else:
+        await update.message.reply_text("لطفا یک تصویر ارسال کنید.")
         return States.REGISTER_LICENSE
+    
+    file_path = await download_file(photo_file, "license", update.effective_user.id)
+    context.user_data['license'] = file_path
+    
+    await update.message.reply_text(
+        "لطفا تصویر کارت نظام پزشکی را ارسال کنید:",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return States.REGISTER_MEDICAL_CARD
 
+async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get phone number in registration process"""
+    if update.message.photo:
+        photo_file = await update.message.photo[-1].get_file()
+    elif update.message.document:
+        photo_file = await update.message.document.get_file()
+    else:
+        await update.message.reply_text("لطفا یک تصویر ارسال کنید.")
+        return States.REGISTER_MEDICAL_CARD
+    
+    file_path = await download_file(photo_file, "medical_card", update.effective_user.id)
+    context.user_data['medical_card'] = file_path
+    
+    keyboard = [[KeyboardButton("اشتراک گذاری شماره تلفن", request_contact=True)]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    
+    await update.message.reply_text(
+        "لطفا شماره تلفن خود را با استفاده از دکمه زیر ارسال کنید:",
+        reply_markup=reply_markup
+    )
+    return States.REGISTER_PHONE
 async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get address in registration process"""
     try:
