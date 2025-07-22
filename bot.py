@@ -8,6 +8,7 @@ import asyncio
 import psycopg2
 import traceback
 import pandas as pd
+from telegram.ext import PicklePersistence
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime
