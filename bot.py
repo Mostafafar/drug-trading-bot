@@ -3747,34 +3747,49 @@ async def run_bot():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=False,
+            per_message=False,  # تغییر به False
             per_chat=True,
             per_user=True,
             name="main_conversation"
         )
-
-        # Add handlers in correct order
+        
+        # اضافه کردن هندلرها
         application.add_handler(CallbackQueryHandler(handle_button_click))
         application.add_handler(conv_handler)
         
-        # Add other essential handlers
+        # اضافه کردن سایر هندلرها
+        application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("generate_code", generate_simple_code))
         application.add_handler(CommandHandler("upload_excel", upload_excel_start))
         application.add_handler(MessageHandler(filters.Regex(r'^/verify_\d+$'), verify_pharmacy))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         
-        # Error handler
+        # هندلر خطا
         application.add_error_handler(error_handler)
         
-        # Start the bot
-        logger.info("Starting bot...")
-        await application.run_polling(drop_pending_updates=True)
+        # راه‌اندازی بات
+        logger.info("راه‌اندازی بات...")
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(drop_pending_updates=True)
         
+        # اجرای نامحدود
+        while True:
+            await asyncio.sleep(1)
+            
+    except asyncio.CancelledError:
+        logger.info("دریافت سیگنال توقف")
     except Exception as e:
-        logger.critical(f"Fatal error in bot: {e}")
+        logger.critical(f"خطای بحرانی: {e}", exc_info=True)
     finally:
-        if 'application' in locals():
+        if application and application.running:
+            logger.info("توقف بات...")
+            await application.updater.stop()
             await application.stop()
             await application.shutdown()
 
 if __name__ == "__main__":
-    asyncio.run(run_bot())
+    try:
+        asyncio.run(run_bot())
+    except KeyboardInterrupt:
+        logger.info("توسط کاربر متوقف شد")
