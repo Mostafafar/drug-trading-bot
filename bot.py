@@ -3521,113 +3521,72 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.error(f"Error in error_handler: {e}")
 async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Comprehensive handler for all inline buttons"""
+    """Handler for all inline buttons"""
     query = update.callback_query
-    await query.answer()  # Immediate response to prevent loading indicator
+    await query.answer()
     
     logger.info(f"Button pressed: {query.data}")
     
     try:
-        # Get current conversation state
+        # Get current state
         current_state = await context.application.persistence.get_conversation(
             update.effective_chat.id, 
             update.effective_user.id
         )
         
-        # Main registration buttons
-        if query.data == "register":
-            return await register_pharmacy_name(update, context)
+        # Handle buttons based on current state
+        if current_state == States.SELECT_DRUG_FOR_ADDING:
+            if query.data.startswith("select_drug_"):
+                drug_id = query.data.split('_')[2]
+                context.user_data['selected_drug'] = drug_id
+                await add_drug_date(update, context)
+                return States.ADD_DRUG_DATE
+                
+        elif current_state == States.SELECT_NEED_CATEGORY:
+            if query.data.startswith("cat_toggle_"):
+                category = query.data.split('_')[2]
+                selected = context.user_data.get('selected_categories', [])
+                if category in selected:
+                    selected.remove(category)
+                else:
+                    selected.append(category)
+                context.user_data['selected_categories'] = selected
+                await toggle_category(update, context)
+                return States.SELECT_NEED_CATEGORY
+            elif query.data == "save_categories":
+                await save_categories(update, context)
+                return States.ADD_NEED_DESC
+                
+        # Handle main menu buttons
+        elif query.data == "register":
+            await register_pharmacy_name(update, context)
+            return States.REGISTER_PHARMACY_NAME
         elif query.data == "admin_verify":
-            return await admin_verify_start(update, context)
+            await admin_verify_start(update, context)
+            return States.ADMIN_VERIFICATION
         elif query.data == "simple_verify":
-            return await simple_verify_start(update, context)
-            
-        # Drug search and selection
-        elif query.data.startswith("select_drug_"):
-            drug_id = query.data.split('_')[2]
-            context.user_data['selected_drug'] = drug_id
-            return await add_drug_date(update, context)
-            
-        # Pharmacy selection
-        elif query.data.startswith("select_pharmacy_"):
-            pharmacy_id = query.data.split('_')[2]
-            context.user_data['selected_pharmacy'] = pharmacy_id
-            return await select_items(update, context)
-            
-        # Item selection
-        elif query.data.startswith("select_item_"):
-            item_id = query.data.split('_')[2]
-            context.user_data['selected_item'] = item_id
-            return await handle_compensation_selection(update, context)
-            
-        # Compensation handling
-        elif query.data.startswith("compensation_"):
-            comp_type = query.data.split('_')[1]
-            context.user_data['compensation_type'] = comp_type
-            return await handle_compensation_quantity(update, context)
-            
-        # Needs category selection
-        elif query.data.startswith("toggle_category_"):
-            category = query.data.split('_')[2]
-            selected = context.user_data.get('selected_categories', [])
-            if category in selected:
-                selected.remove(category)
-            else:
-                selected.append(category)
-            context.user_data['selected_categories'] = selected
-            return await toggle_category(update, context)
-            
-        elif query.data == "save_categories":
-            return await save_categories(update, context)
-            
-        # Drug editing
-        elif query.data.startswith("edit_drug_"):
-            drug_id = query.data.split('_')[2]
-            context.user_data['edit_drug_id'] = drug_id
-            return await edit_drug_item(update, context)
-            
-        # Need editing
-        elif query.data.startswith("edit_need_"):
-            need_id = query.data.split('_')[2]
-            context.user_data['edit_need_id'] = need_id
-            return await edit_need_item(update, context)
-            
-        # Offer responses
-        elif query.data.startswith("offer_"):
-            parts = query.data.split('_')
-            offer_id = parts[1]
-            response = parts[2]
-            return await handle_offer_response(update, context)
+            await simple_verify_start(update, context)
+            return States.SIMPLE_VERIFICATION
             
         # Unknown button
         else:
-            logger.warning(f"Unknown button pressed: {query.data}")
-            await query.edit_message_text(
-                text="⚠️ This action isn't supported. Please use the main menu.",
-                reply_markup=None
-            )
+            logger.warning(f"Unknown button: {query.data}")
+            await query.edit_message_text("⚠️ این دکمه قابل شناسایی نیست")
             
     except Exception as e:
-        logger.error(f"Error processing button click: {e}")
-        try:
-            await query.edit_message_text(
-                text="⚠️ An error occurred. Please try again."
-            )
-        except:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="⚠️ An error occurred. Please try again."
-            )
+        logger.error(f"Error in button click: {e}")
+        await query.edit_message_text("⚠️ خطایی در پردازش دکمه رخ داد")
 
 async def run_bot():
-    """Main function to run the bot"""
+    """Run the bot"""
+    application = None
     try:
-        # Initialize database and load data
+        # Initialize
         await initialize_db()
         if not load_drug_data():
-            logger.error("Failed to load drug data on startup")
+            logger.error("Failed to load drug data")
         
-        # Create application with persistence
+        # Create application
         application = Application.builder() \
             .token("7551102128:AAEYxAtdyGh21CwmjvnvqKNq8FyR6PijHsY") \
             .persistence(PicklePersistence(filepath='bot_data')) \
