@@ -3656,7 +3656,7 @@ async def run_bot():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text),
                 CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
                 CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$"),
-                CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
+                CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$"),
                 CallbackQueryHandler(handle_button_click)
             ],
             states={
