@@ -1,6 +1,3 @@
-# ربات تبادل دارو - نسخه بهبود یافته
-
-```python
 import os
 import re
 import time
