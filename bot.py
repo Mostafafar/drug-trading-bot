@@ -3763,7 +3763,7 @@ async def run_bot():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=False,
+            per_message=True,
             per_chat=True,
             per_user=True,
             name="main_conversation"
