@@ -1,3 +1,6 @@
+# ربات تبادل دارو - نسخه بهبود یافته
+
+```python
 import os
 import re
 import time
@@ -8,7 +11,6 @@ import asyncio
 import psycopg2
 import traceback
 import pandas as pd
-from telegram.ext import PicklePersistence
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime
@@ -60,7 +62,7 @@ logger = logging.getLogger(__name__)
 DB_CONFIG = {
     'dbname': 'drug_trading',
     'user': 'postgres',
-    'password': 'm13821382',
+    'password': 'yourpassword',
     'host': 'localhost',
     'port': '5432'
 }
@@ -872,26 +874,6 @@ async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("خطایی در دریافت تصویر رخ داد. لطفا دوباره تلاش کنید.")
         return States.REGISTER_LICENSE
 
-async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get phone number in registration process"""
-    try:
-        if update.message.contact:
-            phone = update.message.contact.phone_number
-        else:
-            phone = update.message.text
-        
-        context.user_data['phone'] = phone
-        
-        await update.message.reply_text(
-            "لطفا آدرس داروخانه را وارد کنید:",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return States.REGISTER_ADDRESS
-    except Exception as e:
-        logger.error(f"Error in register_phone: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
-
 async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get address in registration process"""
     try:
@@ -930,6 +912,7 @@ async def register_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in register_location: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Verify registration code"""
     try:
@@ -3520,78 +3503,19 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             logger.error(f"Error notifying user: {e}")
     except Exception as e:
         logger.error(f"Error in error_handler: {e}")
-async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler for all inline buttons"""
-    query = update.callback_query
-    await query.answer()
-    
-    logger.info(f"Button pressed: {query.data}")
-    
-    try:
-        # Get current state
-        current_state = await context.application.persistence.get_conversation(
-            update.effective_chat.id, 
-            update.effective_user.id
-        )
-        
-        # Handle buttons based on current state
-        if current_state == States.SELECT_DRUG_FOR_ADDING:
-            if query.data.startswith("select_drug_"):
-                drug_id = query.data.split('_')[2]
-                context.user_data['selected_drug'] = drug_id
-                await add_drug_date(update, context)
-                return States.ADD_DRUG_DATE
-                
-        elif current_state == States.SELECT_NEED_CATEGORY:
-            if query.data.startswith("cat_toggle_"):
-                category = query.data.split('_')[2]
-                selected = context.user_data.get('selected_categories', [])
-                if category in selected:
-                    selected.remove(category)
-                else:
-                    selected.append(category)
-                context.user_data['selected_categories'] = selected
-                await toggle_category(update, context)
-                return States.SELECT_NEED_CATEGORY
-            elif query.data == "save_categories":
-                await save_categories(update, context)
-                return States.ADD_NEED_DESC
-                
-        # Handle main menu buttons
-        elif query.data == "register":
-            await register_pharmacy_name(update, context)
-            return States.REGISTER_PHARMACY_NAME
-        elif query.data == "admin_verify":
-            await admin_verify_start(update, context)
-            return States.ADMIN_VERIFICATION
-        elif query.data == "simple_verify":
-            await simple_verify_start(update, context)
-            return States.SIMPLE_VERIFICATION
-            
-        # Unknown button
-        else:
-            logger.warning(f"Unknown button: {query.data}")
-            await query.edit_message_text("⚠️ این دکمه قابل شناسایی نیست")
-            
-    except Exception as e:
-        logger.error(f"Error in button click: {e}")
-        await query.edit_message_text("⚠️ خطایی در پردازش دکمه رخ داد")
 
 async def run_bot():
     """Run the bot"""
-    application = None
     try:
-        # Initialize
+        # Initialize database and load drug data
         await initialize_db()
         if not load_drug_data():
-            logger.error("Failed to load drug data")
+            logger.error("Failed to load drug data on startup")
         
         # Create application
         application = Application.builder() \
             .token("7551102128:AAEYxAtdyGh21CwmjvnvqKNq8FyR6PijHsY") \
-            .persistence(PicklePersistence(filepath='bot_data')) \
             .build()
-            
         
         # Main conversation handler
         conv_handler = ConversationHandler(
@@ -3600,8 +3524,7 @@ async def run_bot():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text),
                 CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
                 CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$"),
-                CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$"),
-                CallbackQueryHandler(handle_button_click)
+                CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
             ],
             states={
                 States.START: [
@@ -3700,55 +3623,49 @@ async def run_bot():
                     CallbackQueryHandler(handle_need_deletion),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
                 ],
-                States.SELECT_NEED_CATEGORY: [
+                                States.SELECT_NEED_CATEGORY: [
                     CallbackQueryHandler(toggle_category),
                     CallbackQueryHandler(save_categories, pattern="^save_categories$")
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=False,  # تغییر به False
-            per_chat=True,
-            per_user=True,
-            name="main_conversation"
+            allow_reentry=True
         )
-        
-        # اضافه کردن هندلرها
-        application.add_handler(CallbackQueryHandler(handle_button_click))
+
+        # Add handlers
         application.add_handler(conv_handler)
         
-        # اضافه کردن سایر هندلرها
+        # Add command handlers
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("generate_code", generate_simple_code))
         application.add_handler(CommandHandler("upload_excel", upload_excel_start))
         application.add_handler(MessageHandler(filters.Regex(r'^/verify_\d+$'), verify_pharmacy))
+        
+        # Add callback handlers
+        application.add_handler(CallbackQueryHandler(handle_offer_response, pattern="^offer_"))
+        
+        # Add message handlers
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         
-        # هندلر خطا
+        # Add error handler
         application.add_error_handler(error_handler)
         
-        # راه‌اندازی بات
-        logger.info("راه‌اندازی بات...")
+        # Start the bot
+        logger.info("Starting bot...")
         await application.initialize()
         await application.start()
-        await application.updater.start_polling(drop_pending_updates=True)
+        await application.updater.start_polling()
         
-        # اجرای نامحدود
+        # Keep the bot running
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(3600)
             
-    except asyncio.CancelledError:
-        logger.info("دریافت سیگنال توقف")
     except Exception as e:
-        logger.critical(f"خطای بحرانی: {e}", exc_info=True)
+        logger.error(f"Fatal error in run_bot: {e}")
     finally:
-        if application and application.running:
-            logger.info("توقف بات...")
-            await application.updater.stop()
+        if 'application' in locals():
             await application.stop()
             await application.shutdown()
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(run_bot())
-    except KeyboardInterrupt:
-        logger.info("توسط کاربر متوقف شد")
+    asyncio.run(run_bot())
