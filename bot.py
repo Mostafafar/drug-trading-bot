@@ -3515,7 +3515,10 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         logger.error(f"Error in error_handler: {e}")
 
 async def run_bot():
-    """Run the bot"""
+    """Run the bot with proper startup and shutdown handling"""
+    application = None
+    updater = None
+    
     try:
         # Initialize database and load drug data
         await initialize_db()
@@ -3664,18 +3667,46 @@ async def run_bot():
         logger.info("Starting bot...")
         await application.initialize()
         await application.start()
-        await application.updater.start_polling()
+        
+        # Get the updater if it exists
+        if hasattr(application, 'updater') and application.updater:
+            updater = application.updater
+            await updater.start_polling()
+            logger.info("Updater started polling")
+        
+        logger.info("Bot is now running")
         
         # Keep the bot running
         while True:
             await asyncio.sleep(3600)
             
+    except asyncio.CancelledError:
+        logger.info("Bot received cancellation signal")
     except Exception as e:
-        logger.error(f"Fatal error in run_bot: {e}")
+        logger.error(f"Fatal error in run_bot: {e}", exc_info=True)
     finally:
-        if 'application' in locals():
-            await application.stop()
-            await application.shutdown()
+        try:
+            logger.info("Starting shutdown sequence...")
+            
+            # Shutdown in reverse order of initialization
+            if updater is not None:
+                logger.info("Stopping updater...")
+                await updater.stop()
+            
+            if application is not None:
+                logger.info("Stopping application...")
+                await application.stop()
+                logger.info("Shutting down application...")
+                await application.shutdown()
+            
+            logger.info("Cleanup completed successfully")
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}", exc_info=True)
 
 if __name__ == "__main__":
-    asyncio.run(run_bot())
+    try:
+        asyncio.run(run_bot())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by keyboard interrupt")
+    except Exception as e:
+        logger.error(f"Unexpected error in main: {e}", exc_info=True)
