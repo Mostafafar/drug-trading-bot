@@ -3521,129 +3521,113 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.error(f"Error in error_handler: {e}")
 async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler جامع برای تمام دکمه‌های اینلاین"""
+    """Comprehensive handler for all inline buttons"""
     query = update.callback_query
-    await query.answer()  # پاسخ اولیه برای جلوگیری از نشانگر بارگذاری
+    await query.answer()  # Immediate response to prevent loading indicator
     
-    logger.info(f"دکمه فشرده شده: {query.data}")
+    logger.info(f"Button pressed: {query.data}")
     
     try:
-        # بررسی وضعیت مکالمه فعلی
+        # Get current conversation state
         current_state = await context.application.persistence.get_conversation(
             update.effective_chat.id, 
             update.effective_user.id
         )
         
-        # اگر در حالتی هستیم که نیاز به پردازش توسط ConversationHandler دارد
-        if current_state and current_state in States.__dict__.values():
-            logger.info(f"مکالمه فعال در حالت {current_state} - پردازش به ConversationHandler واگذار می‌شود")
-            return
-        
-        # پردازش دکمه‌های اصلی
+        # Main registration buttons
         if query.data == "register":
-            await register_pharmacy_name(update, context)
+            return await register_pharmacy_name(update, context)
         elif query.data == "admin_verify":
-            await admin_verify_start(update, context)
+            return await admin_verify_start(update, context)
         elif query.data == "simple_verify":
-            await simple_verify_start(update, context)
+            return await simple_verify_start(update, context)
             
-        # پردازش دکمه‌های داروخانه
-        elif query.data.startswith("pharmacy_"):
-            parts = query.data.split('_')
-            if len(parts) == 3 and parts[1] == "select":
-                context.user_data['selected_pharmacy'] = parts[2]
-                await select_items(update, context)
-                
-        # پردازش دکمه‌های دارو
-        elif query.data.startswith("drug_"):
-            parts = query.data.split('_')
-            if len(parts) >= 3:
-                action = parts[1]
-                drug_id = parts[2]
-                
-                if action == "select":
-                    context.user_data['selected_drug'] = drug_id
-                    await add_drug_date(update, context)
-                elif action == "edit":
-                    await edit_drug_item(update, context)
-                elif action == "delete":
-                    await handle_drug_deletion(update, context)
-                    
-        # پردازش دکمه‌های نیازها
-        elif query.data.startswith("need_"):
-            parts = query.data.split('_')
-            if len(parts) >= 3:
-                action = parts[1]
-                need_id = parts[2]
-                
-                if action == "edit":
-                    await edit_need_item(update, context)
-                elif action == "delete":
-                    await handle_need_deletion(update, context)
-                    
-        # پردازش دکمه‌های جبران خسارت
-        elif query.data.startswith("comp_"):
-            parts = query.data.split('_')
-            if len(parts) == 3:
-                action = parts[1]
-                comp_id = parts[2]
-                
-                if action == "select":
-                    await handle_compensation_selection(update, context)
-                elif action == "confirm":
-                    await confirm_totals(update, context)
-                    
-        # پردازش دکمه‌های دسته‌بندی
-        elif query.data.startswith("cat_"):
-            parts = query.data.split('_')
-            if len(parts) == 3:
-                action = parts[1]
-                cat_id = parts[2]
-                
-                if action == "toggle":
-                    await toggle_category(update, context)
-                elif action == "save":
-                    await save_categories(update, context)
-                    
-        # پردازش دکمه‌های پیشنهادات
+        # Drug search and selection
+        elif query.data.startswith("select_drug_"):
+            drug_id = query.data.split('_')[2]
+            context.user_data['selected_drug'] = drug_id
+            return await add_drug_date(update, context)
+            
+        # Pharmacy selection
+        elif query.data.startswith("select_pharmacy_"):
+            pharmacy_id = query.data.split('_')[2]
+            context.user_data['selected_pharmacy'] = pharmacy_id
+            return await select_items(update, context)
+            
+        # Item selection
+        elif query.data.startswith("select_item_"):
+            item_id = query.data.split('_')[2]
+            context.user_data['selected_item'] = item_id
+            return await handle_compensation_selection(update, context)
+            
+        # Compensation handling
+        elif query.data.startswith("compensation_"):
+            comp_type = query.data.split('_')[1]
+            context.user_data['compensation_type'] = comp_type
+            return await handle_compensation_quantity(update, context)
+            
+        # Needs category selection
+        elif query.data.startswith("toggle_category_"):
+            category = query.data.split('_')[2]
+            selected = context.user_data.get('selected_categories', [])
+            if category in selected:
+                selected.remove(category)
+            else:
+                selected.append(category)
+            context.user_data['selected_categories'] = selected
+            return await toggle_category(update, context)
+            
+        elif query.data == "save_categories":
+            return await save_categories(update, context)
+            
+        # Drug editing
+        elif query.data.startswith("edit_drug_"):
+            drug_id = query.data.split('_')[2]
+            context.user_data['edit_drug_id'] = drug_id
+            return await edit_drug_item(update, context)
+            
+        # Need editing
+        elif query.data.startswith("edit_need_"):
+            need_id = query.data.split('_')[2]
+            context.user_data['edit_need_id'] = need_id
+            return await edit_need_item(update, context)
+            
+        # Offer responses
         elif query.data.startswith("offer_"):
             parts = query.data.split('_')
-            if len(parts) == 4:
-                action = parts[1]
-                offer_id = parts[2]
-                response = parts[3]
-                
-                if action == "respond":
-                    await handle_offer_response(update, context)
-                    
-        # مدیریت دکمه‌های ناشناخته
+            offer_id = parts[1]
+            response = parts[2]
+            return await handle_offer_response(update, context)
+            
+        # Unknown button
         else:
-            logger.warning(f"دکمه ناشناخته: {query.data}")
+            logger.warning(f"Unknown button pressed: {query.data}")
             await query.edit_message_text(
-                text="⚠️ این عملیات پشتیبانی نمی‌شود. لطفاً از منوی اصلی استفاده کنید.",
+                text="⚠️ This action isn't supported. Please use the main menu.",
                 reply_markup=None
             )
             
     except Exception as e:
-        logger.error(f"خطا در پردازش دکمه: {e}")
+        logger.error(f"Error processing button click: {e}")
         try:
             await query.edit_message_text(
-                text="⚠️ خطایی در پردازش درخواست شما رخ داد. لطفاً دوباره تلاش کنید."
+                text="⚠️ An error occurred. Please try again."
             )
         except:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="⚠️ خطایی در پردازش درخواست شما رخ داد. لطفاً دوباره تلاش کنید."
+                text="⚠️ An error occurred. Please try again."
             )
 
 async def run_bot():
-    """تابع اصلی اجرای بات"""
+    """Main function to run the bot"""
     try:
-        # مقداردهی اولیه و راه‌اندازی
+        # Initialize database and load data
         await initialize_db()
         if not load_drug_data():
-            logger.error("خطا در بارگذاری داده‌های دارویی")
-            
+            logger.error("Failed to load drug data on startup")
+        
+        # Create application with persistence
         application = Application.builder() \
             .token("7551102128:AAEYxAtdyGh21CwmjvnvqKNq8FyR6PijHsY") \
             .persistence(PicklePersistence(filepath='bot_data')) \
@@ -3768,33 +3752,25 @@ async def run_bot():
             per_user=True,
             name="main_conversation"
         )
-        
-        # اضافه کردن هندلرها با ترتیب صحیح
+
+        # Add handlers in correct order
         application.add_handler(CallbackQueryHandler(handle_button_click))
         application.add_handler(conv_handler)
         
-        # اضافه کردن سایر هندلرها
-        application.add_handler(CommandHandler("start", start))
+        # Add other essential handlers
         application.add_handler(CommandHandler("generate_code", generate_simple_code))
         application.add_handler(CommandHandler("upload_excel", upload_excel_start))
         application.add_handler(MessageHandler(filters.Regex(r'^/verify_\d+$'), verify_pharmacy))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         
-        # هندلر خطا
+        # Error handler
         application.add_error_handler(error_handler)
         
-        # راه‌اندازی بات
-        logger.info("راه‌اندازی بات...")
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling(drop_pending_updates=True)
+        # Start the bot
+        logger.info("Starting bot...")
+        await application.run_polling(drop_pending_updates=True)
         
-        # نگه‌داشتن بات فعال
-        while True:
-            await asyncio.sleep(3600)
-            
     except Exception as e:
-        logger.critical(f"خطای بحرانی: {e}")
+        logger.critical(f"Fatal error in bot: {e}")
     finally:
         if 'application' in locals():
             await application.stop()
