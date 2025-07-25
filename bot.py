@@ -2807,6 +2807,7 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
             f"تفاوت مبلغ: {abs(difference):,}\n\n"
             "لطفا دارویی برای جبران تفاوت انتخاب کنید:",
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return States.COMPENSATION_SELECTION
     except Exception as e:
         logger.error(f"Error in handle_compensation_selection: {e}")
