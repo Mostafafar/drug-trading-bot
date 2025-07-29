@@ -346,22 +346,25 @@ def load_drug_data() -> bool:
     
     try:
         if excel_file.exists():
-            df = pd.read_excel(excel_file, sheet_name="Sheet1")
-            df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
-            drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
-            drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
-            logger.info(f"Loaded {len(drug_list)} drugs from local Excel file")
-            return True
-        
+            try:
+                df = pd.read_excel(excel_file, sheet_name="Sheet1", engine='openpyxl')
+                df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
+                drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
+                drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
+                logger.info(f"Loaded {len(drug_list)} drugs from local Excel file")
+                return True
+            except Exception as e:
+                logger.error(f"Error reading local Excel file: {e}")
+                
         github_url = "https://raw.githubusercontent.com/yourusername/yourrepo/main/DrugPrices.xlsx"
         response = requests.get(github_url)
         if response.status_code == 200:
             excel_data = BytesIO(response.content)
-            df = pd.read_excel(excel_data)
+            df = pd.read_excel(excel_data, engine='openpyxl')
             df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
             drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
             drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
-            df.to_excel(excel_file, index=False)
+            df.to_excel(excel_file, index=False, engine='openpyxl')
             logger.info(f"Loaded {len(drug_list)} drugs from GitHub and saved locally")
             return True
         
@@ -1215,13 +1218,13 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             try:
                 # Process Excel file
-                df = pd.read_excel(file_path)
+                df = pd.read_excel(file_path, engine='openpyxl')
                 df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
                 drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
                 drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
                 
                 # Save to local file
-                df.to_excel(excel_file, index=False)
+                df.to_excel(excel_file, index=False, engine='openpyxl')
                 
                 await update.message.reply_text(
                     f"✅ فایل اکسل با موفقیت آپلود شد!\n\n"
@@ -1262,12 +1265,12 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
                 response = requests.get(github_url)
                 if response.status_code == 200:
                     excel_data = BytesIO(response.content)
-                    df = pd.read_excel(excel_data)
+                    df = pd.read_excel(excel_data, engine='openpyxl')
                     df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
                     drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
                     drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
                     
-                    df.to_excel(excel_file, index=False)
+                    df.to_excel(excel_file, index=False, engine='openpyxl')
                     
                     await update.message.reply_text(
                         f"✅ فایل اکسل از گیتهاب با موفقیت بارگذاری شد!\n\n"
@@ -1482,7 +1485,7 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         keyboard = []
         for idx, (name, price) in enumerate(matched_drugs[:10]):
             keyboard.append([InlineKeyboardButton(
-                f"{name} ({price})", 
+                f"{name[:20]}... ({price})" if len(name) > 20 else f"{name} ({price})", 
                 callback_data=f"select_drug_{idx}"
             )])
         keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
@@ -1728,7 +1731,7 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = []
                 for drug in drugs:
                     keyboard.append([InlineKeyboardButton(
-                        f"{drug['name']} ({drug['quantity']})",
+                        f"{drug['name'][:20]}... ({drug['quantity']})" if len(drug['name']) > 20 else f"{drug['name']} ({drug['quantity']})",
                         callback_data=f"edit_drug_{drug['id']}"
                     )])
                 
@@ -2151,7 +2154,7 @@ async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = []
                 for need in needs:
                     keyboard.append([InlineKeyboardButton(
-                        f"{need['name']} ({need['quantity']})",
+                        f"{need['name'][:20]}... ({need['quantity']})" if len(need['name']) > 20 else f"{need['name']} ({need['quantity']})",
                         callback_data=f"edit_need_{need['id']}"
                     )])
                 
@@ -2962,99 +2965,98 @@ async def create_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         conn = None
         try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                # Calculate total price
-                pharmacy_total = sum(
-                    parse_price(item['price']) * item.get('selected_quantity', 1)
-                    for item in selected_items if item.get('type') == 'pharmacy_drug'
+            # Calculate total price
+            pharmacy_total = sum(
+                parse_price(item['price']) * item.get('selected_quantity', 1)
+                for item in selected_items if item.get('type') == 'pharmacy_drug'
+            )
+            
+            # Create offer
+            cursor = conn.cursor()
+            cursor.execute('''
+            INSERT INTO offers (
+                pharmacy_id, buyer_id, total_price
+            ) VALUES (%s, %s, %s)
+            RETURNING id
+            ''', (
+                pharmacy['id'],
+                update.effective_user.id,
+                pharmacy_total
+            ))
+            offer_id = cursor.fetchone()[0]
+            
+            # Add offer items
+            for item in selected_items:
+                if item.get('type') == 'pharmacy_drug':
+                    cursor.execute('''
+                    INSERT INTO offer_items (
+                        offer_id, drug_name, price, quantity, item_type
+                    ) VALUES (%s, %s, %s, %s, 'drug')
+                    ''', (
+                        offer_id,
+                        item['name'],
+                        item['price'],
+                        item.get('selected_quantity', 1)
+                    ))
+                elif item.get('type') in ('buyer_drug', 'compensation'):
+                    cursor.execute('''
+                    INSERT INTO compensation_items (
+                        offer_id, drug_id, quantity
+                    ) VALUES (%s, %s, %s)
+                    ''', (
+                        offer_id,
+                        item['id'],
+                        item.get('selected_quantity', 1)
+                    ))
+            
+            conn.commit()
+            
+            # Notify pharmacy
+            try:
+                keyboard = [
+                    [InlineKeyboardButton("✅ پذیرش پیشنهاد", callback_data=f"offer_accept_{offer_id}")],
+                    [InlineKeyboardButton("❌ رد پیشنهاد", callback_data=f"offer_reject_{offer_id}")]
+                ]
+                
+                offer_message = (
+                    "📬 یک پیشنهاد تبادل جدید دریافت کردید:\n\n"
+                    f"از: {update.effective_user.full_name}\n\n"
+                    "💊 داروهای پیشنهادی:\n"
                 )
                 
-                # Create offer
-                cursor.execute('''
-                INSERT INTO offers (
-                    pharmacy_id, buyer_id, total_price
-                ) VALUES (%s, %s, %s)
-                RETURNING id
-                ''', (
-                    pharmacy['id'],
-                    update.effective_user.id,
-                    pharmacy_total
-                ))
-                offer_id = cursor.fetchone()[0]
-                
-                # Add offer items
                 for item in selected_items:
                     if item.get('type') == 'pharmacy_drug':
-                        cursor.execute('''
-                        INSERT INTO offer_items (
-                            offer_id, drug_name, price, quantity, item_type
-                        ) VALUES (%s, %s, %s, %s, 'drug')
-                        ''', (
-                            offer_id,
-                            item['name'],
-                            item['price'],
-                            item.get('selected_quantity', 1)
-                        ))
-                    elif item.get('type') in ('buyer_drug', 'compensation'):
-                        cursor.execute('''
-                        INSERT INTO compensation_items (
-                            offer_id, drug_id, quantity
-                        ) VALUES (%s, %s, %s)
-                        ''', (
-                            offer_id,
-                            item['id'],
-                            item.get('selected_quantity', 1)
-                        ))
+                        offer_message += (
+                            f"• {item['name']} - قیمت: {item['price']} "
+                            f"(تعداد: {item.get('selected_quantity', 1)})\n"
+                        )
                 
-                conn.commit()
+                offer_message += "\n📝 داروهای دریافتی:\n"
+                for item in selected_items:
+                    if item.get('type') in ('buyer_drug', 'compensation'):
+                        offer_message += (
+                            f"• {item['name']} - قیمت: {item['price']} "
+                            f"(تعداد: {item.get('selected_quantity', 1)})\n"
+                        )
                 
-                # Notify pharmacy
-                try:
-                    keyboard = [
-                        [InlineKeyboardButton("✅ پذیرش پیشنهاد", callback_data=f"offer_accept_{offer_id}")],
-                        [InlineKeyboardButton("❌ رد پیشنهاد", callback_data=f"offer_reject_{offer_id}")]
-                    ]
-                    
-                    offer_message = (
-                        "📬 یک پیشنهاد تبادل جدید دریافت کردید:\n\n"
-                        f"از: {update.effective_user.full_name}\n\n"
-                        "💊 داروهای پیشنهادی:\n"
-                    )
-                    
-                    for item in selected_items:
-                        if item.get('type') == 'pharmacy_drug':
-                            offer_message += (
-                                f"• {item['name']} - قیمت: {item['price']} "
-                                f"(تعداد: {item.get('selected_quantity', 1)})\n"
-                            )
-                    
-                    offer_message += "\n📝 داروهای دریافتی:\n"
-                    for item in selected_items:
-                        if item.get('type') in ('buyer_drug', 'compensation'):
-                            offer_message += (
-                                f"• {item['name']} - قیمت: {item['price']} "
-                                f"(تعداد: {item.get('selected_quantity', 1)})\n"
-                            )
-                    
-                    offer_message += (
-                        f"\n💰 جمع مبلغ: {pharmacy_total:,}\n\n"
-                        "لطفا این پیشنهاد را بررسی کنید:"
-                    )
-                    
-                    await context.bot.send_message(
-                        chat_id=pharmacy['id'],
-                        text=offer_message,
-                        reply_markup=InlineKeyboardMarkup(keyboard)
-                    )
-                    
-                except Exception as e:
-                    logger.error(f"Failed to notify pharmacy: {e}")
-                
-                await query.edit_message_text(
-                    "✅ پیشنهاد تبادل شما با موفقیت ثبت شد!\n\n"
-                    "پس از بررسی توسط داروخانه، نتیجه به شما اطلاع داده خواهد شد."
+                offer_message += (
+                    f"\n💰 جمع مبلغ: {pharmacy_total:,}\n\n"
+                    "لطفا این پیشنهاد را بررسی کنید:"
                 )
+                
+                await context.bot.send_message(
+                    chat_id=pharmacy['id'],
+                    text=offer_message,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                
+            except Exception as e:
+                logger.error(f"Failed to notify pharmacy: {e}")
+            
+            await query.edit_message_text(
+                "✅ پیشنهاد تبادل شما با موفقیت ثبت شد!\n\n"
+                "پس از بررسی توسط داروخانه، نتیجه به شما اطلاع داده خواهد شد."
+            )
                 
         except Exception as e:
             logger.error(f"Error creating offer: {e}")
