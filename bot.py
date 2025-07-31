@@ -3484,56 +3484,52 @@ def main():
 
         
 
-        # تعریف ConversationHandler برای ویرایش دارو
         edit_drug_handler = ConversationHandler(
             entry_points=[CallbackQueryHandler(edit_drugs, pattern=r"^edit_drugs$")],
             states={
                 States.EDIT_DRUG: [
                     CallbackQueryHandler(edit_drug_item, pattern=r"^edit_drug_\d+$"),
+                    CallbackQueryHandler(handle_drug_edit_action, pattern=r"^(delete_drug_\d+|confirm_delete_\d+|cancel_delete_\d+)"),
                     CallbackQueryHandler(
                         handle_drug_edit_action,
                         pattern=r"^(edit_name|edit_price|edit_date|edit_quantity|delete_drug|back_to_list|confirm_delete|cancel_delete)$"
                     ),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit)
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            allow_reentry=True,
+            allow_reentry=True
         )
 
-        # تعریف ConversationHandler برای ویرایش نیازها
         edit_need_handler = ConversationHandler(
             entry_points=[CallbackQueryHandler(edit_needs, pattern=r"^edit_needs$")],
             states={
                 States.EDIT_NEED: [
                     CallbackQueryHandler(edit_need_item, pattern=r"^edit_need_\d+$"),
+                    CallbackQueryHandler(handle_need_edit_action, pattern=r"^(delete_need_\d+|confirm_need_delete_\d+|cancel_need_delete_\d+)"),
                     CallbackQueryHandler(
                         handle_need_edit_action,
                         pattern=r"^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need|back_to_needs_list|confirm_need_delete|cancel_need_delete)$"
                     ),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            allow_reentry=True,
+            allow_reentry=True
         )
 
-        # تعریف ConversationHandler برای آپلود اکسل توسط ادمین
         admin_excel_handler = ConversationHandler(
             entry_points=[CommandHandler("upload_excel", upload_excel_start)],
             states={
                 States.ADMIN_UPLOAD_EXCEL: [
-                    MessageHandler(
-                        filters.Document.ALL | (filters.TEXT & ~filters.COMMAND),
-                        handle_excel_upload
-                    )
+                    MessageHandler(filters.Document.ALL | filters.TEXT & ~filters.COMMAND, handle_excel_upload)
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            allow_reentry=True,
+            allow_reentry=True
         )
 
-        # افزودن تمام هندلرها به اپلیکیشن
+        # Add all handlers to application
         application.add_handler(CommandHandler("start", start))
         application.add_handler(registration_handler)
         application.add_handler(admin_verify_handler)
@@ -3546,15 +3542,25 @@ def main():
         application.add_handler(admin_excel_handler)
         application.add_handler(CommandHandler("generate_code", generate_simple_code))
 
-        # هندلرهای اضافی
-        application.add_handler(MessageHandler(filters.Regex(r"^لیست داروهای من$"), list_my_drugs))
-        application.add_handler(MessageHandler(filters.Regex(r"^لیست نیازهای من$"), list_my_needs))
+        # Additional callback handlers
+        application.add_handler(CallbackQueryHandler(
+            handle_drug_edit_action,
+            pattern=r"^(edit_name|edit_price|edit_date|edit_quantity|delete_drug)$"
+        ))
+        application.add_handler(MessageHandler(
+            filters.Regex(r"^لیست داروهای من$"),
+            list_my_drugs
+        ))
+        application.add_handler(MessageHandler(
+            filters.Regex(r"^لیست نیازهای من$"),
+            list_my_needs
+        ))
         application.add_handler(CallbackQueryHandler(callback_handler))
-        application.add_handler(error_handler)
+        application.add_error_handler(error_handler)
 
-        # اجرای ربات
+        # Start the bot
         application.run_polling(allowed_updates=Update.ALL_TYPES)
-
+        
     except Exception as e:
         logger.error(f"Error in main: {e}")
 
