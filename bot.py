@@ -3571,13 +3571,12 @@ application.add_handler(MessageHandler(
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_error_handler(error_handler)
 
-# Start the bot with proper error handling
-try:
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        close_loop=False,
-        stop_signals=None
-    )
-except Exception as e:
-    logger.critical(f"Failed to start bot: {e}")
-    raise
+   # ===== START POLLING =====
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    except Exception as e:
+        logger.critical(f"Failed to start bot: {e}")
+        raise
+
+if __name__ == "__main__":
+    main()
