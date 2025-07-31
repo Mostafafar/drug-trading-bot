@@ -1549,6 +1549,52 @@ async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in save_categories: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Setup medical categories for user"""
+    try:
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                # Get all categories and user's selected categories
+                cursor.execute('''
+                SELECT mc.id, mc.name, 
+                       EXISTS(SELECT 1 FROM user_categories uc 
+                              WHERE uc.user_id = %s AND uc.category_id = mc.id) as selected
+                FROM medical_categories mc
+                ORDER BY mc.name
+                ''', (update.effective_user.id,))
+                categories = cursor.fetchall()
+                
+                if not categories:
+                    await update.message.reply_text("هیچ شاخه دارویی تعریف نشده است.")
+                    return
+                
+                # Build keyboard
+                keyboard = []
+                for cat in categories:
+                    emoji = "✅ " if cat['selected'] else "◻️ "
+                    keyboard.append([InlineKeyboardButton(
+                        f"{emoji}{cat['name']}", 
+                        callback_data=f"togglecat_{cat['id']}"
+                    )])
+                
+                keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
+                
+                await update.message.reply_text(
+                    "لطفا شاخه‌های دارویی مورد نظر خود را انتخاب کنید:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                
+        except Exception as e:
+            logger.error(f"Error setting up categories: {e}")
+            await update.message.reply_text("خطا در دریافت لیست شاخه‌های دارویی.")
+        finally:
+            if conn:
+                conn.close()
+    except Exception as e:
+        logger.error(f"Error in setup_medical_categories: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
 
 # Drug Management
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
