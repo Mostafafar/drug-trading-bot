@@ -1873,13 +1873,13 @@ async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_
                 f"آیا مطمئن هستید که می‌خواهید داروی {drug['name']} را حذف کنید؟",
                 reply_markup=InlineKeyboardMarkup(keyboard))
             return States.EDIT_DRUG
-       elif data.startswith('confirm_delete_'):
+        elif data.startswith('confirm_delete_'):
         drug_id = data.split('_')[-1]
         # کد حذف دارو از دیتابیس
         query.edit_message_text("دارو با موفقیت حذف شد.")
         return ConversationHandler.END
 
-      elif data.startswith('cancel_delete_'):
+        elif data.startswith('cancel_delete_'):
         query.edit_message_text("عملیات حذف لغو شد.")
         return States.EDIT_DRUG
     except Exception as e:
