@@ -3351,7 +3351,6 @@ async def post_init(application: Application):
             logger.warning("Failed to load drug data")
     except Exception as e:
         logger.error(f"Error in post_init: {e}")
-
 def main():
     """Main function to start the bot"""
     try:
@@ -3362,7 +3361,6 @@ def main():
             .build()
 
         # conversation handlers
-        # Add conversation handlers with proper formatting and organization
         registration_handler = ConversationHandler(
             entry_points=[CallbackQueryHandler(register_pharmacy_name, pattern="^register$")],
             states={
@@ -3396,7 +3394,6 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=True,
             allow_reentry=True
         )
 
@@ -3408,7 +3405,6 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=True,
             allow_reentry=True
         )
 
@@ -3420,7 +3416,6 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=True,
             allow_reentry=True
         )
 
@@ -3443,7 +3438,6 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=True,
             allow_reentry=True
         )
 
@@ -3474,7 +3468,6 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=True,
             allow_reentry=True
         )
 
@@ -3492,7 +3485,6 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=True,
             allow_reentry=True
         )
 
@@ -3509,7 +3501,6 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=True,
             allow_reentry=True
         )
 
@@ -3526,7 +3517,6 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=True,
             allow_reentry=True
         )
 
@@ -3538,7 +3528,6 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler("cancel", cancel)],
-            per_message=True,
             allow_reentry=True
         )
 
