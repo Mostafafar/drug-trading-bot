@@ -1817,6 +1817,7 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
+
 async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug edit action selection"""
     try:
@@ -1831,23 +1832,7 @@ async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_
             await query.edit_message_text("اطلاعات دارو یافت نشد.")
             return ConversationHandler.END
         
-        if query.data == "edit_name":
-            await query.edit_message_text(
-                f"نام فعلی: {drug['name']}\n\n"
-                "لطفا نام جدید را وارد کنید:"
-            )
-            context.user_data['edit_field'] = 'name'
-            return States.EDIT_DRUG
-        
-        elif query.data == "edit_price":
-            await query.edit_message_text(
-                f"قیمت فعلی: {drug['price']}\n\n"
-                "لطفا قیمت جدید را وارد کنید:"
-            )
-            context.user_data['edit_field'] = 'price'
-            return States.EDIT_DRUG
-        
-        elif query.data == "edit_date":
+        if query.data == "edit_date":
             await query.edit_message_text(
                 f"تاریخ فعلی: {drug['date']}\n\n"
                 "لطفا تاریخ جدید را وارد کنید (مثال: 1403/05/15):"
@@ -1873,15 +1858,7 @@ async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_
                 f"آیا مطمئن هستید که می‌خواهید داروی {drug['name']} را حذف کنید؟",
                 reply_markup=InlineKeyboardMarkup(keyboard))
             return States.EDIT_DRUG
-        elif data.startswith('confirm_delete_'):
-        drug_id = data.split('_')[-1]
-        # کد حذف دارو از دیتابیس
-        query.edit_message_text("دارو با موفقیت حذف شد.")
-        return ConversationHandler.END
-
-        elif data.startswith('cancel_delete_'):
-        query.edit_message_text("عملیات حذف لغو شد.")
-        return States.EDIT_DRUG
+            
     except Exception as e:
         logger.error(f"Error in handle_drug_edit_action: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
@@ -1943,8 +1920,6 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Show edit menu again
         keyboard = [
-            [InlineKeyboardButton("✏️ ویرایش نام", callback_data="edit_name")],
-            [InlineKeyboardButton("✏️ ویرایش قیمت", callback_data="edit_price")],
             [InlineKeyboardButton("✏️ ویرایش تاریخ", callback_data="edit_date")],
             [InlineKeyboardButton("✏️ ویرایش تعداد", callback_data="edit_quantity")],
             [InlineKeyboardButton("🗑️ حذف دارو", callback_data="delete_drug")],
