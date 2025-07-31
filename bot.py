@@ -1449,6 +1449,106 @@ async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in verify_pharmacy: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Toggle medical category selection for user"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        if not query.data.startswith("togglecat_"):
+            return
+            
+        category_id = int(query.data.split("_")[1])
+        
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                # Check if user already has this category
+                cursor.execute('''
+                SELECT 1 FROM user_categories 
+                WHERE user_id = %s AND category_id = %s
+                ''', (update.effective_user.id, category_id))
+                
+                if cursor.fetchone():
+                    # Remove category
+                    cursor.execute('''
+                    DELETE FROM user_categories 
+                    WHERE user_id = %s AND category_id = %s
+                    ''', (update.effective_user.id, category_id))
+                    action = "حذف شد"
+                else:
+                    # Add category
+                    cursor.execute('''
+                    INSERT INTO user_categories (user_id, category_id)
+                    VALUES (%s, %s)
+                    ''', (update.effective_user.id, category_id))
+                    action = "اضافه شد"
+                
+                conn.commit()
+                
+                # Get updated category list
+                cursor.execute('''
+                SELECT mc.id, mc.name, 
+                       EXISTS(SELECT 1 FROM user_categories uc 
+                              WHERE uc.user_id = %s AND uc.category_id = mc.id) as selected
+                FROM medical_categories mc
+                ORDER BY mc.name
+                ''', (update.effective_user.id,))
+                categories = cursor.fetchall()
+                
+                # Rebuild keyboard
+                keyboard = []
+                for cat in categories:
+                    emoji = "✅ " if cat['selected'] else "◻️ "
+                    keyboard.append([InlineKeyboardButton(
+                        f"{emoji}{cat['name']}", 
+                        callback_data=f"togglecat_{cat['id']}"
+                    )])
+                
+                keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
+                
+                await query.edit_message_reply_markup(
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                
+        except Exception as e:
+            logger.error(f"Error toggling category: {e}")
+            await query.answer("خطا در تغییر وضعیت دسته‌بندی", show_alert=True)
+        finally:
+            if conn:
+                conn.close()
+    except Exception as e:
+        logger.error(f"Error in toggle_category: {e}")
+        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+
+async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Save selected medical categories"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        await query.edit_message_text(
+            "✅ شاخه‌های دارویی شما با موفقیت به‌روزرسانی شد.",
+            reply_markup=None
+        )
+        
+        # Return to main menu
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['تنظیم شاخه‌های دارویی', 'لیست داروهای من'],
+            ['ثبت نیاز جدید', 'لیست نیازهای من']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="به منوی اصلی بازگشتید. لطفا یک گزینه را انتخاب کنید:",
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        logger.error(f"Error in save_categories: {e}")
+        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
 
 # Drug Management
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
