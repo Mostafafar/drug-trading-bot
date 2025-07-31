@@ -3493,6 +3493,7 @@ def main():
             states={
                 States.EDIT_DRUG: [
                     CallbackQueryHandler(edit_drug_item, pattern=r"^edit_drug_\d+$"),
+                    CallbackQueryHandler(handle_drug_edit_action, pattern=r"^(delete_drug_\d+|confirm_delete_\d+|cancel_delete_\d+)"),
                     CallbackQueryHandler(
                         handle_drug_edit_action,
                         pattern=r"^(edit_name|edit_price|edit_date|edit_quantity|delete_drug|back_to_list|confirm_delete|cancel_delete)$"
@@ -3509,6 +3510,7 @@ def main():
             states={
                 States.EDIT_NEED: [
                     CallbackQueryHandler(edit_need_item, pattern=r"^edit_need_\d+$"),
+                    CallbackQueryHandler(handle_need_edit_action, pattern=r"^(delete_need_\d+|confirm_need_delete_\d+|cancel_need_delete_\d+)"),
                     CallbackQueryHandler(
                         handle_need_edit_action,
                         pattern=r"^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need|back_to_needs_list|confirm_need_delete|cancel_need_delete)$"
