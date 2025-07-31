@@ -3361,217 +3361,217 @@ def main():
             .post_init(post_init) \
             .build()
 
-        #  conversation handlers
+        # conversation handlers
         # Add conversation handlers with proper formatting and organization
-    registration_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(register_pharmacy_name, pattern="^register$")],
-    states={
-        States.REGISTER_PHARMACY_NAME: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, register_founder_name)
-        ],
-        States.REGISTER_FOUNDER_NAME: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, register_national_card)
-        ],
-        States.REGISTER_NATIONAL_CARD: [
-            MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license)
-        ],
-        States.REGISTER_LICENSE: [
-            MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card)
-        ],
-        States.REGISTER_MEDICAL_CARD: [
-            MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_phone)
-        ],
-        States.REGISTER_PHONE: [
-            MessageHandler(filters.CONTACT, register_address),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, register_address)
-        ],
-        States.REGISTER_ADDRESS: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, register_location)
-        ],
-        States.REGISTER_LOCATION: [
-            MessageHandler(filters.LOCATION, verify_code)
-        ],
-        States.VERIFICATION_CODE: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, complete_registration)
-        ]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-    per_message=True,
-    allow_reentry=True
-)
+        registration_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(register_pharmacy_name, pattern="^register$")],
+            states={
+                States.REGISTER_PHARMACY_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, register_founder_name)
+                ],
+                States.REGISTER_FOUNDER_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, register_national_card)
+                ],
+                States.REGISTER_NATIONAL_CARD: [
+                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license)
+                ],
+                States.REGISTER_LICENSE: [
+                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card)
+                ],
+                States.REGISTER_MEDICAL_CARD: [
+                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_phone)
+                ],
+                States.REGISTER_PHONE: [
+                    MessageHandler(filters.CONTACT, register_address),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, register_address)
+                ],
+                States.REGISTER_ADDRESS: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, register_location)
+                ],
+                States.REGISTER_LOCATION: [
+                    MessageHandler(filters.LOCATION, verify_code)
+                ],
+                States.VERIFICATION_CODE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, complete_registration)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            per_message=True,
+            allow_reentry=True
+        )
 
-admin_verify_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$")],
-    states={
-        States.ADMIN_VERIFICATION: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
-        ]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-    per_message=True,
-    allow_reentry=True
-)
+        admin_verify_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$")],
+            states={
+                States.ADMIN_VERIFICATION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            per_message=True,
+            allow_reentry=True
+        )
 
-simple_verify_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")],
-    states={
-        States.SIMPLE_VERIFICATION: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
-        ]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-    per_message=True,
-    allow_reentry=True
-)
+        simple_verify_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")],
+            states={
+                States.SIMPLE_VERIFICATION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            per_message=True,
+            allow_reentry=True
+        )
 
-add_drug_handler = ConversationHandler(
-    entry_points=[MessageHandler(filters.Regex(r"^اضافه کردن دارو$"), add_drug_item)],
-    states={
-        States.SEARCH_DRUG_FOR_ADDING: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
-        ],
-        States.SELECT_DRUG_FOR_ADDING: [
-            CallbackQueryHandler(select_drug_for_adding)
-        ],
-        States.ADD_DRUG_DATE: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
-            CallbackQueryHandler(search_drug_for_adding, pattern=r"^back_to_search$")
-        ],
-        States.ADD_DRUG_QUANTITY: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
-            CallbackQueryHandler(select_drug_for_adding, pattern=r"^back_to_drug_selection$")
-        ]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-    per_message=True,
-    allow_reentry=True
-)
+        add_drug_handler = ConversationHandler(
+            entry_points=[MessageHandler(filters.Regex(r"^اضافه کردن دارو$"), add_drug_item)],
+            states={
+                States.SEARCH_DRUG_FOR_ADDING: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
+                ],
+                States.SELECT_DRUG_FOR_ADDING: [
+                    CallbackQueryHandler(select_drug_for_adding)
+                ],
+                States.ADD_DRUG_DATE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
+                    CallbackQueryHandler(search_drug_for_adding, pattern=r"^back_to_search$")
+                ],
+                States.ADD_DRUG_QUANTITY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
+                    CallbackQueryHandler(select_drug_for_adding, pattern=r"^back_to_drug_selection$")
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            per_message=True,
+            allow_reentry=True
+        )
 
-search_drug_handler = ConversationHandler(
-    entry_points=[MessageHandler(filters.Regex(r"^جستجوی دارو$"), search_drug)],
-    states={
-        States.SEARCH_DRUG: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
-        ],
-        States.SELECT_PHARMACY: [
-            CallbackQueryHandler(select_pharmacy)
-        ],
-        States.SELECT_ITEMS: [
-            CallbackQueryHandler(select_items)
-        ],
-        States.CONFIRM_TOTALS: [
-            CallbackQueryHandler(confirm_totals)
-        ],
-        States.COMPENSATION_SELECTION: [
-            CallbackQueryHandler(handle_compensation_selection)
-        ],
-        States.COMPENSATION_QUANTITY: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation),
-            CallbackQueryHandler(confirm_totals, pattern=r"^back_to_totals$")
-        ],
-        States.CONFIRM_OFFER: [
-            CallbackQueryHandler(create_offer)
-        ]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-    per_message=True,
-    allow_reentry=True
-)
+        search_drug_handler = ConversationHandler(
+            entry_points=[MessageHandler(filters.Regex(r"^جستجوی دارو$"), search_drug)],
+            states={
+                States.SEARCH_DRUG: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
+                ],
+                States.SELECT_PHARMACY: [
+                    CallbackQueryHandler(select_pharmacy)
+                ],
+                States.SELECT_ITEMS: [
+                    CallbackQueryHandler(select_items)
+                ],
+                States.CONFIRM_TOTALS: [
+                    CallbackQueryHandler(confirm_totals)
+                ],
+                States.COMPENSATION_SELECTION: [
+                    CallbackQueryHandler(handle_compensation_selection)
+                ],
+                States.COMPENSATION_QUANTITY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation),
+                    CallbackQueryHandler(confirm_totals, pattern=r"^back_to_totals$")
+                ],
+                States.CONFIRM_OFFER: [
+                    CallbackQueryHandler(create_offer)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            per_message=True,
+            allow_reentry=True
+        )
 
-add_need_handler = ConversationHandler(
-    entry_points=[MessageHandler(filters.Regex(r"^ثبت نیاز جدید$"), add_need)],
-    states={
-        States.ADD_NEED_NAME: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)
-        ],
-        States.ADD_NEED_DESC: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)
-        ],
-        States.ADD_NEED_QUANTITY: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
-        ]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-    per_message=True,
-    allow_reentry=True
-)
+        add_need_handler = ConversationHandler(
+            entry_points=[MessageHandler(filters.Regex(r"^ثبت نیاز جدید$"), add_need)],
+            states={
+                States.ADD_NEED_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)
+                ],
+                States.ADD_NEED_DESC: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)
+                ],
+                States.ADD_NEED_QUANTITY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            per_message=True,
+            allow_reentry=True
+        )
 
-edit_drug_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(edit_drugs, pattern=r"^edit_drugs$")],
-    states={
-        States.EDIT_DRUG: [
-            CallbackQueryHandler(edit_drug_item, pattern=r"^edit_drug_\d+$"),
-            CallbackQueryHandler(
-                handle_drug_edit_action,
-                pattern=r"^(edit_name|edit_price|edit_date|edit_quantity|delete_drug|back_to_list|confirm_delete|cancel_delete)$"
-            ),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit)
-        ]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-    per_message=True,
-    allow_reentry=True
-)
+        edit_drug_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(edit_drugs, pattern=r"^edit_drugs$")],
+            states={
+                States.EDIT_DRUG: [
+                    CallbackQueryHandler(edit_drug_item, pattern=r"^edit_drug_\d+$"),
+                    CallbackQueryHandler(
+                        handle_drug_edit_action,
+                        pattern=r"^(edit_name|edit_price|edit_date|edit_quantity|delete_drug|back_to_list|confirm_delete|cancel_delete)$"
+                    ),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            per_message=True,
+            allow_reentry=True
+        )
 
-edit_need_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(edit_needs, pattern=r"^edit_needs$")],
-    states={
-        States.EDIT_NEED: [
-            CallbackQueryHandler(edit_need_item, pattern=r"^edit_need_\d+$"),
-            CallbackQueryHandler(
-                handle_need_edit_action,
-                pattern=r"^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need|back_to_needs_list|confirm_need_delete|cancel_need_delete)$"
-            ),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
-        ]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-    per_message=True,
-    allow_reentry=True
-)
+        edit_need_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(edit_needs, pattern=r"^edit_needs$")],
+            states={
+                States.EDIT_NEED: [
+                    CallbackQueryHandler(edit_need_item, pattern=r"^edit_need_\d+$"),
+                    CallbackQueryHandler(
+                        handle_need_edit_action,
+                        pattern=r"^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need|back_to_needs_list|confirm_need_delete|cancel_need_delete)$"
+                    ),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            per_message=True,
+            allow_reentry=True
+        )
 
-admin_excel_handler = ConversationHandler(
-    entry_points=[CommandHandler("upload_excel", upload_excel_start)],
-    states={
-        States.ADMIN_UPLOAD_EXCEL: [
-            MessageHandler(filters.Document.ALL | filters.TEXT & ~filters.COMMAND, handle_excel_upload)
-        ]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)],
-    per_message=True,
-    allow_reentry=True
-)
+        admin_excel_handler = ConversationHandler(
+            entry_points=[CommandHandler("upload_excel", upload_excel_start)],
+            states={
+                States.ADMIN_UPLOAD_EXCEL: [
+                    MessageHandler(filters.Document.ALL | filters.TEXT & ~filters.COMMAND, handle_excel_upload)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            per_message=True,
+            allow_reentry=True
+        )
 
-# Add all handlers to application
-application.add_handler(CommandHandler("start", start))
-application.add_handler(registration_handler)
-application.add_handler(admin_verify_handler)
-application.add_handler(simple_verify_handler)
-application.add_handler(add_drug_handler)
-application.add_handler(search_drug_handler)
-application.add_handler(add_need_handler)
-application.add_handler(edit_drug_handler)
-application.add_handler(edit_need_handler)
-application.add_handler(admin_excel_handler)
-application.add_handler(CommandHandler("generate_code", generate_simple_code))
+        # Add all handlers to application
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(registration_handler)
+        application.add_handler(admin_verify_handler)
+        application.add_handler(simple_verify_handler)
+        application.add_handler(add_drug_handler)
+        application.add_handler(search_drug_handler)
+        application.add_handler(add_need_handler)
+        application.add_handler(edit_drug_handler)
+        application.add_handler(edit_need_handler)
+        application.add_handler(admin_excel_handler)
+        application.add_handler(CommandHandler("generate_code", generate_simple_code))
 
-# Additional callback handlers
-application.add_handler(CallbackQueryHandler(
-    handle_drug_edit_action,
-    pattern=r"^(edit_name|edit_price|edit_date|edit_quantity|delete_drug)$"
-))
-application.add_handler(MessageHandler(
-    filters.Regex(r"^لیست داروهای من$"),
-    list_my_drugs
-))
-application.add_handler(MessageHandler(
-    filters.Regex(r"^لیست نیازهای من$"),
-    list_my_needs
-))
-application.add_handler(CallbackQueryHandler(callback_handler))
-application.add_error_handler(error_handler)
+        # Additional callback handlers
+        application.add_handler(CallbackQueryHandler(
+            handle_drug_edit_action,
+            pattern=r"^(edit_name|edit_price|edit_date|edit_quantity|delete_drug)$"
+        ))
+        application.add_handler(MessageHandler(
+            filters.Regex(r"^لیست داروهای من$"),
+            list_my_drugs
+        ))
+        application.add_handler(MessageHandler(
+            filters.Regex(r"^لیست نیازهای من$"),
+            list_my_needs
+        ))
+        application.add_handler(CallbackQueryHandler(callback_handler))
+        application.add_error_handler(error_handler)
 
-    # Start the bot
+        # Start the bot
         application.run_polling(allowed_updates=Update.ALL_TYPES)
         
     except Exception as e:
