@@ -3485,6 +3485,7 @@ def main():
 
         # Add handlers
         application.add_handler(CommandHandler("start", start))
+        
         application.add_handler(registration_handler)
         application.add_handler(admin_verify_handler)
         application.add_handler(simple_verify_handler)
@@ -3495,6 +3496,10 @@ def main():
         application.add_handler(edit_need_handler)
         application.add_handler(admin_excel_handler)
         application.add_handler(CommandHandler("generate_code", generate_simple_code))
+        application.add_handler(CallbackQueryHandler(
+        handle_drug_edit_action, 
+        pattern="^(edit_name|edit_price|edit_date|edit_quantity|delete_drug)$"
+        ))
         application.add_handler(MessageHandler(filters.Regex("^لیست داروهای من$"), list_my_drugs))
         application.add_handler(MessageHandler(filters.Regex("^لیست نیازهای من$"), list_my_needs))
         application.add_handler(CallbackQueryHandler(callback_handler))
