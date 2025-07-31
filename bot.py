@@ -1818,6 +1818,7 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 
+
 async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug edit action selection"""
     try:
@@ -1863,7 +1864,6 @@ async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_
         logger.error(f"Error in handle_drug_edit_action: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save drug edit changes"""
     try:
@@ -1944,16 +1944,7 @@ async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         query = update.callback_query
         await query.answer()
-        logger.info(f"Callback data: {query.data}")  # دیباگ
-
-        if query.data == "cancel_delete":
-            logger.info("Cancellation requested, returning to edit menu")
-            return await edit_drug_item(update, context)  # اطمینان از وجود تابع
-
-        if query.data != "confirm_delete":
-            logger.warning(f"Unexpected callback data: {query.data}")
-            await query.edit_message_text("گزینه نامعتبر است.")
-            return States.EDIT_DRUG
+        logger.info(f"Deletion callback received: {query.data}")
 
         drug = context.user_data.get('editing_drug')
         if not drug:
@@ -1961,33 +1952,69 @@ async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.edit_message_text("اطلاعات دارو یافت نشد.")
             return ConversationHandler.END
 
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                cursor.execute('''
+        if query.data == "cancel_delete":
+            logger.info("Deletion cancelled by user")
+            # Return to drug edit menu
+            keyboard = [
+                [InlineKeyboardButton("✏️ ویرایش تاریخ", callback_data="edit_date")],
+                [InlineKeyboardButton("✏️ ویرایش تعداد", callback_data="edit_quantity")],
+                [InlineKeyboardButton("🗑️ حذف دارو", callback_data="delete_drug")],
+                [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_list")]
+            ]
+            
+            await query.edit_message_text(
+                f"ویرایش دارو:\n\n"
+                f"تاریخ انقضا: {drug['date']}\n"
+                f"تعداد: {drug['quantity']}\n\n"
+                "لطفا گزینه مورد نظر را انتخاب کنید:",
+                reply_markup=InlineKeyboardMarkup(keyboard))
+            return States.EDIT_DRUG
+
+        elif query.data == "confirm_delete":
+            logger.info(f"Confirming deletion of drug: {drug['name']}")
+            conn = None
+            try:
+                conn = get_db_connection()
+                with conn.cursor() as cursor:
+                    cursor.execute('''
                     DELETE FROM drug_items 
                     WHERE id = %s AND user_id = %s
-                ''', (drug['id'], update.effective_user.id))
-                if cursor.rowcount == 0:
-                    logger.warning("No drug found to delete.")
-                    await query.edit_message_text("دارو یافت نشد یا قبلاً حذف شده است.")
-                    return ConversationHandler.END
-                conn.commit()
-                logger.info(f"Drug {drug['name']} deleted successfully")
-                await query.edit_message_text(f"✅ داروی {drug['name']} با موفقیت حذف شد.")
-                
-        except Exception as e:
-            logger.error(f"Error deleting drug: {e}")
-            await query.edit_message_text("خطا در حذف دارو. لطفا دوباره تلاش کنید.")
-        finally:
-            if conn:
-                conn.close()
-        
-        return await list_my_drugs(update, context)
+                    RETURNING id
+                    ''', (drug['id'], update.effective_user.id))
+                    
+                    deleted_id = cursor.fetchone()
+                    if not deleted_id:
+                        logger.warning("No rows affected by deletion")
+                        await query.edit_message_text("دارو یافت نشد یا قبلاً حذف شده است.")
+                        return States.EDIT_DRUG
+                    
+                    conn.commit()
+                    logger.info(f"Drug {drug['name']} deleted successfully")
+                    
+                    await query.edit_message_text(
+                        f"✅ داروی {drug['name']} با موفقیت حذف شد.")
+                    
+                    # Return to drugs list
+                    return await list_my_drugs(update, context)
+                    
+            except Exception as e:
+                logger.error(f"Database error during deletion: {e}")
+                await query.edit_message_text("خطا در حذف دارو. لطفا دوباره تلاش کنید.")
+                return States.EDIT_DRUG
+            finally:
+                if conn:
+                    conn.close()
+        else:
+            logger.warning(f"Unexpected callback data: {query.data}")
+            await query.edit_message_text("عملیات نامعتبر است.")
+            return States.EDIT_DRUG
+            
     except Exception as e:
         logger.error(f"Error in handle_drug_deletion: {e}")
-        await query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        try:
+            await query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        except:
+            await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 # Needs Management
 async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
