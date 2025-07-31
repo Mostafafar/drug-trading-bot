@@ -1928,8 +1928,6 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_text(
             f"ویرایش دارو:\n\n"
-            f"نام: {drug['name']}\n"
-            f"قیمت: {drug['price']}\n"
             f"تاریخ انقضا: {drug['date']}\n"
             f"تعداد: {drug['quantity']}\n\n"
             "لطفا گزینه مورد نظر را انتخاب کنید:",
@@ -1939,6 +1937,7 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in save_drug_edit: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 
 async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug deletion confirmation"""
@@ -1990,7 +1989,6 @@ async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.error(f"Error in handle_drug_deletion: {e}")
         await query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 # Needs Management
 async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a need"""
