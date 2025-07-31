@@ -578,82 +578,85 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning("Empty callback data received")
             return
 
+        # Handle different callback patterns
+        if query.data == "back":
+            return await handle_back(update, context)
+        elif query.data == "cancel":
+            return await cancel(update, context)
+        elif query.data.startswith("pharmacy_"):
+            return await select_pharmacy(update, context)
+        elif query.data.startswith("offer_"):
+            return await handle_offer_response(update, context)
+        elif query.data.startswith("togglecat_"):
+            return await toggle_category(update, context)
+        elif query.data == "save_categories":
+            return await save_categories(update, context)
+        elif query.data == "admin_verify":
+            return await admin_verify_start(update, context)
+        elif query.data == "register":
+            return await register_pharmacy_name(update, context)
+        elif query.data == "simple_verify":
+            return await simple_verify_start(update, context)
+        elif query.data == "edit_drugs":
+            return await edit_drugs(update, context)
+        elif query.data.startswith("edit_drug_"):
+            return await edit_drug_item(update, context)
+        elif query.data in ["edit_name", "edit_price", "edit_date", "edit_quantity", "delete_drug"]:
+            return await handle_drug_edit_action(update, context)
+        elif query.data == "confirm_delete":
+            return await handle_drug_deletion(update, context)
+        elif query.data == "cancel_delete":
+            return await edit_drug_item(update, context)
+        elif query.data == "edit_needs":
+            return await edit_needs(update, context)
+        elif query.data.startswith("edit_need_"):
+            return await edit_need_item(update, context)
+        elif query.data in ["edit_need_name", "edit_need_desc", "edit_need_quantity", "delete_need"]:
+            return await handle_need_edit_action(update, context)
+        elif query.data == "confirm_need_delete":
+            return await handle_need_deletion(update, context)
+        elif query.data == "cancel_need_delete":
+            return await edit_need_item(update, context)
+        elif query.data == "back_to_list":
+            return await edit_drugs(update, context)
+        elif query.data == "back_to_needs_list":
+            return await edit_needs(update, context)
+        elif query.data.startswith("select_drug_"):
+            return await select_drug_for_adding(update, context)
+        elif query.data == "back_to_search":
+            return await search_drug_for_adding(update, context)
+        elif query.data == "back_to_drug_selection":
+            return await select_drug_for_adding(update, context)
+        elif query.data == "finish_selection":
+            return await confirm_totals(update, context)
+        elif query.data == "compensate":
+            return await handle_compensation_selection(update, context)
+        elif query.data.startswith("comp_"):
+            return await handle_compensation_selection(update, context)
+        elif query.data == "comp_finish":
+            return await confirm_totals(update, context)
+        elif query.data == "back_to_totals":
+            return await confirm_totals(update, context)
+        elif query.data == "back_to_items":
+            return await show_two_column_selection(update, context)
+        elif query.data == "back_to_pharmacies":
+            return await select_pharmacy(update, context)
+        elif query.data == "confirm_totals":
+            return await confirm_totals(update, context)
+        elif query.data == "edit_selection":
+            return await show_two_column_selection(update, context)
+        elif query.data.startswith("view_match_"):
+            return await handle_match_notification(update, context)
+        
+        logger.warning(f"Unhandled callback data: {query.data}")
+        await query.edit_message_text("این گزینه در حال حاضر قابل استفاده نیست.")
+        
+    except Exception as e:
+        logger.error(f"Error processing callback {query.data}: {e}")
         try:
-            # Handle different callback patterns
-            if query.data == "back":
-                return await handle_back(update, context)
-            elif query.data == "cancel":
-                return await cancel(update, context)
-            elif query.data.startswith("pharmacy_"):
-                return await select_pharmacy(update, context)
-            elif query.data.startswith("offer_"):
-                return await handle_offer_response(update, context)
-            elif query.data.startswith("togglecat_"):
-                return await toggle_category(update, context)
-            elif query.data == "save_categories":
-                return await save_categories(update, context)
-            elif query.data == "admin_verify":
-                return await admin_verify_start(update, context)
-            elif query.data == "register":
-                return await register_pharmacy_name(update, context)
-            elif query.data == "simple_verify":
-                return await simple_verify_start(update, context)
-            elif query.data == "edit_drugs":
-                return await edit_drugs(update, context)
-            elif query.data.startswith("edit_drug_"):
-                return await edit_drug_item(update, context)
-            elif query.data in ["edit_name", "edit_price", "edit_date", "edit_quantity", "delete_drug"]:
-                return await handle_drug_edit_action(update, context)
-            elif query.data == "confirm_delete":
-                return await handle_drug_deletion(update, context)
-            elif query.data == "cancel_delete":
-                return await edit_drug_item(update, context)
-            elif query.data == "edit_needs":
-                return await edit_needs(update, context)
-            elif query.data.startswith("edit_need_"):
-                return await edit_need_item(update, context)
-            elif query.data in ["edit_need_name", "edit_need_desc", "edit_need_quantity", "delete_need"]:
-                return await handle_need_edit_action(update, context)
-            elif query.data == "confirm_need_delete":
-                return await handle_need_deletion(update, context)
-            elif query.data == "cancel_need_delete":
-                return await edit_need_item(update, context)
-            elif query.data.startswith("select_drug_"):
-                return await select_drug_for_adding(update, context)
-            elif query.data == "back_to_search":
-                return await search_drug_for_adding(update, context)
-            elif query.data == "back_to_drug_selection":
-                return await select_drug_for_adding(update, context)
-            elif query.data == "finish_selection":
-                return await confirm_totals(update, context)
-            elif query.data == "compensate":
-                return await handle_compensation_selection(update, context)
-            elif query.data.startswith("comp_"):
-                return await handle_compensation_selection(update, context)
-            elif query.data == "comp_finish":
-                return await confirm_totals(update, context)
-            elif query.data == "back_to_totals":
-                return await confirm_totals(update, context)
-            elif query.data == "back_to_items":
-                return await show_two_column_selection(update, context)
-            elif query.data == "back_to_pharmacies":
-                return await select_pharmacy(update, context)
-            elif query.data == "confirm_totals":
-                return await confirm_totals(update, context)
-            elif query.data == "edit_selection":
-                return await show_two_column_selection(update, context)
-            elif query.data.startswith("view_match_"):
-                return await handle_match_notification(update, context)
-            
-            logger.warning(f"Unhandled callback data: {query.data}")
-            await query.edit_message_text("این گزینه در حال حاضر قابل استفاده نیست.")
-            
+            await query.edit_message_text("خطایی در پردازش درخواست شما رخ داد.")
         except Exception as e:
-            logger.error(f"Error processing callback {query.data}: {e}")
-            try:
-                await query.edit_message_text("خطایی در پردازش درخواست شما رخ داد.")
-            except Exception as e:
-                logger.error(f"Failed to edit message: {e}")
+            logger.error(f"Failed to edit message: {e}")
                 
     except Exception as e:
         logger.error(f"Error in callback_handler: {e}")
@@ -3467,6 +3470,7 @@ def main():
             fallbacks=[CommandHandler("cancel", cancel)],
             allow_reentry=True
         )
+
 
         admin_excel_handler = ConversationHandler(
             entry_points=[CommandHandler("upload_excel", upload_excel_start)],
