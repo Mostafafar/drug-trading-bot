@@ -3363,7 +3363,7 @@ def main():
 
         #  conversation handlers
         # Add conversation handlers with proper formatting and organization
-registration_handler = ConversationHandler(
+    registration_handler = ConversationHandler(
     entry_points=[CallbackQueryHandler(register_pharmacy_name, pattern="^register$")],
     states={
         States.REGISTER_PHARMACY_NAME: [
