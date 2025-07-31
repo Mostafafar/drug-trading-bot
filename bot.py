@@ -3506,7 +3506,7 @@ def main():
             fallbacks=[CommandHandler("cancel", cancel)],
             allow_reentry=True
         )
-         edit_drug_handler = ConversationHandler(
+        edit_drug_handler = ConversationHandler(
             entry_points=[CallbackQueryHandler(edit_drugs, pattern=r"^edit_drugs$")],
             states={
                 States.EDIT_DRUG: [
