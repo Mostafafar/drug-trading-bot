@@ -111,18 +111,25 @@ class States(Enum):
     EDIT_DRUG = auto()
     EDIT_NEED = auto()
 
-# Database Functions
-def get_db_connection(max_retries=3, retry_delay=1.0):
+# def get_db_connection(max_retries=3, retry_delay=1.0):
     """Get a database connection with retry logic"""
     conn = None
     last_error = None
     
     for attempt in range(max_retries):
         try:
-            conn = psycopg2.connect(**DB_CONFIG)
+            conn = psycopg2.connect(
+                dbname=DB_CONFIG['dbname'],
+                user=DB_CONFIG['user'],
+                password=DB_CONFIG['password'],
+                host=DB_CONFIG['host'],
+                port=DB_CONFIG['port'],
+                connect_timeout=5
+            )
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
                 cursor.execute("SET TIME ZONE 'Asia/Tehran'")
+            logger.info("Database connection established successfully")
             return conn
         except psycopg2.Error as e:
             last_error = e
@@ -139,7 +146,6 @@ def get_db_connection(max_retries=3, retry_delay=1.0):
     if last_error:
         raise last_error
     raise psycopg2.Error("Unknown database connection error")
-
 async def initialize_db():
     """Initialize database tables and default data"""
     conn = None
