@@ -1780,10 +1780,11 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data['selected_drug']['price'],
                     context.user_data['drug_date'],
                     quantity
-                    # Log total drugs count after insertion
+                ))
+                # Log total drugs count after insertion
                 cursor.execute('SELECT COUNT(*) FROM drug_items')
                 logger.info(f"Total drugs in DB after insert: {cursor.fetchone()[0]}")
-                ))
+                
                 conn.commit()
                 
                 await update.message.reply_text(
