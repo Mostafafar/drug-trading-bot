@@ -111,7 +111,7 @@ class States(Enum):
     EDIT_DRUG = auto()
     EDIT_NEED = auto()
 
-# def get_db_connection(max_retries=3, retry_delay=1.0):
+def get_db_connection(max_retries=3, retry_delay=1.0):
     """Get a database connection with retry logic"""
     conn = None
     last_error = None
@@ -123,14 +123,12 @@ class States(Enum):
                 user=DB_CONFIG['user'],
                 password=DB_CONFIG['password'],
                 host=DB_CONFIG['host'],
-                port=DB_CONFIG['port'],
-                connect_timeout=5
+                port=DB_CONFIG['port']
             )
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
                 cursor.execute("SET TIME ZONE 'Asia/Tehran'")
-            logger.info("Database connection established successfully")
-            return conn
+            return conn  # این return باید داخل تابع باشد
         except psycopg2.Error as e:
             last_error = e
             logger.error(f"DB connection attempt {attempt + 1} failed: {str(e)}")
@@ -141,7 +139,7 @@ class States(Enum):
                     pass
             if attempt < max_retries - 1:
                 time.sleep(retry_delay * (attempt + 1))
-                
+    
     logger.critical(f"Failed to connect to DB after {max_retries} attempts")
     if last_error:
         raise last_error
