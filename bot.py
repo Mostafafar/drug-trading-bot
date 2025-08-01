@@ -1745,7 +1745,6 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save drug item to database"""
     try:
         if update.callback_query and update.callback_query.data == "back_to_drug_selection":
             await update.callback_query.answer()
@@ -1758,7 +1757,6 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return States.ADD_DRUG_DATE
 
-        # بررسی وجود داده‌های لازم
         if not context.user_data.get('selected_drug') or not context.user_data.get('drug_date'):
             logger.error("Missing selected_drug or drug_date")
             await update.message.reply_text("اطلاعات دارو ناقص است.")
@@ -1794,6 +1792,11 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 conn.commit()
                 logger.info("Drug inserted and committed")
+
+                cursor.execute('SELECT * FROM drug_items WHERE user_id = %s AND name = %s',
+                               (user.id, context.user_data['selected_drug']['name']))
+                inserted_drug = cursor.fetchone()
+                logger.info(f"Inserted drug: {inserted_drug}")
 
                 cursor.execute('SELECT COUNT(*) FROM drug_items')
                 logger.info(f"Total drugs after insert: {cursor.fetchone()[0]}")
