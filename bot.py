@@ -2590,43 +2590,55 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         search_term = update.message.text.strip()
         context.user_data['search_term'] = search_term
+        logger.info(f"Searching for drugs with term: {search_term}")
 
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                # Search in both predefined drugs and user-added drugs
                 cursor.execute('''
                 SELECT 
                     di.id, 
                     di.user_id,
                     di.name,
-                    MAX(di.price) as price,
+                    di.price,
                     di.date,
-                    SUM(di.quantity) as quantity,
-                    p.name AS pharmacy_name
+                    di.quantity,
+                    p.name AS pharmacy_name,
+                    p.verified AS pharmacy_verified
                 FROM drug_items di
                 JOIN pharmacies p ON di.user_id = p.user_id
-                WHERE di.name ILIKE %s AND di.quantity > 0
-                GROUP BY di.id, di.user_id, di.name, di.date, p.name
-                ORDER BY di.price DESC
-                ''', (f'%{search_term}%',))
+                WHERE di.name ILIKE %s AND di.quantity > 0 AND p.verified = TRUE
+                ORDER BY 
+                    CASE 
+                        WHEN di.name ILIKE %s THEN 0  -- Exact match first
+                        ELSE 1
+                    END,
+                    di.price DESC
+                ''', (f'%{search_term}%', f'{search_term}%'))
+                
                 results = cursor.fetchall()
+                logger.info(f"Found {len(results)} matching drugs")
 
                 if results:
                     context.user_data['search_results'] = [dict(row) for row in results]
                     
-                    message = "نتایج جستجو (نمایش بالاترین قیمت برای هر دارو):\n\n"
-                    for idx, item in enumerate(results[:5]):
+                    # Prepare the message with search results
+                    message = "🔍 نتایج جستجو:\n\n"
+                    for idx, item in enumerate(results[:5]):  # Show first 5 results
                         message += (
-                            f"{idx+1}. {item['name']} - قیمت: {item['price'] or 'نامشخص'}\n"
-                            f"   داروخانه: {item['pharmacy_name']}\n"
-                            f"   موجودی: {item['quantity']}\n\n"
+                            f"🏥 داروخانه: {item['pharmacy_name']}\n"
+                            f"💊 دارو: {item['name']}\n"
+                            f"💰 قیمت: {item['price'] or 'نامشخص'}\n"
+                            f"📅 تاریخ انقضا: {item['date']}\n"
+                            f"📦 موجودی: {item['quantity']}\n\n"
                         )
                     
                     if len(results) > 5:
                         message += f"\n➕ {len(results)-5} نتیجه دیگر...\n\n"
                     
-                    # Group by pharmacy
+                    # Group by pharmacy for better organization
                     pharmacies = {}
                     for item in results:
                         pharmacy_id = item['user_id']
@@ -2641,34 +2653,63 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     context.user_data['pharmacies'] = pharmacies
                     
+                    # Create keyboard with pharmacy options
                     keyboard = []
                     for pharmacy_id, pharmacy_data in pharmacies.items():
                         keyboard.append([InlineKeyboardButton(
-                            f"داروخانه: {pharmacy_data['name']} ({pharmacy_data['count']} آیتم)", 
+                            f"🏥 {pharmacy_data['name']} ({pharmacy_data['count']} دارو)", 
                             callback_data=f"pharmacy_{pharmacy_id}"
                         )])
                     
-                    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
+                    keyboard.append([InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back")])
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
                     await update.message.reply_text(
                         message + "لطفا داروخانه مورد نظر را انتخاب کنید:",
-                        reply_markup=reply_markup
+                        reply_markup=reply_markup,
+                        parse_mode=ParseMode.MARKDOWN
                     )
                     return States.SELECT_PHARMACY
                 else:
-                    await update.message.reply_text("هیچ دارویی با این نام یافت نشد.")
+                    # If no results found, suggest adding the drug
+                    keyboard = [
+                        [InlineKeyboardButton("➕ ثبت این دارو", callback_data=f"add_drug_{search_term}")],
+                        [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+                    ]
+                    
+                    await update.message.reply_text(
+                        "هیچ دارویی با این نام یافت نشد.\n\n"
+                        "اگر این دارو را در اختیار دارید، می‌توانید آن را به لیست اضافه کنید.",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
                     return ConversationHandler.END
+
         except psycopg2.Error as e:
-            logger.error(f"Database error in search: {e}")
-            await update.message.reply_text("خطایی در پایگاه داده رخ داده است.")
+            logger.error(f"Database error in search: {str(e)}")
+            await update.message.reply_text(
+                "خطایی در پایگاه داده رخ داده است. لطفا稍后再试。",
+                reply_markup=ReplyKeyboardRemove()
+            )
             return ConversationHandler.END
+            
+        except Exception as e:
+            logger.error(f"Unexpected error in search: {str(e)}")
+            await update.message.reply_text(
+                "خطای غیرمنتظره‌ای رخ داده است. لطفا با پشتیبانی تماس بگیرید。",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return ConversationHandler.END
+            
         finally:
             if conn:
                 conn.close()
+
     except Exception as e:
-        logger.error(f"Error in handle_search: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        logger.error(f"Error in handle_search: {str(e)}")
+        await update.message.reply_text(
+            "خطایی در پردازش درخواست شما رخ داد. لطفا دوباره تلاش کنید。",
+            reply_markup=ReplyKeyboardRemove()
+        )
         return ConversationHandler.END
 
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3709,6 +3750,10 @@ def main():
         application.add_handler(edit_need_handler)
         application.add_handler(admin_excel_handler)
         application.add_handler(CommandHandler("generate_code", generate_simple_code))
+        application.add_handler(CallbackQueryHandler(
+        add_drug_from_search, 
+        pattern=r"^add_drug_"
+        ))
 
         # Additional callback handlers
         application.add_handler(CallbackQueryHandler(
