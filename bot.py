@@ -2771,6 +2771,18 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in select_pharmacy: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def add_drug_from_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    drug_name = query.data.replace("add_drug_", "")
+    context.user_data['selected_drug'] = {'name': drug_name, 'price': ''}
+    
+    await query.edit_message_text(
+        f"در حال ثبت داروی جدید: {drug_name}\n\n"
+        "لطفا قیمت دارو را وارد کنید:"
+    )
+    return States.ADD_DRUG_PRICE
 
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Show two-column selection interface for drugs"""
