@@ -1765,6 +1765,11 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = update.effective_user
             conn = get_db_connection()
             with conn.cursor() as cursor:
+                # Log the drug being saved
+                logger.info(f"Saving drug: {context.user_data['selected_drug']}")
+                
+                # Log total drugs count before insertion
+                cursor.execute('SELECT COUNT(*) FROM drug_items')
                 cursor.execute('''
                 INSERT INTO drug_items (
                     user_id, name, price, date, quantity
@@ -1775,6 +1780,9 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data['selected_drug']['price'],
                     context.user_data['drug_date'],
                     quantity
+                    # Log total drugs count after insertion
+                cursor.execute('SELECT COUNT(*) FROM drug_items')
+                logger.info(f"Total drugs in DB after insert: {cursor.fetchone()[0]}")
                 ))
                 conn.commit()
                 
