@@ -2604,52 +2604,30 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle drug search"""
     try:
-        if not update.message or not update.message.text:
-            await update.message.reply_text("لطفاً نام دارو را وارد کنید.")
+        search_term = normalize_text(update.message.text.strip())
+        if len(search_term) < 2:
+            await update.message.reply_text("حداقل 2 حرف برای جستجو وارد کنید")
             return States.SEARCH_DRUG
-
-        search_term = update.message.text.strip()
-        logger.info(f"Searching for drugs with term: {search_term}")
-
+        
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                # Search with pg_trgm similarity and exact matches
                 cursor.execute('''
                 SELECT 
-                    di.id, 
-                    di.user_id,
-                    di.name,
-                    di.price,
-                    di.date,
-                    di.quantity,
+                    di.id, di.user_id, di.name, di.price, di.date, di.quantity,
                     p.name AS pharmacy_name,
-                    p.verified AS pharmacy_verified,
                     similarity(di.name, %s) AS match_score
                 FROM drug_items di
                 JOIN pharmacies p ON di.user_id = p.user_id
                 WHERE 
-                    di.quantity > 0 AND 
+                    di.quantity > 0 AND
                     p.verified = TRUE AND
                     (di.name ILIKE %s OR similarity(di.name, %s) > 0.3)
-                ORDER BY 
-                    CASE 
-                        WHEN di.name ILIKE %s THEN 0  -- Exact matches first
-                        ELSE 1 
-                    END,
-                    match_score DESC,
-                    di.price DESC
-                LIMIT 50
-                ''', (
-                    search_term,
-                    f'%{search_term}%',
-                    search_term,
-                    f'{search_term}%'
-                ))
-
+                ORDER BY match_score DESC, di.price DESC
+                LIMIT 20
+                ''', (search_term, f'%{search_term}%', search_term))
                 
                 results = cursor.fetchall()
                 logger.info(f"Found {len(results)} matching drugs")
