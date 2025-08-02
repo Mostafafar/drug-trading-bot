@@ -673,7 +673,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
 async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle back button"""
+    """Handle back button with proper keyboard"""
     try:
         query = update.callback_query
         await query.answer()
@@ -685,16 +685,27 @@ async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
         
-        await query.edit_message_text(
-            "به منوی اصلی بازگشتید. لطفا یک گزینه را انتخاب کنید:",
+        try:
+            await query.edit_message_text(
+                "به منوی اصلی بازگشتید. لطفا یک گزینه را انتخاب کنید:",
+                reply_markup=None  # Remove any existing inline keyboard
+            )
+        except:
+            pass
+            
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="به منوی اصلی بازگشتید. لطفا یک گزینه را انتخاب کنید:",
             reply_markup=reply_markup
         )
         return ConversationHandler.END
     except Exception as e:
         logger.error(f"Error in handle_back: {e}")
-        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="خطایی رخ داده است. به منوی اصلی بازگشتید."
+        )
         return ConversationHandler.END
-
 async def simple_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start simple verification process"""
     try:
