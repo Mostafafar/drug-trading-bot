@@ -3459,10 +3459,12 @@ async def main():
         application = (
             ApplicationBuilder()
             .token("8000378956:AAGfDy2R8tcUR_LcOTEfgTv8fAca512IgJ8")
+            .concurrent_updates(True)
             .post_init(post_init)
             .build()
         )
-        # Add conversation handler with registration states
+
+        # ========== REGISTRATION HANDLER ==========
         registration_handler = ConversationHandler(
             entry_points=[
                 CommandHandler('start', start),
@@ -3514,10 +3516,11 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
+            allow_reentry=True,
+            per_message=True
         )
-        
-        # Add conversation handler for drug management
+
+        # ========== DRUG MANAGEMENT HANDLER ==========
         drug_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
@@ -3553,10 +3556,11 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
+            allow_reentry=True,
+            per_message=True
         )
-        
-        # Add conversation handler for needs management
+
+        # ========== NEEDS MANAGEMENT HANDLER ==========
         needs_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^ثبت نیاز جدید$'), add_need),
@@ -3585,10 +3589,11 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
+            allow_reentry=True,
+            per_message=True
         )
-        
-        # Add conversation handler for search and trade
+
+        # ========== TRADE HANDLER ==========
         trade_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^جستجوی دارو$'), search_drug),
@@ -3633,10 +3638,11 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
+            allow_reentry=True,
+            per_message=True
         )
-        
-        # Add conversation handler for medical categories
+
+        # ========== CATEGORIES HANDLER ==========
         categories_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^تنظیم شاخه‌های دارویی$'), setup_medical_categories),
@@ -3650,10 +3656,11 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
+            allow_reentry=True,
+            per_message=True
         )
-        
-        # Add conversation handler for admin commands
+
+        # ========== ADMIN HANDLER ==========
         admin_handler = ConversationHandler(
             entry_points=[
                 CommandHandler('upload_excel', upload_excel_start),
@@ -3666,31 +3673,37 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
+            allow_reentry=True,
+            per_message=True
         )
+
+        # Add all handlers to application
+        handlers = [
+            registration_handler,
+            drug_handler,
+            needs_handler,
+            trade_handler,
+            categories_handler,
+            admin_handler,
+            CallbackQueryHandler(callback_handler, pattern=".*")
+        ]
         
-        # Add handlers
-        application.add_handler(registration_handler)
-        application.add_handler(drug_handler)
-        application.add_handler(needs_handler)
-        application.add_handler(trade_handler)
-        application.add_handler(categories_handler)
-        application.add_handler(admin_handler)
+        for handler in handlers:
+            application.add_handler(handler)
         
-        # Add callback query handler
-        application.add_handler(CallbackQueryHandler(callback_handler))
-        
-        # Add error handler
         application.add_error_handler(error_handler)
-        
+
         # Start the bot
         logger.info("Starting bot polling...")
         await application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             close_loop=False,
-            stop_signals=None
+            stop_signals=None,
+            drop_pending_updates=True
         )
 
+    except asyncio.CancelledError:
+        logger.info("Bot stopped by user")
     except Exception as main_error:
         logger.critical(f"Bot crashed: {main_error}")
         raise
@@ -3702,15 +3715,14 @@ async def post_init(application: Application) -> None:
     """Post-initialization callback"""
     await application.bot.set_my_commands([
         BotCommand("start", "Start the bot"),
-        BotCommand("help", "Get help")
+        BotCommand("help", "Get help"),
+        BotCommand("search", "Search for drugs"),
+        BotCommand("add", "Add new drug")
     ])
 
 
-if __name__ == '__main__':
-    # Configure asyncio policy for Python 3.12+
-    if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
+def run_bot():
+    """Wrapper function to properly handle event loop"""
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
@@ -3718,3 +3730,22 @@ if __name__ == '__main__':
     except Exception as e:
         logger.critical(f"Fatal error: {e}")
         sys.exit(1)
+
+
+if __name__ == '__main__':
+    # Configure logging
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO,
+        handlers=[
+            logging.FileHandler('bot.log'),
+            logging.StreamHandler()
+        ]
+    )
+    
+    # Configure asyncio policy for Windows
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    
+    # Run the bot
+    run_bot()
