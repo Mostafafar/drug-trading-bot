@@ -1868,6 +1868,18 @@ async def verify_database():
     finally:
         if conn:
             conn.close()
+async def debug_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Debug command to check drug data"""
+    try:
+        message = f"Drug list contains {len(drug_list)} items\n"
+        message += f"Sample drugs:\n"
+        
+        for name, price in drug_list[:10]:  # Show first 10 drugs
+            message += f"- {name}: {price}\n"
+            
+        await update.message.reply_text(message)
+    except Exception as e:
+        await update.message.reply_text(f"Error getting drug data: {str(e)}")
 
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
