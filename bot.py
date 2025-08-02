@@ -3450,7 +3450,7 @@ def main():
             logger.warning("Failed to load drug data - some features may not work")
         
         # Create application
-        application = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+        application = ApplicationBuilder().token("8000378956:AAGfDy2R8tcUR_LcOTEfgTv8fAca512IgJ8").build()
         
         # Add conversation handler with registration states
         registration_handler = ConversationHandler(
