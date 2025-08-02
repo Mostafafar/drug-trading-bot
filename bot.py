@@ -1753,16 +1753,8 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-def normalize_text(text):
-    """نرمال‌سازی متن برای یکسان‌سازی یونیکد و حذف فاصله‌های اضافی"""
-    if text is None:
-        return ""
-    return unicodedata.normalize('NFKC', text.strip())
-
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """ذخیره دارو در دیتابیس"""
     try:
-        # مدیریت callback برای بازگشت به انتخاب دارو
         if update.callback_query and update.callback_query.data == "back_to_drug_selection":
             await update.callback_query.answer()
             query = update.callback_query
@@ -1774,9 +1766,6 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return States.ADD_DRUG_DATE
 
-        # بررسی وجود داده‌های لازم
-        logger.info(f"Input data: selected_drug={context.user_data.get('selected_drug')}, "
-                    f"drug_date={context.user_data.get('drug_date')}")
         if not context.user_data.get('selected_drug') or not context.user_data.get('drug_date'):
             logger.error("Missing selected_drug or drug_date")
             await update.message.reply_text("اطلاعات دارو ناقص است.")
@@ -1784,98 +1773,73 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         conn = None
         try:
-            # بررسی مقدار ورودی برای تعداد
             quantity = int(update.message.text)
             if quantity <= 0:
                 await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
                 return States.ADD_DRUG_QUANTITY
 
             user = update.effective_user
-            drug_name = normalize_text(context.user_data['selected_drug']['name'])
-            drug_price = context.user_data['selected_drug']['price']
-            drug_date = context.user_data['drug_date']
-
-            # بررسی مقادیر قبل از ذخیره
-            if not drug_name or not drug_price or not drug_date:
-                logger.error(f"Invalid data: name={drug_name}, price={drug_price}, date={drug_date}")
-                await update.message.reply_text("داده‌های دارو نامعتبر هستند.")
-                return ConversationHandler.END
-
-            logger.info(f"Saving drug: user_id={user.id}, name={drug_name}, "
-                        f"price={drug_price}, date={drug_date}, quantity={quantity}")
-
-            # اتصال به دیتابیس
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                # تعداد داروها قبل از درج
-                cursor.execute('SELECT COUNT(*) FROM drug_items')
-                count_before = cursor.fetchone()[0]
-                logger.info(f"Total drugs before insert: {count_before}")
+                logger.info(f"Saving drug: user_id={user.id}, name={context.user_data['selected_drug']['name']}, "
+                            f"price={context.user_data['selected_drug']['price']}, date={context.user_data['drug_date']}, "
+                            f"quantity={quantity}")
 
-                # درج داده
+                cursor.execute('SELECT COUNT(*) FROM drug_items')
+                logger.info(f"Total drugs before insert: {cursor.fetchone()[0]}")
+
                 cursor.execute('''
                     INSERT INTO drug_items (user_id, name, price, date, quantity)
                     VALUES (%s, %s, %s, %s, %s)
-                    RETURNING id
                 ''', (
                     user.id,
-                    drug_name,
-                    float(drug_price),  # اطمینان از نوع عددی برای قیمت
-                    drug_date,
+                    context.user_data['selected_drug']['name'],
+                    context.user_data['selected_drug']['price'],
+                    context.user_data['drug_date'],
                     quantity
                 ))
 
-                inserted_id = cursor.fetchone()[0]
                 conn.commit()
-                logger.info(f"Drug inserted with id: {inserted_id}")
+                logger.info("Drug inserted and committed")
 
-                # بررسی داده درج‌شده
-                cursor.execute('SELECT id, user_id, name, price, date, quantity FROM drug_items WHERE id = %s',
-                               (inserted_id,))
+                cursor.execute('SELECT * FROM drug_items WHERE user_id = %s AND name = %s',
+                               (user.id, context.user_data['selected_drug']['name']))
                 inserted_drug = cursor.fetchone()
                 logger.info(f"Inserted drug: {inserted_drug}")
 
-                # تعداد داروها بعد از درج
                 cursor.execute('SELECT COUNT(*) FROM drug_items')
-                count_after = cursor.fetchone()[0]
-                logger.info(f"Total drugs after insert: {count_after}")
+                logger.info(f"Total drugs after insert: {cursor.fetchone()[0]}")
 
-                # ارسال پیام موفقیت
                 await update.message.reply_text(
                     f"✅ دارو با موفقیت اضافه شد!\n\n"
-                    f"نام: {drug_name}\n"
-                    f"قیمت: {drug_price}\n"
-                    f"تاریخ انقضا: {drug_date}\n"
+                    f"نام: {context.user_data['selected_drug']['name']}\n"
+                    f"قیمت: {context.user_data['selected_drug']['price']}\n"
+                    f"تاریخ انقضا: {context.user_data['drug_date']}\n"
                     f"تعداد: {quantity}"
                 )
 
-                # اجرای تابع تطبیق
                 context.application.create_task(check_for_matches(user.id, context))
 
-        except ValueError as ve:
-            logger.error(f"ValueError: Invalid quantity input: {update.message.text}, error: {ve}")
+        except ValueError:
             await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
             return States.ADD_DRUG_QUANTITY
-        except psycopg2.Error as dbe:
-            logger.error(f"Database error: {dbe}")
+        except psycopg2.Error as e:
+            logger.error(f"Database error: {e}")
             await update.message.reply_text("خطا در ثبت دارو. لطفا دوباره تلاش کنید.")
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
-            await update.message.reply_text("خطایی در پردازش درخواست شما رخ داده است.")
+            await update.message.reply_text("خطایی رخ داده است.")
         finally:
             if conn:
-                try:
-                    conn.close()
-                    logger.info("Database connection closed")
-                except Exception as e:
-                    logger.error(f"Error closing connection: {e}")
+                conn.close()
 
         return ConversationHandler.END
 
     except Exception as e:
         logger.error(f"Error in save_drug_item: {e}")
-        await update.message.reply_text("خطایی در پردازش درخواست شما رخ داده است.")
+        await update.message.reply_text("خطایی رخ داده است.")
         return ConversationHandler.END
+
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List user's drug items"""
     try:
