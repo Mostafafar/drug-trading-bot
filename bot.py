@@ -1,6 +1,3 @@
-I'll provide a complete refactored version of the drug trading bot with the requested changes. Here's the full implementation:
-
-```python
 import os
 import re
 import time
