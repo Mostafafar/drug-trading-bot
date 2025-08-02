@@ -3439,11 +3439,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in error handler: {e}")
 
-def main():
-    """Start the bot"""
-    try:
-        # Initialize database
-        asyncio.get_event_loop().run_until_complete(initialize_db())
+async def main():
+    await initialize_db()
         
         # Load drug data
         if not load_drug_data():
@@ -3681,5 +3678,5 @@ def main():
         raise
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
                     
