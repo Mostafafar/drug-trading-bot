@@ -1745,7 +1745,37 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-
+async def verify_database():
+    """Verify database connection and structure"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # Check if drug_items table exists and has records
+            cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'drug_items'
+            )
+            """)
+            table_exists = cursor.fetchone()[0]
+            
+            if not table_exists:
+                logger.error("drug_items table does not exist!")
+                return False
+                
+            cursor.execute("SELECT COUNT(*) FROM drug_items")
+            count = cursor.fetchone()[0]
+            logger.info(f"Found {count} records in drug_items table")
+            
+            return True
+            
+    except Exception as e:
+        logger.error(f"Database verification failed: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
 
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
