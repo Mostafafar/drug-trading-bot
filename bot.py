@@ -44,13 +44,7 @@ from telegram.ext import (
 )
 from telegram.constants import ParseMode
 from psycopg2 import sql, extras
-import unicodedata
-import psycopg2
-from telegram.ext import ConversationHandler
-import logging
 
-# تنظیم لاگینگ
-logger = logging.getLogger(__name__)
 
 # Constants and Configuration
 logging.basicConfig(
