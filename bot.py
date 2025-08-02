@@ -1761,11 +1761,10 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return States.ADD_DRUG_DATE
 
         if not context.user_data.get('selected_drug') or not context.user_data.get('drug_date'):
-            logger.error("Missing selected_drug or drug_date")
+            logger.error("Missing selected_drug or drug_date in context")
             await update.message.reply_text("اطلاعات دارو ناقص است.")
             return ConversationHandler.END
 
-        conn = None
         try:
             quantity = int(update.message.text)
             if quantity <= 0:
@@ -1773,67 +1772,67 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return States.ADD_DRUG_QUANTITY
 
             user = update.effective_user
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                logger.info(f"Saving drug: user_id={user.id}, name={context.user_data['selected_drug']['name']}, "
-                            f"price={context.user_data['selected_drug']['price']}, date={context.user_data['drug_date']}, "
-                            f"quantity={quantity}")
+            conn = None
+            try:
+                conn = get_db_connection()
+                with conn.cursor() as cursor:
+                    # Log before insertion
+                    logger.info(f"Attempting to insert drug: {context.user_data['selected_drug']['name']}")
 
-                cursor.execute('SELECT COUNT(*) FROM drug_items')
-                logger.info(f"Total drugs before insert: {cursor.fetchone()[0]}")
-
-                cursor.execute('''
+                    cursor.execute('''
                     INSERT INTO drug_items (user_id, name, price, date, quantity)
                     VALUES (%s, %s, %s, %s, %s)
-                ''', (
-                    user.id,
-                    context.user_data['selected_drug']['name'],
-                    context.user_data['selected_drug']['price'],
-                    context.user_data['drug_date'],
-                    quantity
-                ))
+                    RETURNING id
+                    ''', (
+                        user.id,
+                        context.user_data['selected_drug']['name'],
+                        context.user_data['selected_drug']['price'],
+                        context.user_data['drug_date'],
+                        quantity
+                    ))
+                    
+                    # Get the inserted ID to confirm insertion
+                    drug_id = cursor.fetchone()[0]
+                    logger.info(f"Drug inserted successfully with ID: {drug_id}")
+                    
+                    conn.commit()
+                    
+                    # Verify insertion
+                    cursor.execute('SELECT * FROM drug_items WHERE id = %s', (drug_id,))
+                    inserted_drug = cursor.fetchone()
+                    logger.info(f"Inserted drug record: {inserted_drug}")
 
-                conn.commit()
-                logger.info("Drug inserted and committed")
+                    await update.message.reply_text(
+                        f"✅ دارو با موفقیت اضافه شد!\n\n"
+                        f"نام: {context.user_data['selected_drug']['name']}\n"
+                        f"قیمت: {context.user_data['selected_drug']['price']}\n"
+                        f"تاریخ انقضا: {context.user_data['drug_date']}\n"
+                        f"تعداد: {quantity}"
+                    )
 
-                cursor.execute('SELECT * FROM drug_items WHERE user_id = %s AND name = %s',
-                               (user.id, context.user_data['selected_drug']['name']))
-                inserted_drug = cursor.fetchone()
-                logger.info(f"Inserted drug: {inserted_drug}")
+                    # Check for matches
+                    context.application.create_task(check_for_matches(user.id, context))
 
-                cursor.execute('SELECT COUNT(*) FROM drug_items')
-                logger.info(f"Total drugs after insert: {cursor.fetchone()[0]}")
-
-                await update.message.reply_text(
-                    f"✅ دارو با موفقیت اضافه شد!\n\n"
-                    f"نام: {context.user_data['selected_drug']['name']}\n"
-                    f"قیمت: {context.user_data['selected_drug']['price']}\n"
-                    f"تاریخ انقضا: {context.user_data['drug_date']}\n"
-                    f"تعداد: {quantity}"
-                )
-
-                context.application.create_task(check_for_matches(user.id, context))
+            except psycopg2.Error as e:
+                logger.error(f"Database error: {e}")
+                if conn:
+                    conn.rollback()
+                await update.message.reply_text("خطا در ثبت دارو. لطفا دوباره تلاش کنید.")
+                return States.ADD_DRUG_QUANTITY
+            finally:
+                if conn:
+                    conn.close()
 
         except ValueError:
             await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
             return States.ADD_DRUG_QUANTITY
-        except psycopg2.Error as e:
-            logger.error(f"Database error: {e}")
-            await update.message.reply_text("خطا در ثبت دارو. لطفا دوباره تلاش کنید.")
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-            await update.message.reply_text("خطایی رخ داده است.")
-        finally:
-            if conn:
-                conn.close()
 
         return ConversationHandler.END
 
     except Exception as e:
         logger.error(f"Error in save_drug_item: {e}")
-        await update.message.reply_text("خطایی رخ داده است.")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List user's drug items"""
     try:
