@@ -3924,6 +3924,8 @@ def main():
 
         # Add all handlers to application
         application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("debug", debug_db))  # Add this after application is created
+        application.add_handler(CommandHandler("debug_drugs", debug_drugs))
         application.add_handler(registration_handler)
         application.add_handler(admin_verify_handler)
         application.add_handler(simple_verify_handler)
