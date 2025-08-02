@@ -6,7 +6,6 @@ import logging
 import random
 import asyncio
 import psycopg2
-import sys
 import traceback
 import pandas as pd
 from io import BytesIO
@@ -3440,31 +3439,20 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in error handler: {e}")
 
-async def main():
-    """Main async function to initialize and run the bot"""
+def main():
+    """Start the bot"""
     try:
-        # Initialize database with error handling
-        try:
-            await initialize_db()
-            logger.info("Database initialized successfully")
-        except Exception as db_error:
-            logger.critical(f"Failed to initialize database: {db_error}")
-            raise
-
+        # Initialize database
+        asyncio.get_event_loop().run_until_complete(initialize_db())
+        
         # Load drug data
         if not load_drug_data():
             logger.warning("Failed to load drug data - some features may not work")
-
-        # Create and configure application
-        application = (
-            ApplicationBuilder()
-            .token("8000378956:AAGfDy2R8tcUR_LcOTEfgTv8fAca512IgJ8")
-            .concurrent_updates(True)
-            .post_init(post_init)
-            .build()
-        )
-
-        # ========== REGISTRATION HANDLER ==========
+        
+        # Create application
+        application = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+        
+        # Add conversation handler with registration states
         registration_handler = ConversationHandler(
             entry_points=[
                 CommandHandler('start', start),
@@ -3516,11 +3504,10 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-            per_message=True
+            allow_reentry=True
         )
-
-        # ========== DRUG MANAGEMENT HANDLER ==========
+        
+        # Add conversation handler for drug management
         drug_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
@@ -3556,11 +3543,10 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-            per_message=True
+            allow_reentry=True
         )
-
-        # ========== NEEDS MANAGEMENT HANDLER ==========
+        
+        # Add conversation handler for needs management
         needs_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^ثبت نیاز جدید$'), add_need),
@@ -3589,11 +3575,10 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-            per_message=True
+            allow_reentry=True
         )
-
-        # ========== TRADE HANDLER ==========
+        
+        # Add conversation handler for search and trade
         trade_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^جستجوی دارو$'), search_drug),
@@ -3638,11 +3623,10 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-            per_message=True
+            allow_reentry=True
         )
-
-        # ========== CATEGORIES HANDLER ==========
+        
+        # Add conversation handler for medical categories
         categories_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^تنظیم شاخه‌های دارویی$'), setup_medical_categories),
@@ -3656,11 +3640,10 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-            per_message=True
+            allow_reentry=True
         )
-
-        # ========== ADMIN HANDLER ==========
+        
+        # Add conversation handler for admin commands
         admin_handler = ConversationHandler(
             entry_points=[
                 CommandHandler('upload_excel', upload_excel_start),
@@ -3673,79 +3656,29 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-            per_message=True
+            allow_reentry=True
         )
-
-        # Add all handlers to application
-        handlers = [
-            registration_handler,
-            drug_handler,
-            needs_handler,
-            trade_handler,
-            categories_handler,
-            admin_handler,
-            CallbackQueryHandler(callback_handler, pattern=".*")
-        ]
         
-        for handler in handlers:
-            application.add_handler(handler)
+        # Add handlers
+        application.add_handler(registration_handler)
+        application.add_handler(drug_handler)
+        application.add_handler(needs_handler)
+        application.add_handler(trade_handler)
+        application.add_handler(categories_handler)
+        application.add_handler(admin_handler)
         
+        # Add callback query handler
+        application.add_handler(CallbackQueryHandler(callback_handler))
+        
+        # Add error handler
         application.add_error_handler(error_handler)
-
-        # Start the bot
-        logger.info("Starting bot polling...")
-        await application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            close_loop=False,
-            stop_signals=None,
-            drop_pending_updates=True
-        )
-
-    except asyncio.CancelledError:
-        logger.info("Bot stopped by user")
-    except Exception as main_error:
-        logger.critical(f"Bot crashed: {main_error}")
-        raise
-    finally:
-        logger.info("Bot shutdown complete")
-
-
-async def post_init(application: Application) -> None:
-    """Post-initialization callback"""
-    await application.bot.set_my_commands([
-        BotCommand("start", "Start the bot"),
-        BotCommand("help", "Get help"),
-        BotCommand("search", "Search for drugs"),
-        BotCommand("add", "Add new drug")
-    ])
-
-
-def run_bot():
-    """Wrapper function to properly handle event loop"""
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
+        
+        # Start the Bot
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        
     except Exception as e:
-        logger.critical(f"Fatal error: {e}")
-        sys.exit(1)
-
+        logger.critical(f"Fatal error in main: {e}")
+        raise
 
 if __name__ == '__main__':
-    # Configure logging
-    logging.basicConfig(
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.INFO,
-        handlers=[
-            logging.FileHandler('bot.log'),
-            logging.StreamHandler()
-        ]
-    )
-    
-    # Configure asyncio policy for Windows
-    if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
-    # Run the bot
-    run_bot()
+    main()
