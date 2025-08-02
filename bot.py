@@ -2882,7 +2882,7 @@ async def debug_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn.close()
 
 # Add to your main() function:
-application.add_handler(CommandHandler("debug", debug_db))
+
 
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Select pharmacy from search results"""
