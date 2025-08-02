@@ -6,6 +6,7 @@ import logging
 import random
 import asyncio
 import psycopg2
+import sys
 import traceback
 import pandas as pd
 from io import BytesIO
