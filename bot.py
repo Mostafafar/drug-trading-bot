@@ -2942,6 +2942,7 @@ async def select_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"💵 مبلغ کل: {parse_price(selected_item['price']) * quantity}\n\n"
                 "آیا از انتخاب خود مطمئن هستید؟",
                 reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             return States.CONFIRM_OFFER
                 
         except ValueError:
