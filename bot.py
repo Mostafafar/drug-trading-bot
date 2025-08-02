@@ -1627,7 +1627,7 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Search for drug to add with comprehensive error handling and logging"""
     try:
