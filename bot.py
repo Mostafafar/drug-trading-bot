@@ -2823,6 +2823,7 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
+
 async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug selection for offer"""
     try:
@@ -2844,6 +2845,7 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
             await query.edit_message_text(
                 "لطفا داروخانه مورد نظر را انتخاب کنید:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             return States.SELECT_PHARMACY
             
         if not query.data.startswith("offer_"):
@@ -2875,7 +2877,13 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
         return States.SELECT_QUANTITY
     except Exception as e:
         logger.error(f"Error in handle_offer_response: {e}")
-        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        try:
+            await query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        except:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="خطایی رخ داده است. لطفا دوباره تلاش کنید."
+            )
         return ConversationHandler.END
 
 async def select_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
