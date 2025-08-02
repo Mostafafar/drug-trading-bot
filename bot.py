@@ -2758,7 +2758,39 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "خطایی در پردازش درخواست شما رخ داد. لطفاً دوباره تلاش کنید.",
             reply_markup=ReplyKeyboardRemove()
         )
-        return ConversationHandler.END
+        return ConversationHandler.END 
+async def debug_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Debug command to check database status"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # Check drug_items table
+            cursor.execute("SELECT COUNT(*) FROM drug_items")
+            drug_count = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT * FROM drug_items LIMIT 5")
+            sample_drugs = cursor.fetchall()
+            
+            message = (
+                f"Database Status:\n"
+                f"Drug items count: {drug_count}\n"
+                f"Sample drugs:\n"
+            )
+            
+            for drug in sample_drugs:
+                message += f"- {drug[2]} (Qty: {drug[5]})\n"
+                
+            await update.message.reply_text(message)
+            
+    except Exception as e:
+        await update.message.reply_text(f"Database error: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
+
+# Add to your main() function:
+application.add_handler(CommandHandler("debug", debug_db))
 
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Select pharmacy from search results"""
