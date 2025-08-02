@@ -3440,7 +3440,10 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in error handler: {e}")
 
 async def main():
-    await initialize_db()
+    """Main function to start the bot"""
+    try:
+        # Initialize database
+        await initialize_db()
         
         # Load drug data
         if not load_drug_data():
@@ -3448,7 +3451,7 @@ async def main():
         
         # Create application
         application = ApplicationBuilder().token("8000378956:AAGfDy2R8tcUR_LcOTEfgTv8fAca512IgJ8").build()
-        
+
         # Add conversation handler with registration states
         registration_handler = ConversationHandler(
             entry_points=[
