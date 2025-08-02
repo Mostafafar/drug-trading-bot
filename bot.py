@@ -3440,18 +3440,27 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in error handler: {e}")
 
 async def main():
-    """Main function to start the bot"""
+    """Main async function to initialize and run the bot"""
     try:
-        # Initialize database
-        await initialize_db()
-        
+        # Initialize database with error handling
+        try:
+            await initialize_db()
+            logger.info("Database initialized successfully")
+        except Exception as db_error:
+            logger.critical(f"Failed to initialize database: {db_error}")
+            raise
+
         # Load drug data
         if not load_drug_data():
             logger.warning("Failed to load drug data - some features may not work")
-        
-        # Create application
-        application = ApplicationBuilder().token("8000378956:AAGfDy2R8tcUR_LcOTEfgTv8fAca512IgJ8").build()
 
+        # Create and configure application
+        application = (
+            ApplicationBuilder()
+            .token("8000378956:AAGfDy2R8tcUR_LcOTEfgTv8fAca512IgJ8")
+            .post_init(post_init)
+            .build()
+        )
         # Add conversation handler with registration states
         registration_handler = ConversationHandler(
             entry_points=[
@@ -3673,13 +3682,38 @@ async def main():
         # Add error handler
         application.add_error_handler(error_handler)
         
-        # Start the Bot
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-        
-    except Exception as e:
-        logger.critical(f"Fatal error in main: {e}")
+        # Start the bot
+        logger.info("Starting bot polling...")
+        await application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            close_loop=False,
+            stop_signals=None
+        )
+
+    except Exception as main_error:
+        logger.critical(f"Bot crashed: {main_error}")
         raise
+    finally:
+        logger.info("Bot shutdown complete")
+
+
+async def post_init(application: Application) -> None:
+    """Post-initialization callback"""
+    await application.bot.set_my_commands([
+        BotCommand("start", "Start the bot"),
+        BotCommand("help", "Get help")
+    ])
+
 
 if __name__ == '__main__':
-    main()
-                    
+    # Configure asyncio policy for Python 3.12+
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.critical(f"Fatal error: {e}")
+        sys.exit(1)
