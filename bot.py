@@ -181,7 +181,7 @@ async def initialize_db():
                 verified BOOLEAN DEFAULT FALSE,
                 verified_at TIMESTAMP,
                 admin_id BIGINT REFERENCES users(id)
-            ''')
+            )''')
             
             # Drug items table
             cursor.execute('''
