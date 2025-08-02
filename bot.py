@@ -2998,7 +2998,52 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in confirm_offer: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def save_compensation_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Save the quantity for compensation items"""
+    try:
+        quantity_text = update.message.text.strip()
+        
+        # Validate quantity input
+        try:
+            quantity = int(quantity_text)
+            if quantity <= 0:
+                await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
+                return States.COMPENSATION_QUANTITY
+        except ValueError:
+            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
+            return States.COMPENSATION_QUANTITY
 
+        # Get the drug from context
+        comp_drug = context.user_data.get('comp_drug')
+        if not comp_drug:
+            await update.message.reply_text("اطلاعات دارو یافت نشد.")
+            return ConversationHandler.END
+
+        # Check if quantity is available
+        if quantity > comp_drug['quantity']:
+            await update.message.reply_text(
+                f"موجودی کافی نیست. حداکثر تعداد قابل انتخاب: {comp_drug['quantity']}"
+            )
+            return States.COMPENSATION_QUANTITY
+
+        # Initialize comp_items list if not exists
+        if 'comp_items' not in context.user_data:
+            context.user_data['comp_items'] = []
+
+        # Add to compensation items
+        context.user_data['comp_items'].append({
+            'id': comp_drug['id'],
+            'name': comp_drug['name'],
+            'quantity': quantity
+        })
+
+        # Show updated selection
+        return await show_two_column_selection(update, context)
+
+    except Exception as e:
+        logger.error(f"Error in save_compensation_quantity: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show two-column selection for items and compensation"""
     try:
