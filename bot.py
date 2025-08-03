@@ -2877,6 +2877,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         await query.edit_message_text(
             message,
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return States.SELECT_ITEMS
     except Exception as e:
         logger.error(f"Error in show_two_column_selection: {e}")
