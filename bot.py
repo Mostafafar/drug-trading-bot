@@ -5,7 +5,6 @@ import json
 import logging
 import random
 import asyncio
-import sys
 import psycopg2
 import traceback
 import pandas as pd
@@ -85,8 +84,9 @@ class States(Enum):
     REGISTER_LICENSE = auto()
     REGISTER_MEDICAL_CARD = auto()
     REGISTER_PHONE = auto()
-    VERIFICATION_CODE = auto()
     REGISTER_ADDRESS = auto()
+    REGISTER_LOCATION = auto()
+    VERIFICATION_CODE = auto()
     ADMIN_VERIFICATION = auto()
     SIMPLE_VERIFICATION = auto()
     SEARCH_DRUG = auto()
@@ -95,20 +95,22 @@ class States(Enum):
     SELECT_QUANTITY = auto()
     CONFIRM_OFFER = auto()
     CONFIRM_TOTALS = auto()
+    SELECT_NEED_CATEGORY = auto()
     ADD_NEED_NAME = auto()
     ADD_NEED_DESC = auto()
     ADD_NEED_QUANTITY = auto()
-    SEARCH_DRUG_FOR_ADDING = auto()
-    SELECT_DRUG_FOR_ADDING = auto()
+    SEARCH_DRUG_FOR_NEED = auto()
+    SELECT_DRUG_FOR_NEED = auto()
     COMPENSATION_SELECTION = auto()
     COMPENSATION_QUANTITY = auto()
     ADD_DRUG_DATE = auto()
     ADD_DRUG_QUANTITY = auto()
+    SEARCH_DRUG_FOR_ADDING = auto()
+    SELECT_DRUG_FOR_ADDING = auto()
     ADMIN_UPLOAD_EXCEL = auto()
     EDIT_ITEM = auto()
     EDIT_DRUG = auto()
     EDIT_NEED = auto()
-    SETUP_CATEGORIES = auto()
 
 def get_db_connection(max_retries=3, retry_delay=1.0):
     """Get a database connection with retry logic"""
@@ -127,7 +129,7 @@ def get_db_connection(max_retries=3, retry_delay=1.0):
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
                 cursor.execute("SET TIME ZONE 'Asia/Tehran'")
-            return conn
+            return conn  # این return باید داخل تابع باشد
         except psycopg2.Error as e:
             last_error = e
             logger.error(f"DB connection attempt {attempt + 1} failed: {str(e)}")
@@ -143,7 +145,6 @@ def get_db_connection(max_retries=3, retry_delay=1.0):
     if last_error:
         raise last_error
     raise psycopg2.Error("Unknown database connection error")
-
 async def initialize_db():
     """Initialize database tables and default data"""
     conn = None
@@ -178,6 +179,8 @@ async def initialize_db():
                 medical_card_image TEXT,
                 phone TEXT,
                 address TEXT,
+                location_lat DOUBLE PRECISION,
+                location_lng DOUBLE PRECISION,
                 admin_code TEXT UNIQUE,
                 verified BOOLEAN DEFAULT FALSE,
                 verified_at TIMESTAMP,
@@ -599,13 +602,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await register_pharmacy_name(update, context)
         elif query.data == "simple_verify":
             return await simple_verify_start(update, context)
-        elif query.data.startswith("view_match_"):
-            return await handle_match_notification(update, context)
         elif query.data == "edit_drugs":
             return await edit_drugs(update, context)
         elif query.data.startswith("edit_drug_"):
             return await edit_drug_item(update, context)
-        elif query.data in ["edit_date", "edit_quantity", "delete_drug"]:
+        elif query.data in ["edit_name", "edit_price", "edit_date", "edit_quantity", "delete_drug"]:
             return await handle_drug_edit_action(update, context)
         elif query.data == "confirm_delete":
             return await handle_drug_deletion(update, context)
@@ -649,6 +650,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await confirm_totals(update, context)
         elif query.data == "edit_selection":
             return await show_two_column_selection(update, context)
+        elif query.data.startswith("view_match_"):
+            return await handle_match_notification(update, context)
         
         logger.warning(f"Unhandled callback data: {query.data}")
         await query.edit_message_text("این گزینه در حال حاضر قابل استفاده نیست.")
@@ -662,6 +665,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
     except Exception as e:
         logger.error(f"Error in callback_handler: {e}")
+        # Try to notify user if possible
         try:
             if update.callback_query:
                 await update.callback_query.answer("خطایی رخ داد. لطفا دوباره تلاش کنید.", show_alert=True)
@@ -702,7 +706,6 @@ async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text="خطایی رخ داده است. به منوی اصلی بازگشتید."
         )
         return ConversationHandler.END
-
 async def simple_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start simple verification process"""
     try:
@@ -840,8 +843,8 @@ async def admin_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     # Check if user already registered as pharmacy
                     cursor.execute('''
-                    SELECT 1 FROM pharmacies WHERE user_id = %s
-                    ''', (update.effective_user.id,))
+                SELECT 1 FROM pharmacies WHERE user_id = %s
+                ''', (update.effective_user.id,))
                     if cursor.fetchone():
                         await update.message.reply_text(
                             "شما قبلاً با یک داروخانه ثبت نام کرده‌اید."
@@ -1039,11 +1042,31 @@ async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Verify registration code"""
+async def register_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get location in registration process"""
     try:
         address = update.message.text
         context.user_data['address'] = address
+        
+        keyboard = [[KeyboardButton("اشتراک گذاری موقعیت مکانی", request_location=True)]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+        
+        await update.message.reply_text(
+            "لطفا موقعیت مکانی داروخانه را با استفاده از دکمه زیر ارسال کنید:",
+            reply_markup=reply_markup
+        )
+        return States.REGISTER_LOCATION
+    except Exception as e:
+        logger.error(f"Error in register_location: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+
+async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Verify registration code"""
+    try:
+        location = update.message.location
+        context.user_data['location_lat'] = location.latitude
+        context.user_data['location_lng'] = location.longitude
         
         verification_code = str(random.randint(1000, 9999))
         context.user_data['verification_code'] = verification_code
@@ -1108,8 +1131,8 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
                     INSERT INTO pharmacies (
                         user_id, name, founder_name, national_card_image,
                         license_image, medical_card_image, phone, address,
-                        verified
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        location_lat, location_lng, verified
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ''', (
                         update.effective_user.id,
                         context.user_data.get('pharmacy_name'),
@@ -1119,6 +1142,8 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
                         context.user_data.get('medical_card'),
                         context.user_data.get('phone'),
                         context.user_data.get('address'),
+                        context.user_data.get('location_lat'),
+                        context.user_data.get('location_lng'),
                         False
                     ))
                     
@@ -1440,7 +1465,6 @@ async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in verify_pharmacy: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-
 async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Toggle medical category selection for user"""
     try:
@@ -1541,7 +1565,6 @@ async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in save_categories: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-
 async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Setup medical categories for user"""
     try:
@@ -1578,7 +1601,6 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
                     "لطفا شاخه‌های دارویی مورد نظر خود را انتخاب کنید:",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
-                return States.SETUP_CATEGORIES
                 
         except Exception as e:
             logger.error(f"Error setting up categories: {e}")
@@ -1604,6 +1626,7 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in add_drug_item: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Search for drug to add with comprehensive error handling and logging"""
@@ -1677,7 +1700,7 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         keyboard = []
         try:
             for idx, (name, price) in enumerate(matched_drugs[:10]):  # Limit to 10 results
-                display_text = f"{name} ({price})"
+                display_text = f"{name[:20]}... ({price})" if len(name) > 20 else f"{name} ({price})"
                 keyboard.append([InlineKeyboardButton(display_text, callback_data=f"select_drug_{idx}")])
         except Exception as e:
             logger.error(f"Error preparing keyboard: {e}")
@@ -1814,6 +1837,50 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
+async def verify_database():
+    """Verify database connection and structure"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # Check if drug_items table exists and has records
+            cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'drug_items'
+            )
+            """)
+            table_exists = cursor.fetchone()[0]
+            
+            if not table_exists:
+                logger.error("drug_items table does not exist!")
+                return False
+                
+            cursor.execute("SELECT COUNT(*) FROM drug_items")
+            count = cursor.fetchone()[0]
+            logger.info(f"Found {count} records in drug_items table")
+            
+            return True
+            
+    except Exception as e:
+        logger.error(f"Database verification failed: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+async def debug_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Debug command to check drug data"""
+    try:
+        message = f"Drug list contains {len(drug_list)} items\n"
+        message += f"Sample drugs:\n"
+        
+        for name, price in drug_list[:10]:  # Show first 10 drugs
+            message += f"- {name}: {price}\n"
+            
+        await update.message.reply_text(message)
+    except Exception as e:
+        await update.message.reply_text(f"Error getting drug data: {str(e)}")
+
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if update.callback_query and update.callback_query.data == "back_to_drug_selection":
@@ -1900,7 +1967,6 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in save_drug_item: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List user's drug items"""
     try:
@@ -1976,7 +2042,7 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = []
                 for drug in drugs:
                     keyboard.append([InlineKeyboardButton(
-                        f"{drug['name']} ({drug['quantity']})",
+                        f"{drug['name'][:20]}... ({drug['quantity']})" if len(drug['name']) > 20 else f"{drug['name']} ({drug['quantity']})",
                         callback_data=f"edit_drug_{drug['id']}"
                     )])
                 
@@ -2029,6 +2095,8 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data['editing_drug'] = dict(drug)
                     
                     keyboard = [
+                        [InlineKeyboardButton("✏️ ویرایش نام", callback_data="edit_name")],
+                        [InlineKeyboardButton("✏️ ویرایش قیمت", callback_data="edit_price")],
                         [InlineKeyboardButton("✏️ ویرایش تاریخ", callback_data="edit_date")],
                         [InlineKeyboardButton("✏️ ویرایش تعداد", callback_data="edit_quantity")],
                         [InlineKeyboardButton("🗑️ حذف دارو", callback_data="delete_drug")],
@@ -2056,6 +2124,8 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in edit_drug_item: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
+
 
 async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug edit action selection"""
@@ -2102,7 +2172,6 @@ async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_
         logger.error(f"Error in handle_drug_edit_action: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save drug edit changes"""
     try:
@@ -2176,6 +2245,7 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in save_drug_edit: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 
 async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug deletion confirmation"""
@@ -2254,7 +2324,6 @@ async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
         except:
             await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 # Needs Management
 async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a need"""
@@ -2415,7 +2484,7 @@ async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = []
                 for need in needs:
                     keyboard.append([InlineKeyboardButton(
-                        f"{need['name']} ({need['quantity']})",
+                        f"{need['name'][:20]}... ({need['quantity']})" if len(need['name']) > 20 else f"{need['name']} ({need['quantity']})",
                         callback_data=f"edit_need_{need['id']}"
                     )])
                 
@@ -2673,7 +2742,6 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in search_drug: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug search requests and display results"""
     try:
@@ -2752,33 +2820,81 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         message,
                         reply_markup=reply_markup,
                         parse_mode=ParseMode.MARKDOWN
-                    
                     )
                     return States.SELECT_PHARMACY
                 else:
+                    # No results found
                     keyboard = [
-                        [InlineKeyboardButton("🔙 جستجوی مجدد", callback_data="back_to_search")],
+                        [InlineKeyboardButton("🔙 بازگشت به جستجو", callback_data="back_to_search")],
                         [InlineKeyboardButton("🏠 منوی اصلی", callback_data="back")]
                     ]
                     
                     await update.message.reply_text(
-                        "هیچ دارویی با این مشخصات یافت نشد.\n\n"
+                        "هیچ دارویی با این نام یافت نشد.\n\n"
                         "می‌توانید دوباره جستجو کنید یا به منوی اصلی بازگردید.",
                         reply_markup=InlineKeyboardMarkup(keyboard)
                     )
                     return States.SEARCH_DRUG
-                    
+
+        except psycopg2.Error as e:
+            logger.error(f"Database error in search: {str(e)}")
+            await update.message.reply_text(
+                "خطایی در پایگاه داده رخ داده است. لطفاً بعداً دوباره تلاش کنید.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return ConversationHandler.END
+            
         except Exception as e:
-            logger.error(f"Error searching drugs: {e}")
-            await update.message.reply_text("خطا در جستجوی داروها. لطفا دوباره تلاش کنید.")
-            return States.SEARCH_DRUG
+            logger.error(f"Unexpected error in search: {str(e)}")
+            await update.message.reply_text(
+                "خطای غیرمنتظره‌ای رخ داده است. لطفاً با پشتیبانی تماس بگیرید.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return ConversationHandler.END
+            
         finally:
             if conn:
                 conn.close()
+
     except Exception as e:
-        logger.error(f"Error in handle_search: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+        logger.error(f"Error in handle_search: {str(e)}")
+        await update.message.reply_text(
+            "خطایی در پردازش درخواست شما رخ داد. لطفاً دوباره تلاش کنید.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END 
+async def debug_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Debug command to check database status"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # Check drug_items table
+            cursor.execute("SELECT COUNT(*) FROM drug_items")
+            drug_count = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT * FROM drug_items LIMIT 5")
+            sample_drugs = cursor.fetchall()
+            
+            message = (
+                f"Database Status:\n"
+                f"Drug items count: {drug_count}\n"
+                f"Sample drugs:\n"
+            )
+            
+            for drug in sample_drugs:
+                message += f"- {drug[2]} (Qty: {drug[5]})\n"
+                
+            await update.message.reply_text(message)
+            
+    except Exception as e:
+        await update.message.reply_text(f"Database error: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
+
+# Add to your main() function:
+
 
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Select pharmacy from search results"""
@@ -2787,516 +2903,715 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
 
         if query.data == "back":
-            return await handle_back(update, context)
-            
-        if not query.data.startswith("pharmacy_"):
-            await query.edit_message_text("خطا در انتخاب داروخانه.")
+            await query.edit_message_text("لطفا نام دارویی که می‌خواهید جستجو کنید را وارد کنید:")
             return States.SEARCH_DRUG
+
+        if query.data.startswith("pharmacy_"):
+            pharmacy_id = int(query.data.split("_")[1])
+            pharmacies = context.user_data.get('pharmacies', {})
+            pharmacy_data = pharmacies.get(pharmacy_id)
             
-        pharmacy_id = int(query.data.split("_")[1])
-        pharmacies = context.user_data.get('pharmacies', {})
-        
-        if pharmacy_id not in pharmacies:
-            await query.edit_message_text("داروخانه یافت نشد.")
-            return States.SEARCH_DRUG
-            
-        pharmacy = pharmacies[pharmacy_id]
-        context.user_data['selected_pharmacy'] = pharmacy
-        context.user_data['selected_pharmacy_id'] = pharmacy_id
-        
-        # Prepare keyboard with drug items
-        keyboard = []
-        for item in pharmacy['items']:
-            keyboard.append([InlineKeyboardButton(
-                f"{item['name']} - {item['price']} (موجودی: {item['quantity']})",
-                callback_data=f"offer_{item['id']}"
-            )])
-        
-        keyboard.append([InlineKeyboardButton("🔙 بازگشت به نتایج", callback_data="back_to_pharmacies")])
-        
-        await query.edit_message_text(
-            f"🏥 داروخانه: {pharmacy['name']}\n\n"
-            "لطفا داروی مورد نظر را انتخاب کنید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return States.SELECT_ITEMS
+            if pharmacy_data:
+                context.user_data['selected_pharmacy'] = {
+                    'id': pharmacy_id,
+                    'name': pharmacy_data['name']
+                }
+                context.user_data['pharmacy_drugs'] = pharmacy_data['items']
+                context.user_data['selected_items'] = []
+                
+                conn = None
+                try:
+                    conn = get_db_connection()
+                    with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                        # Get buyer's drugs for potential exchange
+                        cursor.execute('''
+                        SELECT id, name, price, quantity 
+                        FROM drug_items 
+                        WHERE user_id = %s AND quantity > 0
+                        ''', (update.effective_user.id,))
+                        buyer_drugs = cursor.fetchall()
+                        context.user_data['buyer_drugs'] = [dict(row) for row in buyer_drugs]
+                        
+                        # Get pharmacy's medical categories
+                        cursor.execute('''
+                        SELECT mc.id, mc.name 
+                        FROM user_categories uc
+                        JOIN medical_categories mc ON uc.category_id = mc.id
+                        WHERE uc.user_id = %s
+                        ''', (pharmacy_id,))
+                        pharmacy_categories = cursor.fetchall()
+                        context.user_data['pharmacy_categories'] = [dict(row) for row in pharmacy_categories]
+                        
+                except Exception as e:
+                    logger.error(f"Error fetching data: {e}")
+                    context.user_data['buyer_drugs'] = []
+                    context.user_data['pharmacy_categories'] = []
+                finally:
+                    if conn:
+                        conn.close()
+                
+                return await show_two_column_selection(update, context)
     except Exception as e:
         logger.error(f"Error in select_pharmacy: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def add_drug_from_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    drug_name = query.data.replace("add_drug_", "")
+    context.user_data['selected_drug'] = {'name': drug_name, 'price': ''}
+    
+    await query.edit_message_text(
+        f"در حال ثبت داروی جدید: {drug_name}\n\n"
+        "لطفا قیمت دارو را وارد کنید:"
+    )
+    return States.ADD_DRUG_PRICE
 
-
-async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle drug selection for offer"""
+async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show two-column selection interface for drugs"""
     try:
-        query = update.callback_query
-        await query.answer()
+        pharmacy = context.user_data.get('selected_pharmacy', {})
+        pharmacy_drugs = context.user_data.get('pharmacy_drugs', [])
+        buyer_drugs = context.user_data.get('buyer_drugs', [])
+        selected_items = context.user_data.get('selected_items', [])
+        
+        keyboard = []
+        max_length = max(len(pharmacy_drugs), len(buyer_drugs))
+        
+        for i in range(max_length):
+            row = []
+            if i < len(pharmacy_drugs):
+                drug = pharmacy_drugs[i]
+                is_selected = any(
+                    item['id'] == drug['id'] and item.get('type') == 'pharmacy_drug'
+                    for item in selected_items
+                )
+                emoji = "✅ " if is_selected else ""
+                row.append(InlineKeyboardButton(
+                    f"{emoji}💊 {drug['name'][:15]}", 
+                    callback_data=f"pharmacydrug_{drug['id']}"
+                ))
+            else:
+                row.append(InlineKeyboardButton(" ", callback_data="none"))
+            
+            if i < len(buyer_drugs):
+                drug = buyer_drugs[i]
+                is_selected = any(
+                    item['id'] == drug['id'] and item.get('type') == 'buyer_drug'
+                    for item in selected_items
+                )
+                emoji = "✅ " if is_selected else ""
+                row.append(InlineKeyboardButton(
+                    f"{emoji}📝 {drug['name'][:15]}", 
+                    callback_data=f"buyerdrug_{drug['id']}"
+                ))
+            else:
+                row.append(InlineKeyboardButton(" ", callback_data="none"))
+            
+            keyboard.append(row)
 
-        if query.data == "back_to_pharmacies":
-            # Rebuild pharmacy selection keyboard
-            pharmacies = context.user_data.get('pharmacies', {})
-            keyboard = []
-            for pharmacy_id, pharmacy_data in pharmacies.items():
-                keyboard.append([InlineKeyboardButton(
-                    f"🏥 {pharmacy_data['name']} ({pharmacy_data['count']} دارو)", 
-                    callback_data=f"pharmacy_{pharmacy_id}"
-                )])
-            
-            keyboard.append([InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back")])
-            
-            await query.edit_message_text(
-                "لطفا داروخانه مورد نظر را انتخاب کنید:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            return States.SELECT_PHARMACY
-            
-        if not query.data.startswith("offer_"):
-            await query.edit_message_text("خطا در انتخاب دارو.")
-            return States.SELECT_ITEMS
-            
-        drug_id = int(query.data.split("_")[1])
-        pharmacy_items = context.user_data['selected_pharmacy']['items']
-        selected_item = next((item for item in pharmacy_items if item['id'] == drug_id), None)
-        
-        if not selected_item:
-            await query.edit_message_text("دارو یافت نشد.")
-            return States.SELECT_ITEMS
-            
-        context.user_data['selected_item'] = selected_item
-        
-        keyboard = [
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_items")]
-        ]
-        
-        await query.edit_message_text(
-            f"💊 دارو: {selected_item['name']}\n"
-            f"💰 قیمت: {selected_item['price']}\n"
-            f"📅 تاریخ انقضا: {selected_item['date']}\n"
-            f"📦 موجودی: {selected_item['quantity']}\n\n"
-            "لطفا تعداد مورد نیاز را وارد کنید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+        keyboard.append([
+            InlineKeyboardButton("💰 محاسبه جمع", callback_data="finish_selection"),
+            InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_pharmacies"),
+            InlineKeyboardButton("❌ لغو", callback_data="cancel")
+        ])
+
+        message = (
+            f"🔹 داروخانه: {pharmacy.get('name', '')}\n\n"
+            "💊 داروهای داروخانه | 📝 داروهای شما برای تبادل\n\n"
+            "علامت ✅ نشان‌دهنده انتخاب است\n"
+            "پس از انتخاب موارد، روی «محاسبه جمع» کلیک کنید"
         )
-        return States.SELECT_QUANTITY
-    except Exception as e:
-        logger.error(f"Error in handle_offer_response: {e}")
-        try:
-            await query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        except:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="خطایی رخ داده است. لطفا دوباره تلاش کنید."
-            )
-        return ConversationHandler.END
 
-async def select_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Select quantity for drug offer"""
-    try:
-        if update.callback_query and update.callback_query.data == "back_to_items":
-            await update.callback_query.answer()
-            pharmacy = context.user_data.get('selected_pharmacy', {})
-            
-            # Rebuild items keyboard
-            keyboard = []
-            for item in pharmacy.get('items', []):
-                keyboard.append([InlineKeyboardButton(
-                    f"{item['name']} - {item['price']} (موجودی: {item['quantity']})",
-                    callback_data=f"offer_{item['id']}"
-                )])
-            
-            keyboard.append([InlineKeyboardButton("🔙 بازگشت به نتایج", callback_data="back_to_pharmacies")])
-            
+        if update.callback_query:
             await update.callback_query.edit_message_text(
-                f"🏥 داروخانه: {pharmacy.get('name', '')}\n\n"
-                "لطفا داروی مورد نظر را انتخاب کنید:",
+                text=message,
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            return States.SELECT_ITEMS
-            
-        try:
-            quantity = int(update.message.text)
-            selected_item = context.user_data.get('selected_item')
-            
-            if not selected_item:
-                await update.message.reply_text("اطلاعات دارو یافت نشد.")
-                return States.SEARCH_DRUG
-                
-            if quantity <= 0:
-                await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
-                return States.SELECT_QUANTITY
-                
-            if quantity > selected_item['quantity']:
-                await update.message.reply_text(
-                    f"موجودی کافی نیست. حداکثر تعداد قابل انتخاب: {selected_item['quantity']}"
-                )
-                return States.SELECT_QUANTITY
-                
-            context.user_data['selected_quantity'] = quantity
-            
-            keyboard = [
-                [InlineKeyboardButton("✅ تایید", callback_data="confirm_offer")],
-                [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_items")]
-            ]
-            
-            await update.message.reply_text(
-                f"💊 دارو: {selected_item['name']}\n"
-                f"💰 قیمت واحد: {selected_item['price']}\n"
-                f"📦 تعداد: {quantity}\n"
-                f"💵 مبلغ کل: {parse_price(selected_item['price']) * quantity}\n\n"
-                "آیا از انتخاب خود مطمئن هستید؟",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            return States.CONFIRM_OFFER
-                
-        except ValueError:
-            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
-            return States.SELECT_QUANTITY
-    except Exception as e:
-        logger.error(f"Error in select_quantity: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
-
-async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Confirm drug offer and proceed to compensation selection"""
-    try:
-        query = update.callback_query
-        await query.answer()
-
-        if query.data == "back_to_items":
-            return await handle_offer_response(update, context)
-            
-        selected_item = context.user_data.get('selected_item')
-        quantity = context.user_data.get('selected_quantity')
-        
-        if not selected_item or not quantity:
-            await query.edit_message_text("اطلاعات ناقص است.")
-            return States.SEARCH_DRUG
-            
-        # Initialize offer items list if not exists
-        if 'offer_items' not in context.user_data:
-            context.user_data['offer_items'] = []
-            
-        # Add item to offer
-        context.user_data['offer_items'].append({
-            'drug_name': selected_item['name'],
-            'price': selected_item['price'],
-            'quantity': quantity,
-            'pharmacy_id': context.user_data['selected_pharmacy_id']
-        })
-        
-        keyboard = [
-            [InlineKeyboardButton("➕ افزودن داروی دیگر", callback_data="add_more")],
-            [InlineKeyboardButton("💵 پرداخت نقدی", callback_data="compensate")],
-            [InlineKeyboardButton("🔚 اتمام انتخاب", callback_data="finish_selection")]
-        ]
-        
-        await query.edit_message_text(
-            "✅ دارو به لیست پیشنهادات اضافه شد.\n\n"
-            "می‌توانید داروی دیگری اضافه کنید یا روش جبران را انتخاب نمایید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return States.COMPENSATION_SELECTION
-    except Exception as e:
-        logger.error(f"Error in confirm_offer: {e}")
-        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
-async def save_compensation_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save the quantity for compensation items"""
-    try:
-        quantity_text = update.message.text.strip()
-        
-        # Validate quantity input
-        try:
-            quantity = int(quantity_text)
-            if quantity <= 0:
-                await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
-                return States.COMPENSATION_QUANTITY
-        except ValueError:
-            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
-            return States.COMPENSATION_QUANTITY
-
-        # Get the drug from context
-        comp_drug = context.user_data.get('comp_drug')
-        if not comp_drug:
-            await update.message.reply_text("اطلاعات دارو یافت نشد.")
-            return ConversationHandler.END
-
-        # Check if quantity is available
-        if quantity > comp_drug['quantity']:
-            await update.message.reply_text(
-                f"موجودی کافی نیست. حداکثر تعداد قابل انتخاب: {comp_drug['quantity']}"
-            )
-            return States.COMPENSATION_QUANTITY
-
-        # Initialize comp_items list if not exists
-        if 'comp_items' not in context.user_data:
-            context.user_data['comp_items'] = []
-
-        # Add to compensation items
-        context.user_data['comp_items'].append({
-            'id': comp_drug['id'],
-            'name': comp_drug['name'],
-            'quantity': quantity
-        })
-
-        # Show updated selection
-        return await show_two_column_selection(update, context)
-
-    except Exception as e:
-        logger.error(f"Error in save_compensation_quantity: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
-async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show two-column selection for items and compensation"""
-    try:
-        query = update.callback_query
-        await query.answer()
-
-        offer_items = context.user_data.get('offer_items', [])
-        comp_items = context.user_data.get('comp_items', [])
-        
-        # Prepare items message
-        items_msg = "📋 لیست داروهای انتخاب شده:\n\n"
-        total_price = 0
-        
-        for idx, item in enumerate(offer_items, 1):
-            item_price = parse_price(item['price']) * item['quantity']
-            total_price += item_price
-            items_msg += (
-                f"{idx}. {item['drug_name']}\n"
-                f"   تعداد: {item['quantity']}\n"
-                f"   قیمت: {item['price']} (جمع: {item_price})\n\n"
-            )
-        
-        # Prepare compensation message
-        comp_msg = "📋 لیست جبرانی:\n\n"
-        if comp_items:
-            for idx, item in enumerate(comp_items, 1):
-                comp_msg += (
-                    f"{idx}. {item['name']}\n"
-                    f"   تعداد: {item['quantity']}\n\n"
-                )
         else:
-            comp_msg += "هیچ موردی انتخاب نشده است.\n\n"
+            await update.message.reply_text(
+                text=message,
+                reply_markup=InlineKeyboardMarkup(keyboard))
         
-        # Calculate totals
-        totals_msg = (
-            f"💰 جمع کل: {total_price}\n"
-            f"💵 مبلغ قابل پرداخت: {total_price}\n\n"
-        )
-        
-        # Prepare keyboard
-        keyboard = [
-            [InlineKeyboardButton("➕ افزودن داروی دیگر", callback_data="add_more")],
-            [InlineKeyboardButton("💵 پرداخت نقدی", callback_data="compensate")],
-            [InlineKeyboardButton("📝 ویرایش انتخاب‌ها", callback_data="edit_selection")],
-            [InlineKeyboardButton("✅ تایید نهایی", callback_data="confirm_totals")]
-        ]
-        
-        await query.edit_message_text(
-            f"{items_msg}\n{comp_msg}\n{totals_msg}"
-            "لطفا گزینه مورد نظر را انتخاب کنید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return States.CONFIRM_TOTALS
+        return States.SELECT_ITEMS
     except Exception as e:
         logger.error(f"Error in show_two_column_selection: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-async def handle_compensation_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle compensation selection (cash or items)"""
+async def select_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle item selection in two-column interface"""
     try:
         query = update.callback_query
         await query.answer()
 
-        if query.data == "add_more":
-            await query.edit_message_text("لطفا نام دارویی که می‌خواهید جستجو کنید را وارد کنید:")
-            return States.SEARCH_DRUG
+        if query.data == "cancel":
+            await cancel(update, context)
+            return ConversationHandler.END
+
+        if query.data == "back_to_pharmacies":
+            search_term = context.user_data.get('search_term', '')
+            message = f"نتایج جستجو برای '{search_term}':\n\n"
             
-        if query.data == "compensate":
-            # User selected cash payment
-            context.user_data['comp_method'] = 'cash'
-            return await confirm_totals(update, context)
+            pharmacies = context.user_data.get('pharmacies', {})
+            keyboard = []
+            for pharmacy_id, pharmacy_data in pharmacies.items():
+                keyboard.append([InlineKeyboardButton(
+                    f"داروخانه: {pharmacy_data['name']} ({pharmacy_data['count']} آیتم)", 
+                    callback_data=f"pharmacy_{pharmacy_id}"
+                )])
             
-        if query.data.startswith("comp_"):
-            # Handle item selection for compensation
-            drug_id = int(query.data.split("_")[1])
+            keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
             
-            conn = None
-            try:
-                conn = get_db_connection()
-                with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                    cursor.execute('''
-                    SELECT id, name, quantity 
-                    FROM drug_items 
-                    WHERE id = %s AND user_id = %s AND quantity > 0
-                    ''', (drug_id, update.effective_user.id))
-                    drug = cursor.fetchone()
-                    
-                    if not drug:
-                        await query.answer("دارو یافت نشد.", show_alert=True)
-                        return
-                    
-                    context.user_data['comp_drug'] = dict(drug)
-                    await query.edit_message_text(
-                        f"💊 داروی انتخابی برای جبران: {drug['name']}\n"
-                        f"📦 موجودی: {drug['quantity']}\n\n"
-                        "لطفا تعداد مورد نظر را وارد کنید:"
-                    )
-                    return States.COMPENSATION_QUANTITY
-                    
-            except Exception as e:
-                logger.error(f"Error getting drug for compensation: {e}")
-                await query.answer("خطا در دریافت اطلاعات دارو.", show_alert=True)
-            finally:
-                if conn:
-                    conn.close()
+            await query.edit_message_text(
+                message + "لطفا داروخانه مورد نظر را انتخاب کنید:",
+                reply_markup=InlineKeyboardMarkup(keyboard))
+            return States.SELECT_PHARMACY
+
+        if query.data == "finish_selection":
+            selected_items = context.user_data.get('selected_items', [])
+            if not selected_items:
+                await query.answer("لطفا حداقل یک مورد را انتخاب کنید", show_alert=True)
+                return States.SELECT_ITEMS
+            
+            # Calculate totals
+            pharmacy_total = sum(
+                parse_price(item['price']) * item.get('selected_quantity', 1)
+                for item in selected_items if item.get('type') == 'pharmacy_drug'
+            )
+            
+            buyer_total = sum(
+                parse_price(item['price']) * item.get('selected_quantity', 1)
+                for item in selected_items if item.get('type') == 'buyer_drug'
+            )
+            
+            difference = pharmacy_total - buyer_total
+            
+            message = (
+                "📊 جمع کل انتخاب‌ها:\n\n"
+                f"💊 جمع داروهای داروخانه: {pharmacy_total:,}\n"
+                f"📝 جمع داروهای شما: {buyer_total:,}\n"
+                f"💰 تفاوت: {abs(difference):,} ({'به نفع شما' if difference < 0 else 'به نفع داروخانه'})\n\n"
+            )
+            
+            if difference != 0:
+                message += "برای جبران تفاوت می‌توانید از دکمه زیر استفاده کنید:\n"
+                keyboard = [
+                    [InlineKeyboardButton("➕ جبران تفاوت", callback_data="compensate")],
+                    [InlineKeyboardButton("✅ تایید نهایی", callback_data="confirm_totals")],
+                    [InlineKeyboardButton("✏️ ویرایش", callback_data="edit_selection")],
+                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_items")]
+                ]
+            else:
+                message += "آیا مایل به ادامه هستید؟"
+                keyboard = [
+                    [InlineKeyboardButton("✅ تایید نهایی", callback_data="confirm_totals")],
+                    [InlineKeyboardButton("✏️ ویرایش", callback_data="edit_selection")],
+                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_items")]
+                ]
+            
+            await query.edit_message_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard))
+            return States.CONFIRM_TOTALS
+
+        elif query.data.startswith(("pharmacydrug_", "buyerdrug_")):
+            item_type, item_id = query.data.split("_")
+            item_id = int(item_id)
+            
+            selected_items = context.user_data.get('selected_items', [])
+            
+            # Check if item already selected
+            existing_idx = next(
+                (i for i, item in enumerate(selected_items) 
+                 if item.get('id') == item_id and 
+                 ((item_type == "pharmacydrug" and item.get('type') == 'pharmacy_drug') or
+                  (item_type == "buyerdrug" and item.get('type') =='buyer_drug'))),
+                None
+            )
+            
+            if existing_idx is not None:
+                # Remove from selected items
+                selected_items.pop(existing_idx)
+            else:
+                # Add to selected items
+                if item_type == "pharmacydrug":
+                    pharmacy_drugs = context.user_data.get('pharmacy_drugs', [])
+                    drug = next((d for d in pharmacy_drugs if d['id'] == item_id), None)
+                    if drug:
+                        selected_items.append({
+                            'id': drug['id'],
+                            'name': drug['name'],
+                            'price': drug['price'],
+                            'quantity': drug['quantity'],
+                            'type': 'pharmacy_drug',
+                            'selected_quantity': 1
+                        })
+                else:
+                    buyer_drugs = context.user_data.get('buyer_drugs', [])
+                    drug = next((d for d in buyer_drugs if d['id'] == item_id), None)
+                    if drug:
+                        selected_items.append({
+                            'id': drug['id'],
+                            'name': drug['name'],
+                            'price': drug['price'],
+                            'quantity': drug['quantity'],
+                            'type': 'buyer_drug',
+                            'selected_quantity': 1
+                        })
+            
+            context.user_data['selected_items'] = selected_items
+            return await show_two_column_selection(update, context)
+            
+    except Exception as e:
+        logger.error(f"Error in select_items: {e}")
+        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+
+async def handle_compensation_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle compensation selection for trade difference"""
+    try:
+        query = update.callback_query
+        await query.answer()
+
+        selected_items = context.user_data.get('selected_items', [])
+        
+        # Calculate totals
+        pharmacy_total = sum(
+            parse_price(item['price']) * item.get('selected_quantity', 1)
+            for item in selected_items if item.get('type') == 'pharmacy_drug'
+        )
+        
+        buyer_total = sum(
+            parse_price(item['price']) * item.get('selected_quantity', 1)
+            for item in selected_items if item.get('type') == 'buyer_drug'
+        )
+        
+        difference = pharmacy_total - buyer_total
+        
+        # Get buyer's drugs for compensation
+        buyer_drugs = context.user_data.get('buyer_drugs', [])
+        
+        if not buyer_drugs:
+            await query.answer("هیچ دارویی برای جبران تفاوت ندارید", show_alert=True)
+            return States.CONFIRM_TOTALS
+        
+        keyboard = []
+        for drug in buyer_drugs:
+            # Skip drugs already selected for trade
+            if any(item['id'] == drug['id'] and item.get('type') == 'buyer_drug' 
+                   for item in selected_items):
+                continue
+                
+            keyboard.append([InlineKeyboardButton(
+                f"{drug['name']} ({drug['price']})", 
+                callback_data=f"comp_{drug['id']}"
+            )])
+        
+        keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_totals")])
+        
+        await query.edit_message_text(
+            f"تفاوت مبلغ: {abs(difference):,}\n\n"
+            "لطفا دارویی برای جبران تفاوت انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return States.COMPENSATION_SELECTION
     except Exception as e:
         logger.error(f"Error in handle_compensation_selection: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Confirm final totals and create offer"""
+async def handle_compensation_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle compensation quantity selection"""
     try:
         query = update.callback_query
         await query.answer()
 
-        offer_items = context.user_data.get('offer_items', [])
-        if not offer_items:
-            await query.edit_message_text("هیچ دارویی انتخاب نشده است.")
-            return States.SEARCH_DRUG
+        if query.data.startswith("comp_"):
+            drug_id = int(query.data.split("_")[1])
+            buyer_drugs = context.user_data.get('buyer_drugs', [])
+            drug = next((d for d in buyer_drugs if d['id'] == drug_id), None)
             
-        # Calculate total price
-        total_price = sum(parse_price(item['price']) * item['quantity'] for item in offer_items)
+            if not drug:
+                await query.answer("دارو یافت نشد", show_alert=True)
+                return States.COMPENSATION_SELECTION
+                
+            context.user_data['compensation_drug'] = drug
+            
+            await query.edit_message_text(
+                f"داروی انتخابی: {drug['name']}\n"
+                f"قیمت واحد: {drug['price']}\n\n"
+                "لطفا تعداد مورد نیاز برای جبران تفاوت را وارد کنید:"
+            )
+            return States.COMPENSATION_QUANTITY
+    except Exception as e:
+        logger.error(f"Error in handle_compensation_quantity: {e}")
+        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+
+async def save_compensation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Save compensation selection"""
+    try:
+        try:
+            quantity = int(update.message.text)
+            if quantity <= 0:
+                await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
+                return States.COMPENSATION_QUANTITY
+                
+            drug = context.user_data.get('compensation_drug')
+            if not drug:
+                await update.message.reply_text("خطا در پردازش. لطفا دوباره تلاش کنید.")
+                return ConversationHandler.END
+                
+            selected_items = context.user_data.get('selected_items', [])
+            selected_items.append({
+                'id': drug['id'],
+                'name': drug['name'],
+                'price': drug['price'],
+                'quantity': drug['quantity'],
+                'type': 'compensation',
+                'selected_quantity': quantity
+            })
+            context.user_data['selected_items'] = selected_items
+            
+            return await confirm_totals(update, context)
+            
+        except ValueError:
+            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
+            return States.COMPENSATION_QUANTITY
+    except Exception as e:
+        logger.error(f"Error in save_compensation: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+
+async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Confirm trade totals and create offer"""
+    try:
+        query = update.callback_query
+        await query.answer()
+
+        selected_items = context.user_data.get('selected_items', [])
+        pharmacy = context.user_data.get('selected_pharmacy', {})
         
-        # Prepare message
-        message = "📋 خلاصه پیشنهاد:\n\n"
-        message += "📌 داروهای درخواستی:\n"
-        for item in offer_items:
-            message += f"- {item['drug_name']} ({item['quantity']} عدد) - {item['price']}\n"
+        if not selected_items or not pharmacy:
+            await query.answer("خطا در پردازش. لطفا دوباره تلاش کنید.", show_alert=True)
+            return ConversationHandler.END
+            
+        # Calculate totals
+        pharmacy_total = sum(
+            parse_price(item['price']) * item.get('selected_quantity', 1)
+            for item in selected_items if item.get('type') == 'pharmacy_drug'
+        )
         
-        message += f"\n💰 جمع کل: {total_price}\n"
+        buyer_total = sum(
+            parse_price(item['price']) * item.get('selected_quantity', 1)
+            for item in selected_items if item.get('type') in ('buyer_drug', 'compensation')
+        )
         
-        # Add compensation info
-        if context.user_data.get('comp_method') == 'cash':
-            message += "\n💵 روش جبران: پرداخت نقدی\n"
-        elif context.user_data.get('comp_items'):
-            message += "\n💊 داروهای جبرانی:\n"
-            for item in context.user_data['comp_items']:
-                message += f"- {item['name']} ({item['quantity']} عدد)\n"
+        difference = pharmacy_total - buyer_total
+        
+        message = (
+            "📋 خلاصه پیشنهاد تبادل:\n\n"
+            f"🔹 داروخانه: {pharmacy.get('name')}\n\n"
+            "💊 داروهای دریافتی از داروخانه:\n"
+        )
+        
+        for item in selected_items:
+            if item.get('type') == 'pharmacy_drug':
+                message += (
+                    f"• {item['name']} - قیمت: {item['price']} "
+                    f"(تعداد: {item.get('selected_quantity', 1)})\n"
+                )
+        
+        message += "\n📝 داروهای ارسالی شما:\n"
+        for item in selected_items:
+            if item.get('type') in ('buyer_drug', 'compensation'):
+                message += (
+                    f"• {item['name']} - قیمت: {item['price']} "
+                    f"(تعداد: {item.get('selected_quantity', 1)})\n"
+                )
+        
+        message += (
+            f"\n💰 جمع دریافتی: {pharmacy_total:,}\n"
+            f"💰 جمع ارسالی: {buyer_total:,}\n"
+            f"🔹 تفاوت: {abs(difference):,} "
+            f"({'به نفع شما' if difference < 0 else 'به نفع داروخانه'})\n\n"
+            "آیا مایل به ثبت این پیشنهاد هستید؟"
+        )
         
         keyboard = [
-            [InlineKeyboardButton("✅ تأیید و ارسال", callback_data="send_offer")],
-            [InlineKeyboardButton("✏️ ویرایش", callback_data="edit_selection")]
+            [InlineKeyboardButton("✅ تایید و ارسال", callback_data="confirm_offer")],
+            [InlineKeyboardButton("✏️ ویرایش", callback_data="edit_selection")],
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_totals")]
         ]
         
         await query.edit_message_text(
             message,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return States.CONFIRM_TOTALS
+            reply_markup=InlineKeyboardMarkup(keyboard))
+        return States.CONFIRM_OFFER
     except Exception as e:
         logger.error(f"Error in confirm_totals: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send the finalized offer to the pharmacy"""
+async def create_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Create trade offer in database"""
     try:
         query = update.callback_query
         await query.answer()
 
-        offer_items = context.user_data.get('offer_items', [])
-        if not offer_items:
-            await query.edit_message_text("هیچ دارویی برای ارسال وجود ندارد.")
-            return States.SEARCH_DRUG
-            
-        # Get pharmacy ID from first item (all should be same pharmacy)
-        pharmacy_id = offer_items[0]['pharmacy_id']
-        buyer_id = update.effective_user.id
+        selected_items = context.user_data.get('selected_items', [])
+        pharmacy = context.user_data.get('selected_pharmacy', {})
         
-        # Calculate total price
-        total_price = sum(parse_price(item['price']) * item['quantity'] for item in offer_items)
+        if not selected_items or not pharmacy:
+            await query.answer("خطا در پردازش. لطفا دوباره تلاش کنید.", show_alert=True)
+            return ConversationHandler.END
+            
+        conn = None
+        try:
+            # Calculate total price
+            pharmacy_total = sum(
+                parse_price(item['price']) * item.get('selected_quantity', 1)
+                for item in selected_items if item.get('type') == 'pharmacy_drug'
+            )
+            
+            # Create offer
+            cursor = conn.cursor()
+            cursor.execute('''
+            INSERT INTO offers (
+                pharmacy_id, buyer_id, total_price
+            ) VALUES (%s, %s, %s)
+            RETURNING id
+            ''', (
+                pharmacy['id'],
+                update.effective_user.id,
+                pharmacy_total
+            ))
+            offer_id = cursor.fetchone()[0]
+            
+            # Add offer items
+            for item in selected_items:
+                if item.get('type') == 'pharmacy_drug':
+                    cursor.execute('''
+                    INSERT INTO offer_items (
+                        offer_id, drug_name, price, quantity, item_type
+                    ) VALUES (%s, %s, %s, %s, 'drug')
+                    ''', (
+                        offer_id,
+                        item['name'],
+                        item['price'],
+                        item.get('selected_quantity', 1)
+                    ))
+                elif item.get('type') in ('buyer_drug', 'compensation'):
+                    cursor.execute('''
+                    INSERT INTO compensation_items (
+                        offer_id, drug_id, quantity
+                    ) VALUES (%s, %s, %s)
+                    ''', (
+                        offer_id,
+                        item['id'],
+                        item.get('selected_quantity', 1)
+                    ))
+            
+            conn.commit()
+            
+            # Notify pharmacy
+            try:
+                keyboard = [
+                    [InlineKeyboardButton("✅ پذیرش پیشنهاد", callback_data=f"offer_accept_{offer_id}")],
+                    [InlineKeyboardButton("❌ رد پیشنهاد", callback_data=f"offer_reject_{offer_id}")]
+                ]
+                
+                offer_message = (
+                    "📬 یک پیشنهاد تبادل جدید دریافت کردید:\n\n"
+                    f"از: {update.effective_user.full_name}\n\n"
+                    "💊 داروهای پیشنهادی:\n"
+                )
+                
+                for item in selected_items:
+                    if item.get('type') == 'pharmacy_drug':
+                        offer_message += (
+                            f"• {item['name']} - قیمت: {item['price']} "
+                            f"(تعداد: {item.get('selected_quantity', 1)})\n"
+                        )
+                
+                offer_message += "\n📝 داروهای دریافتی:\n"
+                for item in selected_items:
+                    if item.get('type') in ('buyer_drug', 'compensation'):
+                        offer_message += (
+                            f"• {item['name']} - قیمت: {item['price']} "
+                            f"(تعداد: {item.get('selected_quantity', 1)})\n"
+                        )
+                
+                offer_message += (
+                    f"\n💰 جمع مبلغ: {pharmacy_total:,}\n\n"
+                    "لطفا این پیشنهاد را بررسی کنید:"
+                )
+                
+                await context.bot.send_message(
+                    chat_id=pharmacy['id'],
+                    text=offer_message,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                
+            except Exception as e:
+                logger.error(f"Failed to notify pharmacy: {e}")
+            
+            await query.edit_message_text(
+                "✅ پیشنهاد تبادل شما با موفقیت ثبت شد!\n\n"
+                "پس از بررسی توسط داروخانه، نتیجه به شما اطلاع داده خواهد شد."
+            )
+                
+        except Exception as e:
+            logger.error(f"Error creating offer: {e}")
+            await query.answer("خطا در ثبت پیشنهاد. لطفا دوباره تلاش کنید.", show_alert=True)
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
+                
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in create_offer: {e}")
+        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+
+async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle pharmacy's response to offer"""
+    try:
+        query = update.callback_query
+        await query.answer()
+
+        if not query.data.startswith(("offer_accept_", "offer_reject_")):
+            return
+            
+        action, offer_id = query.data.split("_")[1], int(query.data.split("_")[2])
         
         conn = None
         try:
             conn = get_db_connection()
-            with conn.cursor() as cursor:
-                # Create offer record
+            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                # Get offer details
                 cursor.execute('''
-                INSERT INTO offers (pharmacy_id, buyer_id, total_price)
-                VALUES (%s, %s, %s)
-                RETURNING id
-                ''', (pharmacy_id, buyer_id, total_price))
-                offer_id = cursor.fetchone()[0]
+                SELECT o.id, o.pharmacy_id, o.buyer_id, o.total_price,
+                       p.name as pharmacy_name,
+                       u.first_name || ' ' || u.last_name as buyer_name
+                FROM offers o
+                JOIN pharmacies p ON o.pharmacy_id = p.user_id
+                JOIN users u ON o.buyer_id = u.id
+                WHERE o.id = %s
+                ''', (offer_id,))
+                offer = cursor.fetchone()
                 
-                # Add offer items
-                for item in offer_items:
+                if not offer:
+                    await query.answer("پیشنهاد یافت نشد", show_alert=True)
+                    return
+                
+                # Update offer status
+                if action == "accept":
                     cursor.execute('''
-                    INSERT INTO offer_items (offer_id, drug_name, price, quantity)
-                    VALUES (%s, %s, %s, %s)
-                    ''', (offer_id, item['drug_name'], item['price'], item['quantity']))
-                
-                # Add compensation items if any
-                if context.user_data.get('comp_items'):
-                    for item in context.user_data['comp_items']:
+                    UPDATE offers 
+                    SET status = 'accepted'
+                    WHERE id = %s
+                    ''', (offer_id,))
+                    
+                    # Get offer items to update quantities
+                    cursor.execute('''
+                    SELECT drug_name, quantity 
+                    FROM offer_items 
+                    WHERE offer_id = %s
+                    ''', (offer_id,))
+                    offer_items = cursor.fetchall()
+                    
+                    for item in offer_items:
                         cursor.execute('''
-                        INSERT INTO compensation_items (offer_id, drug_id, quantity)
-                        VALUES (%s, %s, %s)
-                        ''', (offer_id, item['id'], item['quantity']))
+                        UPDATE drug_items 
+                        SET quantity = quantity - %s
+                        WHERE user_id = %s AND name = %s AND quantity >= %s
+                        ''', (
+                            item['quantity'],
+                            offer['pharmacy_id'],
+                            item['drug_name'],
+                            item['quantity']
+                        ))
+                    
+                    # Get compensation items
+                    cursor.execute('''
+                    SELECT di.id, di.name, c.quantity
+                    FROM compensation_items c
+                    JOIN drug_items di ON c.drug_id = di.id
+                    WHERE c.offer_id = %s
+                    ''', (offer_id,))
+                    compensation_items = cursor.fetchall()
+                    
+                    for item in compensation_items:
+                        cursor.execute('''
+                        UPDATE drug_items 
+                        SET quantity = quantity - %s
+                        WHERE id = %s AND quantity >= %s
+                        ''', (
+                            item['quantity'],
+                            item['id'],
+                            item['quantity']
+                        ))
+                    
+                    # Notify buyer
+                    try:
+                        await context.bot.send_message(
+                            chat_id=offer['buyer_id'],
+                            text=(
+                                "✅ پیشنهاد تبادل شما پذیرفته شد!\n\n"
+                                f"داروخانه: {offer['pharmacy_name']}\n"
+                                "می‌توانید برای هماهنگی بیشتر با داروخانه تماس بگیرید."
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to notify buyer: {e}")
+                    
+                    await query.edit_message_text(
+                        "✅ پیشنهاد تبادل پذیرفته شد!\n\n"
+                        "اطلاعات به خریدار ارسال شد."
+                    )
+                    
+                else:  # reject
+                    cursor.execute('''
+                    UPDATE offers 
+                    SET status = 'rejected'
+                    WHERE id = %s
+                    ''', (offer_id,))
+                    
+                    # Notify buyer
+                    try:
+                        await context.bot.send_message(
+                            chat_id=offer['buyer_id'],
+                            text=(
+                                "❌ پیشنهاد تبادل شما رد شد.\n\n"
+                                f"داروخانه: {offer['pharmacy_name']}\n"
+                                "می‌توانید پیشنهاد جدیدی ارسال کنید."
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to notify buyer: {e}")
+                    
+                    await query.edit_message_text(
+                        "❌ پیشنهاد تبادل رد شد.\n\n"
+                        "اطلاعات به خریدار ارسال شد."
+                    )
                 
                 conn.commit()
                 
-                # Notify pharmacy
-                try:
-                    keyboard = [
-                        [InlineKeyboardButton("✅ تأیید پیشنهاد", callback_data=f"accept_{offer_id}")],
-                        [InlineKeyboardButton("❌ رد پیشنهاد", callback_data=f"reject_{offer_id}")]
-                    ]
-                    
-                    offer_message = "📬 پیشنهاد جدید دریافت شد:\n\n"
-                    for item in offer_items:
-                        offer_message += f"- {item['drug_name']} ({item['quantity']} عدد) - {item['price']}\n"
-                    
-                    offer_message += f"\n💰 جمع کل: {total_price}\n"
-                    
-                    if context.user_data.get('comp_method') == 'cash':
-                        offer_message += "\n💵 روش جبران: پرداخت نقدی\n"
-                    elif context.user_data.get('comp_items'):
-                        offer_message += "\n💊 داروهای جبرانی:\n"
-                        for item in context.user_data['comp_items']:
-                            offer_message += f"- {item['name']} ({item['quantity']} عدد)\n"
-                    
-                    await context.bot.send_message(
-                        chat_id=pharmacy_id,
-                        text=offer_message,
-                        reply_markup=InlineKeyboardMarkup(keyboard)
-                    )
-                    
-                    await query.edit_message_text(
-                        "✅ پیشنهاد شما با موفقیت ارسال شد!\n\n"
-                        "پس از تأیید داروخانه با شما تماس گرفته خواهد شد."
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to notify pharmacy: {e}")
-                    await query.edit_message_text(
-                        "✅ پیشنهاد شما ثبت شد اما خطا در اطلاع‌رسانی به داروخانه رخ داد.\n"
-                        "لطفا با داروخانه تماس بگیرید."
-                    )
-                
         except Exception as e:
-            logger.error(f"Error saving offer: {e}")
+            logger.error(f"Error handling offer response: {e}")
+            await query.answer("خطا در پردازش پیشنهاد", show_alert=True)
             if conn:
                 conn.rollback()
-            await query.edit_message_text("خطا در ثبت پیشنهاد. لطفا دوباره تلاش کنید.")
         finally:
             if conn:
                 conn.close()
-        
-        return ConversationHandler.END
     except Exception as e:
-        logger.error(f"Error in send_offer: {e}")
+        logger.error(f"Error in handle_offer_response: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
@@ -3309,9 +3624,8 @@ async def handle_match_notification(update: Update, context: ContextTypes.DEFAUL
         if not query.data.startswith("view_match_"):
             return
             
-        parts = query.data.split("_")
-        drug_id = int(parts[2])
-        need_id = int(parts[3])
+        _, drug_id, need_id = query.data.split("_")
+        drug_id, need_id = int(drug_id), int(need_id)
         
         conn = None
         try:
@@ -3319,8 +3633,9 @@ async def handle_match_notification(update: Update, context: ContextTypes.DEFAUL
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
                 # Get drug details
                 cursor.execute('''
-                SELECT di.id, di.name, di.price, di.date, di.quantity,
-                       u.id as pharmacy_id, p.name as pharmacy_name
+                SELECT di.id, di.name, di.price, di.quantity, 
+                       u.id as pharmacy_id, 
+                       p.name as pharmacy_name
                 FROM drug_items di
                 JOIN users u ON di.user_id = u.id
                 JOIN pharmacies p ON u.id = p.user_id
@@ -3330,42 +3645,56 @@ async def handle_match_notification(update: Update, context: ContextTypes.DEFAUL
                 
                 # Get need details
                 cursor.execute('''
-                SELECT id, name, quantity 
+                SELECT id, name, description, quantity 
                 FROM user_needs 
-                WHERE id = %s AND user_id = %s
-                ''', (need_id, update.effective_user.id))
+                WHERE id = %s
+                ''', (need_id,))
                 need = cursor.fetchone()
                 
                 if not drug or not need:
-                    await query.edit_message_text("اطلاعات یافت نشد.")
+                    await query.answer("اطلاعات یافت نشد", show_alert=True)
                     return
                 
-                context.user_data['match_drug'] = dict(drug)
-                context.user_data['match_need'] = dict(need)
+                # Store in context for trade process
+                context.user_data['selected_pharmacy'] = {
+                    'id': drug['pharmacy_id'],
+                    'name': drug['pharmacy_name']
+                }
+                context.user_data['pharmacy_drugs'] = [dict(drug)]
+                context.user_data['selected_items'] = [{
+                    'id': drug['id'],
+                    'name': drug['name'],
+                    'price': drug['price'],
+                    'quantity': drug['quantity'],
+                    'type': 'pharmacy_drug',
+                    'selected_quantity': min(drug['quantity'], need['quantity'])
+                }]
                 
-                keyboard = [
-                    [InlineKeyboardButton("💊 مبادله این دارو", callback_data=f"exchange_{drug_id}")],
-                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
-                ]
+                # Get buyer's drugs for potential exchange
+                cursor.execute('''
+                SELECT id, name, price, quantity 
+                FROM drug_items 
+                WHERE user_id = %s AND quantity > 0
+                ''', (update.effective_user.id,))
+                buyer_drugs = cursor.fetchall()
+                context.user_data['buyer_drugs'] = [dict(row) for row in buyer_drugs]
                 
-                await query.edit_message_text(
-                    f"💊 داروی مطابق نیاز:\n\n"
-                    f"🏥 داروخانه: {drug['pharmacy_name']}\n"
-                    f"🔹 دارو: {drug['name']}\n"
-                    f"💰 قیمت: {drug['price']}\n"
-                    f"📅 تاریخ انقضا: {drug['date']}\n"
-                    f"📦 موجودی: {drug['quantity']}\n\n"
-                    f"📝 نیاز شما:\n"
-                    f"🔹 دارو: {need['name']}\n"
-                    f"📦 تعداد مورد نیاز: {need['quantity']}\n\n"
-                    "آیا مایل به مبادله هستید؟",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-                return States.CONFIRM_OFFER
+                # Get pharmacy's medical categories
+                cursor.execute('''
+                SELECT mc.id, mc.name 
+                FROM user_categories uc
+                JOIN medical_categories mc ON uc.category_id = mc.id
+                WHERE uc.user_id = %s
+                ''', (drug['pharmacy_id'],))
+                pharmacy_categories = cursor.fetchall()
+                context.user_data['pharmacy_categories'] = [dict(row) for row in pharmacy_categories]
+                
+                # Show trade interface
+                return await show_two_column_selection(update, context)
                 
         except Exception as e:
             logger.error(f"Error handling match: {e}")
-            await query.edit_message_text("خطا در دریافت اطلاعات تطابق.")
+            await query.answer("خطا در پردازش", show_alert=True)
         finally:
             if conn:
                 conn.close()
@@ -3401,95 +3730,42 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Log errors and handle them gracefully"""
+    """Handle errors in the bot"""
     try:
-        logger.error(msg="Exception while handling update:", exc_info=context.error)
+        logger.error(f"Update {update} caused error: {context.error}")
         
         if update and update.effective_user:
-            error_message = (
-                "⚠️ خطایی در پردازش درخواست شما رخ داد.\n\n"
-                "لطفا دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
-            )
-            
             try:
                 await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=error_message
+                    chat_id=update.effective_user.id,
+                    text="متاسفانه خطایی رخ داده است. لطفا دوباره تلاش کنید."
                 )
-            except:
-                pass
-            
-            # Notify admin
-            tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
-            tb_string = ''.join(tb_list)
-            
-            admin_message = (
-                f"⚠️ خطا برای کاربر {update.effective_user.id}:\n\n"
-                f"{context.error}\n\n"
-                f"Traceback:\n<code>{html.escape(tb_string)}</code>"
-            )
-            
-            try:
-                await context.bot.send_message(
-                    chat_id=ADMIN_CHAT_ID,
-                    text=admin_message,
-                    parse_mode=ParseMode.HTML
-                )
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Failed to send error message: {e}")
     except Exception as e:
-        logger.error(f"Error in error handler: {e}")
+        logger.error(f"Error in error_handler: {e}")
 
-async def main():
-    """Start the bot"""
-    application = None
+async def post_init(application: Application):
+    """Post initialization tasks"""
     try:
-        # Initialize database
         await initialize_db()
-
-        # Load drug data
         if not load_drug_data():
-            logger.warning("Failed to load drug data - some features may not work")
-
-        # Create Telegram application
-        application = (
-            ApplicationBuilder()
-            .token("7584437136:AAFVtfF9RjCyteONcz8DSg2F2CfhgQT2GcQ")
-            .concurrent_updates(True)
+            logger.warning("Failed to load drug data")
+    except Exception as e:
+        logger.error(f"Error in post_init: {e}")
+def main():
+    """Main function to start the bot"""
+    try:
+        # Create application
+        application = ApplicationBuilder() \
+            .token("7584437136:AAFVtfF9RjCyteONcz8DSg2F2CfhgQT2GcQ") \
+            .post_init(post_init) \
             .build()
-        )
 
-        # Error handler function
-        async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-            """Log errors and send notification to user."""
-            logger.error("Exception while handling an update:", exc_info=context.error)
-            
-            if update and isinstance(update, Update) and update.effective_message:
-                text = "⚠️ خطایی رخ داده است. لطفاً دوباره امتحان کنید."
-                await update.effective_message.reply_text(text)
-
-
-
-        # Registration ConversationHandler
+        # conversation handlers
         registration_handler = ConversationHandler(
-            entry_points=[
-                CommandHandler('start', start),
-                CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$"),
-                CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
-                CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
-            ],
+            entry_points=[CallbackQueryHandler(register_pharmacy_name, pattern="^register$")],
             states={
-                States.START: [
-                    CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$"),
-                    CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
-                    CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
-                ],
-                States.ADMIN_VERIFICATION: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
-                ],
-                States.SIMPLE_VERIFICATION: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
-                ],
                 States.REGISTER_PHARMACY_NAME: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, register_founder_name)
                 ],
@@ -3497,83 +3773,108 @@ async def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, register_national_card)
                 ],
                 States.REGISTER_NATIONAL_CARD: [
-                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license),
-                    MessageHandler(filters.ALL & ~(filters.PHOTO | filters.Document.IMAGE), 
-                                 lambda update, context: update.message.reply_text("لطفا تصویر کارت ملی را ارسال کنید."))
+                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license)
                 ],
                 States.REGISTER_LICENSE: [
-                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card),
-                    MessageHandler(filters.ALL & ~(filters.PHOTO | filters.Document.IMAGE), 
-                                 lambda update, context: update.message.reply_text("لطفا تصویر پروانه داروخانه را ارسال کنید."))
+                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card)
                 ],
                 States.REGISTER_MEDICAL_CARD: [
-                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_phone),
-                    MessageHandler(filters.ALL & ~(filters.PHOTO | filters.Document.IMAGE), 
-                                 lambda update, context: update.message.reply_text("لطفا تصویر کارت نظام پزشکی را ارسال کنید."))
+                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_phone)
                 ],
                 States.REGISTER_PHONE: [
-                    MessageHandler(filters.CONTACT | filters.TEXT, register_address)
+                    MessageHandler(filters.CONTACT, register_address),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, register_address)
                 ],
                 States.REGISTER_ADDRESS: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, register_location)
+                ],
+                States.REGISTER_LOCATION: [
+                    MessageHandler(filters.LOCATION, verify_code)
                 ],
                 States.VERIFICATION_CODE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, complete_registration)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler("cancel", cancel)],
             allow_reentry=True
         )
 
-        # Drug management ConversationHandler
-        drug_handler = ConversationHandler(
-            entry_points=[
-                MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
-                MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs),
-                CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
-                CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
-                CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
-                CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$"),
-                CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$"),
-                CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$")
-            ],
+        admin_verify_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$")],
+            states={
+                States.ADMIN_VERIFICATION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            allow_reentry=True
+        )
+
+        simple_verify_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")],
+            states={
+                States.SIMPLE_VERIFICATION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            allow_reentry=True
+        )
+
+        add_drug_handler = ConversationHandler(
+            entry_points=[MessageHandler(filters.Regex(r"^اضافه کردن دارو$"), add_drug_item)],
             states={
                 States.SEARCH_DRUG_FOR_ADDING: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
                 ],
                 States.SELECT_DRUG_FOR_ADDING: [
-                    CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$")
+                    CallbackQueryHandler(select_drug_for_adding)
                 ],
                 States.ADD_DRUG_DATE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
-                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
+                    CallbackQueryHandler(search_drug_for_adding, pattern=r"^back_to_search$")
                 ],
                 States.ADD_DRUG_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
-                    CallbackQueryHandler(select_drug_for_adding, pattern="^back_to_drug_selection$")
-                ],
-                States.EDIT_DRUG: [
-                    CallbackQueryHandler(edit_drugs, pattern="^back_to_list$"),
-                    CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
-                    CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
-                    CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$")
+                    CallbackQueryHandler(select_drug_for_adding, pattern=r"^back_to_drug_selection$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler("cancel", cancel)],
             allow_reentry=True
         )
 
-        # Needs management ConversationHandler
-        needs_handler = ConversationHandler(
-            entry_points=[
-                MessageHandler(filters.Regex('^ثبت نیاز جدید$'), add_need),
-                MessageHandler(filters.Regex('^لیست نیازهای من$'), list_my_needs),
-                CallbackQueryHandler(edit_needs, pattern="^edit_needs$"),
-                CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
-                CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
-                CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
-            ],
+        search_drug_handler = ConversationHandler(
+            entry_points=[MessageHandler(filters.Regex(r"^جستجوی دارو$"), search_drug)],
+            states={
+                States.SEARCH_DRUG: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
+                ],
+                States.SELECT_PHARMACY: [
+                    CallbackQueryHandler(select_pharmacy)
+                ],
+                States.SELECT_ITEMS: [
+                    CallbackQueryHandler(select_items)
+                ],
+                States.CONFIRM_TOTALS: [
+                    CallbackQueryHandler(confirm_totals)
+                ],
+                States.COMPENSATION_SELECTION: [
+                    CallbackQueryHandler(handle_compensation_selection)
+                ],
+                States.COMPENSATION_QUANTITY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation),
+                    CallbackQueryHandler(confirm_totals, pattern=r"^back_to_totals$")
+                ],
+                States.CONFIRM_OFFER: [
+                    CallbackQueryHandler(create_offer)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            allow_reentry=True
+        )
+
+        add_need_handler = ConversationHandler(
+            entry_points=[MessageHandler(filters.Regex(r"^ثبت نیاز جدید$"), add_need)],
             states={
                 States.ADD_NEED_NAME: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)
@@ -3583,151 +3884,100 @@ async def main():
                 ],
                 States.ADD_NEED_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
-                ],
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            allow_reentry=True
+        )
+        edit_drug_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(edit_drugs, pattern=r"^edit_drugs$")],
+            states={
+                States.EDIT_DRUG: [
+                    CallbackQueryHandler(edit_drug_item, pattern=r"^edit_drug_\d+$"),
+                    CallbackQueryHandler(handle_drug_edit_action, pattern=r"^(delete_drug_\d+|confirm_delete_\d+|cancel_delete_\d+)"),
+                    CallbackQueryHandler(
+                        handle_drug_edit_action,
+                        pattern=r"^(edit_date|edit_quantity|delete_drug|back_to_list|confirm_delete|cancel_delete)$"
+                    ),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+            allow_reentry=True
+        )
+
+        edit_need_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(edit_needs, pattern=r"^edit_needs$")],
+            states={
                 States.EDIT_NEED: [
-                    CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
-                    CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
-                    CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit),
-                    CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
+                    CallbackQueryHandler(edit_need_item, pattern=r"^edit_need_\d+$"),
+                    CallbackQueryHandler(handle_need_edit_action, pattern=r"^(delete_need_\d+|confirm_need_delete_\d+|cancel_need_delete_\d+)"),
+                    CallbackQueryHandler(
+                        handle_need_edit_action,
+                        pattern=r"^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need|back_to_needs_list|confirm_need_delete|cancel_need_delete)$"
+                    ),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler("cancel", cancel)],
             allow_reentry=True
         )
 
-        # Trade ConversationHandler
-        trade_handler = ConversationHandler(
-            entry_points=[
-                MessageHandler(filters.Regex('^جستجوی دارو$'), search_drug),
-                CallbackQueryHandler(handle_match_notification, pattern="^view_match_"),
-                CallbackQueryHandler(select_pharmacy, pattern="^pharmacy_"),
-                CallbackQueryHandler(handle_offer_response, pattern="^offer_"),
-                CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"),
-                CallbackQueryHandler(handle_compensation_selection, pattern="^(compensate|comp_)"),
-                CallbackQueryHandler(confirm_totals, pattern="^(finish_selection|confirm_totals)$"),
-                CallbackQueryHandler(send_offer, pattern="^send_offer$")
-            ],
-            states={
-                States.SEARCH_DRUG: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
-                ],
-                States.SELECT_PHARMACY: [
-                    CallbackQueryHandler(select_pharmacy, pattern="^pharmacy_|back_to_pharmacies$")
-                ],
-                States.SELECT_ITEMS: [
-                    CallbackQueryHandler(handle_offer_response, pattern="^offer_|back_to_items$")
-                ],
-                States.SELECT_QUANTITY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, select_quantity),
-                    CallbackQueryHandler(handle_offer_response, pattern="^back_to_items$")
-                ],
-                States.CONFIRM_OFFER: [
-                    CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"),
-                    CallbackQueryHandler(handle_offer_response, pattern="^back_to_items$")
-                ],
-                States.COMPENSATION_SELECTION: [
-                    CallbackQueryHandler(show_two_column_selection, pattern="^add_more$"),
-                    CallbackQueryHandler(handle_compensation_selection, pattern="^(compensate|comp_)"),
-                    CallbackQueryHandler(confirm_totals, pattern="^finish_selection$")
-                ],
-                States.COMPENSATION_QUANTITY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation_quantity)
-                ],
-                States.CONFIRM_TOTALS: [
-                    CallbackQueryHandler(show_two_column_selection, pattern="^edit_selection$"),
-                    CallbackQueryHandler(confirm_totals, pattern="^back_to_totals$"),
-                    CallbackQueryHandler(send_offer, pattern="^send_offer$")
-                ]
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
-        )
-
-        # Categories ConversationHandler
-        categories_handler = ConversationHandler(
-            entry_points=[
-                MessageHandler(filters.Regex('^تنظیم شاخه‌های دارویی$'), setup_medical_categories),
-                CallbackQueryHandler(toggle_category, pattern="^togglecat_"),
-                CallbackQueryHandler(save_categories, pattern="^save_categories$")
-            ],
-            states={
-                States.SETUP_CATEGORIES: [
-                    CallbackQueryHandler(toggle_category, pattern="^togglecat_"),
-                    CallbackQueryHandler(save_categories, pattern="^save_categories$")
-                ]
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
-        )
-
-        # Admin ConversationHandler
-        admin_handler = ConversationHandler(
-            entry_points=[
-                CommandHandler('upload_excel', upload_excel_start),
-                CommandHandler('generate_code', generate_simple_code),
-                CommandHandler('verify', verify_pharmacy)
-            ],
+        admin_excel_handler = ConversationHandler(
+            entry_points=[CommandHandler("upload_excel", upload_excel_start)],
             states={
                 States.ADMIN_UPLOAD_EXCEL: [
-                    MessageHandler(filters.Document.ALL | (filters.TEXT & filters.Entity("url")), handle_excel_upload)
+                    MessageHandler(filters.Document.ALL | filters.TEXT & ~filters.COMMAND, handle_excel_upload)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler("cancel", cancel)],
             allow_reentry=True
         )
 
-         # Add all handlers
+        # Add all handlers to application
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("debug", debug_db))  # Add this after application is created
+        application.add_handler(CommandHandler("debug_drugs", debug_drugs))
         application.add_handler(registration_handler)
-        application.add_handler(drug_handler)
-        application.add_handler(needs_handler)
-        application.add_handler(trade_handler)
-        application.add_handler(categories_handler)
-        application.add_handler(admin_handler)
+        application.add_handler(admin_verify_handler)
+        application.add_handler(simple_verify_handler)
+        application.add_handler(add_drug_handler)
+        application.add_handler(search_drug_handler)
+        application.add_handler(add_need_handler)
+        application.add_handler(edit_drug_handler)
+        application.add_handler(edit_need_handler)
+        application.add_handler(admin_excel_handler)
+        application.add_handler(CommandHandler("generate_code", generate_simple_code))
+        application.add_handler(CallbackQueryHandler(
+        add_drug_from_search, 
+        pattern=r"^add_drug_"
+        ))
+
+        # Additional callback handlers
+        application.add_handler(CallbackQueryHandler(
+            handle_drug_edit_action,
+            pattern=r"^(edit_name|edit_price|edit_date|edit_quantity|delete_drug)$"
+        ))
+        application.add_handler(MessageHandler(
+            filters.Regex(r"^لیست داروهای من$"),
+            list_my_drugs
+        ))
+        application.add_handler(MessageHandler(
+            filters.Regex(r"^لیست نیازهای من$"),
+            list_my_needs
+        ))
+        application.add_handler(MessageHandler(
+        filters.Regex(r"^تنظیم شاخه‌های دارویی$"),
+        setup_medical_categories
+        ))
         application.add_handler(CallbackQueryHandler(callback_handler))
-        
-        # Add error handler correctly
         application.add_error_handler(error_handler)
 
-        # Start the bot with proper context management
-        logger.info("Starting bot...")
-        async with application:
-            await application.initialize()
-            await application.start()
-            await application.updater.start_polling(
-                drop_pending_updates=True,
-                allowed_updates=Update.ALL_TYPES
-            )
-            
-            # Keep running until stopped
-            while True:
-                await asyncio.sleep(3600)  # Sleep for 1 hour
-
-    except asyncio.CancelledError:
-        logger.info("Received shutdown signal")
+        # Start the bot
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        
     except Exception as e:
-        logger.critical(f"Fatal error in main: {e}", exc_info=True)
-        raise
-    finally:
-        if application:
-            logger.info("Shutting down application...")
-            try:
-                if hasattr(application, 'updater') and application.updater.running:
-                    await application.updater.stop()
-                await application.stop()
-                await application.shutdown()
-            except Exception as e:
-                logger.error(f"Error during shutdown: {e}")
+        logger.error(f"Error in main: {e}")
 
-def run_bot():
-    """Wrapper function to run the bot"""
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
-    except Exception as e:
-        logger.critical(f"Fatal error in bot execution: {e}")
-        sys.exit(1)
-
-if __name__ == '__main__':
-    run_bot()
+if __name__ == "__main__":
+    main() 
