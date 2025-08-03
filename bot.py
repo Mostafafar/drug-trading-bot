@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 
 # Database Configuration
 DB_CONFIG = {
-        'dbname': 'drug_trading',  # باید همان دیتابیس هدف باشد
+    'dbname': 'drug_trading',  # باید همان دیتابیس هدف باشد
     'user': 'drugbot_user',
     'password': 'm13821382',
     'host': 'localhost',
@@ -125,7 +125,12 @@ def get_db_connection(max_retries=3, retry_delay=1.0):
                 user=DB_CONFIG['user'],
                 password=DB_CONFIG['password'],
                 host=DB_CONFIG['host'],
-                port=DB_CONFIG['port']
+                port=DB_CONFIG['port'],
+                options=DB_CONFIG['options']
+    )
+    conn.autocommit = False
+    return conn
+                
             )
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
