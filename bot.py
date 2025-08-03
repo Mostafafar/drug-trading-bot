@@ -3613,7 +3613,7 @@ def main():
     try:
         # Create the Application and pass it your bot's token.
         application = ApplicationBuilder() \
-            .token("YOUR_TELEGRAM_BOT_TOKEN") \
+            .token("8000378956:AAGCV0la1WKApWSmVXxtA5o8Q6KqdwBjdqU") \
             .post_init(post_init) \
             .build()
 
