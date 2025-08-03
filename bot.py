@@ -1814,6 +1814,16 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
+        # لاگ کامل محتوای context
+        logger.info(f"Full context.user_data: {context.user_data}")
+        
+        if 'selected_drug' not in context.user_data:
+            logger.error("Missing 'selected_drug' in context")
+            await update.message.reply_text("خطا: اطلاعات دارو یافت نشد.")
+            return ConversationHandler.END
+
+        logger.info(f"Selected drug data: {context.user_data['selected_drug']}")
+        
         logger.info("Starting save_drug_item function")
         
         # دریافت مقدار quantity از کاربر
