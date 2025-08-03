@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 DB_CONFIG = {
     'dbname': 'drug_trading',  # باید همان دیتابیس هدف باشد
     'user': 'drugbot_user',
-    'password': 'm13821382',
+    'password': 'f13821382',
     'host': 'localhost',
     'port': '5432',
     'options': '-c search_path=public'
