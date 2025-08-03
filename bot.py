@@ -3439,9 +3439,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in error handler: {e}")
 
-
 async def main():
     """Start the bot"""
+    application = None
     try:
         # Initialize database
         await initialize_db()
@@ -3451,7 +3451,12 @@ async def main():
             logger.warning("Failed to load drug data - some features may not work")
 
         # Create Telegram application
-        application = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+        application = (
+            ApplicationBuilder()
+            .token("YOUR_BOT_TOKEN")
+            .concurrent_updates(True)
+            .build()
+        )
 
         # Error handler function
         async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3461,6 +3466,8 @@ async def main():
             if update and isinstance(update, Update) and update.effective_message:
                 text = "⚠️ خطایی رخ داده است. لطفاً دوباره امتحان کنید."
                 await update.effective_message.reply_text(text)
+
+
 
         # Registration ConversationHandler
         registration_handler = ConversationHandler(
@@ -3669,7 +3676,7 @@ async def main():
             allow_reentry=True
         )
 
-        # Add all handlers
+         # Add all handlers
         application.add_handler(registration_handler)
         application.add_handler(drug_handler)
         application.add_handler(needs_handler)
@@ -3681,17 +3688,45 @@ async def main():
         # Add error handler correctly
         application.add_error_handler(error_handler)
 
-        # Start polling
-        await application.run_polling(allowed_updates=Update.ALL_TYPES)
+        # Start the bot with proper context management
+        logger.info("Starting bot...")
+        async with application:
+            await application.initialize()
+            await application.start()
+            await application.updater.start_polling(
+                drop_pending_updates=True,
+                allowed_updates=Update.ALL_TYPES
+            )
+            
+            # Keep running until stopped
+            while True:
+                await asyncio.sleep(3600)  # Sleep for 1 hour
 
+    except asyncio.CancelledError:
+        logger.info("Received shutdown signal")
     except Exception as e:
-        logger.critical(f"Fatal error in main: {e}")
+        logger.critical(f"Fatal error in main: {e}", exc_info=True)
         raise
+    finally:
+        if application:
+            logger.info("Shutting down application...")
+            try:
+                if hasattr(application, 'updater') and application.updater.running:
+                    await application.updater.stop()
+                await application.stop()
+                await application.shutdown()
+            except Exception as e:
+                logger.error(f"Error during shutdown: {e}")
 
-if __name__ == '__main__':
+def run_bot():
+    """Wrapper function to run the bot"""
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Bot stopped by user")
+        logger.info("Bot stopped by user")
     except Exception as e:
-        logger.critical(f"Fatal error: {e}")
+        logger.critical(f"Fatal error in bot execution: {e}")
+        sys.exit(1)
+
+if __name__ == '__main__':
+    run_bot()
