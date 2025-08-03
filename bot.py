@@ -1877,6 +1877,9 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 new_id = cursor.fetchone()[0]
                 conn.commit()
+                # بعد از conn.commit()
+                logger.info(f"Verify commit - Last inserted ID: {new_id}")
+                await update.message.reply_text(f"شناسه داروی ذخیره شده: {new_id}")
                 
                 logger.info(f"Drug successfully saved with ID: {new_id}")
                 
