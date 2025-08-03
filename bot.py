@@ -3443,17 +3443,26 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main():
     """Start the bot"""
     try:
-        # مقداردهی اولیه پایگاه داده
-        await initialize_db()  # استفاده از await به جای run_until_complete
+        # Initialize database
+        await initialize_db()
 
-        # بارگذاری داده‌های دارو
+        # Load drug data
         if not load_drug_data():
             logger.warning("Failed to load drug data - some features may not work")
 
-        # ساخت اپلیکیشن تلگرام
+        # Create Telegram application
         application = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
 
-        # ConversationHandler برای ثبت‌نام
+        # Error handler function
+        async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+            """Log errors and send notification to user."""
+            logger.error("Exception while handling an update:", exc_info=context.error)
+            
+            if update and isinstance(update, Update) and update.effective_message:
+                text = "⚠️ خطایی رخ داده است. لطفاً دوباره امتحان کنید."
+                await update.effective_message.reply_text(text)
+
+        # Registration ConversationHandler
         registration_handler = ConversationHandler(
             entry_points=[
                 CommandHandler('start', start),
@@ -3505,11 +3514,10 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-              # رفع هشدار PTBUserWarning
+            allow_reentry=True
         )
 
-        # ConversationHandler برای مدیریت دارو
+        # Drug management ConversationHandler
         drug_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
@@ -3545,11 +3553,10 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-              # رفع هشدار PTBUserWarning
+            allow_reentry=True
         )
 
-        # ConversationHandler برای مدیریت نیازها
+        # Needs management ConversationHandler
         needs_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^ثبت نیاز جدید$'), add_need),
@@ -3578,11 +3585,10 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-              # رفع هشدار PTBUserWarning
+            allow_reentry=True
         )
 
-        # ConversationHandler برای جستجو و تجارت
+        # Trade ConversationHandler
         trade_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^جستجوی دارو$'), search_drug),
@@ -3627,11 +3633,10 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-            # رفع هشدار PTBUserWarning
+            allow_reentry=True
         )
 
-        # ConversationHandler برای دسته‌بندی‌های دارویی
+        # Categories ConversationHandler
         categories_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^تنظیم شاخه‌های دارویی$'), setup_medical_categories),
@@ -3645,11 +3650,10 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-            
+            allow_reentry=True
         )
 
-        # ConversationHandler برای دستورات ادمین
+        # Admin ConversationHandler
         admin_handler = ConversationHandler(
             entry_points=[
                 CommandHandler('upload_excel', upload_excel_start),
@@ -3662,11 +3666,10 @@ async def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True,
-             
+            allow_reentry=True
         )
 
-        # اضافه کردن Handlerها
+        # Add all handlers
         application.add_handler(registration_handler)
         application.add_handler(drug_handler)
         application.add_handler(needs_handler)
@@ -3674,9 +3677,11 @@ async def main():
         application.add_handler(categories_handler)
         application.add_handler(admin_handler)
         application.add_handler(CallbackQueryHandler(callback_handler))
-        application.add_handler(error_handler)
+        
+        # Add error handler correctly
+        application.add_error_handler(error_handler)
 
-        # شروع ربات با polling
+        # Start polling
         await application.run_polling(allowed_updates=Update.ALL_TYPES)
 
     except Exception as e:
