@@ -127,25 +127,30 @@ def get_db_connection(max_retries=3, retry_delay=1.0):
                 host=DB_CONFIG['host'],
                 port=DB_CONFIG['port'],
                 options=DB_CONFIG['options']
-    )
-    conn.autocommit = False
-    return conn
-                
+            )
+            conn.autocommit = False
             
+            # Verify connection
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
                 cursor.execute("SET TIME ZONE 'Asia/Tehran'")
+                logger.info(f"Successfully connected to database '{DB_CONFIG['dbname']}' as user '{DB_CONFIG['user']}'")
+            
             return conn
+            
         except psycopg2.Error as e:
             last_error = e
             logger.error(f"DB connection attempt {attempt + 1} failed: {str(e)}")
             if conn:
                 try:
                     conn.close()
-                except:
-                    pass
+                except Exception as e:
+                    logger.error(f"Error closing connection: {str(e)}")
+            
             if attempt < max_retries - 1:
-                time.sleep(retry_delay * (attempt + 1))
+                sleep_time = retry_delay * (attempt + 1)
+                logger.info(f"Retrying in {sleep_time} seconds...")
+                time.sleep(sleep_time)
     
     logger.critical(f"Failed to connect to DB after {max_retries} attempts")
     if last_error:
