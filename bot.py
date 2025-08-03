@@ -131,7 +131,7 @@ def get_db_connection(max_retries=3, retry_delay=1.0):
     conn.autocommit = False
     return conn
                 
-            )
+            
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
                 cursor.execute("SET TIME ZONE 'Asia/Tehran'")
