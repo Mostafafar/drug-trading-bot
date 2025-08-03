@@ -3454,7 +3454,7 @@ async def main():
         # Create Telegram application
         application = (
             ApplicationBuilder()
-            .token("YOUR_BOT_TOKEN")
+            .token("8000378956:AAGfDy2R8tcUR_LcOTEfgTv8fAca512IgJ8")
             .concurrent_updates(True)
             .build()
         )
