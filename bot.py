@@ -3439,32 +3439,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in error handler: {e}")
 
-import asyncio
-import logging
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters
-from telegram import Update
-
-# تنظیم لاگینگ
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-# فرض می‌کنیم این توابع و States از جای دیگه import شدن
-from your_module import (initialize_db, load_drug_data, start, admin_verify_start, register_pharmacy_name,
-                        simple_verify_start, admin_verify_code, simple_verify_code, register_founder_name,
-                        register_national_card, register_license, register_medical_card, register_phone,
-                        register_address, verify_code, complete_registration, cancel, add_drug_item,
-                        list_my_drugs, edit_drugs, edit_drug_item, handle_drug_edit_action, handle_drug_deletion,
-                        search_drug_for_adding, select_drug_for_adding, add_drug_date, save_drug_item, save_drug_edit,
-                        add_need, list_my_needs, edit_needs, edit_need_item, handle_need_edit_action, handle_need_deletion,
-                        save_need_name, save_need_desc, save_need, save_need_edit, search_drug, handle_match_notification,
-                        select_pharmacy, handle_offer_response, confirm_offer, show_two_column_selection,
-                        handle_compensation_selection, confirm_totals, send_offer, handle_search, select_quantity,
-                        save_compensation_quantity, setup_medical_categories, toggle_category, save_categories,
-                        upload_excel_start, generate_simple_code, verify_pharmacy, handle_excel_upload,
-                        callback_handler, error_handler, States)
 
 async def main():
     """Start the bot"""
