@@ -158,11 +158,14 @@ def get_db_connection(max_retries=3, retry_delay=1.0):
     raise psycopg2.Error("Unknown database connection error")
 
 async def initialize_db():
-    """Initialize database tables and default data"""
+    """Initialize database tables and default data with proper permissions"""
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
+            # Set the role to ensure proper ownership
+            cursor.execute('SET ROLE drugbot_user')
+            
             # Users table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
@@ -297,27 +300,66 @@ async def initialize_db():
             # Insert default categories
             default_categories = ['اعصاب', 'قلب', 'ارتوپد', 'زنان', 'گوارش', 'پوست', 'اطفال']
             for category in default_categories:
-                cursor.execute('''
-                INSERT INTO medical_categories (name)
-                VALUES (%s)
-                ON CONFLICT (name) DO NOTHING
-                ''', (category,))
+                try:
+                    cursor.execute('''
+                    INSERT INTO medical_categories (name)
+                    VALUES (%s)
+                    ON CONFLICT (name) DO NOTHING
+                    ''', (category,))
+                except psycopg2.Error as e:
+                    logger.error(f"Error inserting category {category}: {e}")
+                    continue
             
             # Ensure admin user exists
+            try:
+                cursor.execute('''
+                INSERT INTO users (id, is_admin, is_verified)
+                VALUES (%s, TRUE, TRUE)
+                ON CONFLICT (id) DO UPDATE SET is_admin = TRUE
+                ''', (ADMIN_CHAT_ID,))
+            except psycopg2.Error as e:
+                logger.error(f"Error ensuring admin user: {e}")
+                raise
+            
+            # Grant all permissions to drugbot_user on all tables
             cursor.execute('''
-            INSERT INTO users (id, is_admin, is_verified)
-            VALUES (%s, TRUE, TRUE)
-            ON CONFLICT (id) DO UPDATE SET is_admin = TRUE
-            ''', (ADMIN_CHAT_ID,))
+            DO $$
+            DECLARE
+                r RECORD;
+            BEGIN
+                FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+                LOOP
+                    EXECUTE 'GRANT ALL PRIVILEGES ON TABLE ' || quote_ident(r.tablename) || ' TO drugbot_user';
+                END LOOP;
+                
+                FOR r IN SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public'
+                LOOP
+                    EXECUTE 'GRANT ALL PRIVILEGES ON SEQUENCE ' || quote_ident(r.sequence_name) || ' TO drugbot_user';
+                END LOOP;
+            END $$;
+            ''')
             
             conn.commit()
+            logger.info("Database initialized successfully with all tables and permissions")
+            
     except psycopg2.Error as e:
         logger.error(f"Database initialization error: {e}")
         if conn:
             conn.rollback()
+        raise  # Re-raise the exception after logging
+    except Exception as e:
+        logger.error(f"Unexpected error during initialization: {e}")
+        if conn:
+            conn.rollback()
+        raise
     finally:
         if conn:
-            conn.close()
+            try:
+                conn.close()
+            except Exception as e:
+                logger.error(f"Error closing connection: {e}")
+                
+                
 
 async def ensure_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ensure user exists in database"""
