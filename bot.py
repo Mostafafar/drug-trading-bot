@@ -3614,7 +3614,7 @@ def main():
     try:
         # Create the Application and pass it your bot's token.
         application = ApplicationBuilder() \
-            .token("8000378956:AAGCV0la1WKApWSmVXxtA5o8Q6KqdwBjdqU") \
+            .token("7584437136:AAFVtfF9RjCyteONcz8DSg2F2CfhgQT2GcQ") \
             .post_init(post_init) \
             .build()
 
