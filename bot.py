@@ -3506,7 +3506,7 @@ async def main():
             },
             fallbacks=[CommandHandler('cancel', cancel)],
             allow_reentry=True,
-            per_message=True  # رفع هشدار PTBUserWarning
+              # رفع هشدار PTBUserWarning
         )
 
         # ConversationHandler برای مدیریت دارو
@@ -3546,7 +3546,7 @@ async def main():
             },
             fallbacks=[CommandHandler('cancel', cancel)],
             allow_reentry=True,
-            per_message=True  # رفع هشدار PTBUserWarning
+              # رفع هشدار PTBUserWarning
         )
 
         # ConversationHandler برای مدیریت نیازها
@@ -3579,7 +3579,7 @@ async def main():
             },
             fallbacks=[CommandHandler('cancel', cancel)],
             allow_reentry=True,
-            per_message=True  # رفع هشدار PTBUserWarning
+              # رفع هشدار PTBUserWarning
         )
 
         # ConversationHandler برای جستجو و تجارت
@@ -3628,7 +3628,7 @@ async def main():
             },
             fallbacks=[CommandHandler('cancel', cancel)],
             allow_reentry=True,
-            per_message=True  # رفع هشدار PTBUserWarning
+            # رفع هشدار PTBUserWarning
         )
 
         # ConversationHandler برای دسته‌بندی‌های دارویی
@@ -3646,7 +3646,7 @@ async def main():
             },
             fallbacks=[CommandHandler('cancel', cancel)],
             allow_reentry=True,
-            per_message=True  # رفع هشدار PTBUserWarning
+            
         )
 
         # ConversationHandler برای دستورات ادمین
@@ -3663,7 +3663,7 @@ async def main():
             },
             fallbacks=[CommandHandler('cancel', cancel)],
             allow_reentry=True,
-            per_message=True  # رفع هشدار PTBUserWarning
+             
         )
 
         # اضافه کردن Handlerها
