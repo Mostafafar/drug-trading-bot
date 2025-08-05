@@ -2770,7 +2770,7 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pharmacies = {}
                     for item in results:
                         if item['pharmacy_id'] not in pharmacies:
-                            pharmacies[item['pharmacy_id'] = {
+                            pharmacies[item['pharmacy_id']] = {
                                 'name': item['pharmacy_name'],
                                 'items': []
                             }
