@@ -2715,16 +2715,7 @@ async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start drug search process"""
-    try:
-        await ensure_user(update, context)
-        await update.message.reply_text("لطفا نام دارویی که می‌خواهید جستجو کنید را وارد کنید:")
-        return States.SEARCH_DRUG
-    except Exception as e:
-        logger.error(f"Error in search_drug: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+
 async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Search for drugs in database"""
     try:
