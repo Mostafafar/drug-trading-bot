@@ -84,6 +84,7 @@ class States(Enum):
     REGISTER_LICENSE = auto()
     REGISTER_MEDICAL_CARD = auto()
     REGISTER_PHONE = auto()
+    VERIFICATION_CODE = auto()
     REGISTER_ADDRESS = auto()
     ADMIN_VERIFICATION = auto()
     SIMPLE_VERIFICATION = auto()
