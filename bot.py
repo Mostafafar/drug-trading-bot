@@ -3101,6 +3101,30 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
         logger.error(f"Error in handle_compensation_selection: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def save_compensation_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Save compensation item quantity"""
+    try:
+        quantity = int(update.message.text)
+        item_index = context.user_data.get('editing_comp_item_index')
+        compensation_items = context.user_data.get('compensation_items', [])
+        
+        if item_index is not None and item_index < len(compensation_items):
+            compensation_items[item_index]['quantity'] = quantity
+            context.user_data['compensation_items'] = compensation_items
+            
+            await update.message.reply_text(
+                f"تعداد به {quantity} تنظیم شد.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            
+            return await handle_compensation_selection(update, context)
+        else:
+            await update.message.reply_text("خطا در ذخیره تعداد. لطفا دوباره تلاش کنید.")
+            return States.COMPENSATION_QUANTITY
+            
+    except ValueError:
+        await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
+        return States.COMPENSATION_QUANTITY
 
 async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Confirm final totals and create offer"""
