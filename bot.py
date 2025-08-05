@@ -2747,16 +2747,41 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                # Search for drugs with similarity matching
+                # More flexible search query
                 cursor.execute('''
-                SELECT di.id, di.name, di.price, di.date, di.quantity,
-                p.name AS pharmacy_name
+                SELECT 
+                    di.id, 
+                    di.user_id, 
+                    di.name, 
+                    di.price, 
+                    di.date, 
+                    di.quantity,
+                    p.name AS pharmacy_name,
+                    p.verified AS pharmacy_verified,
+                    similarity(di.name, %s) AS match_score
                 FROM drug_items di
                 JOIN pharmacies p ON di.user_id = p.user_id
-                WHERE di.quantity > 0
-                AND di.name ILIKE %s
+                WHERE 
+                    di.quantity > 0 AND
+                    (di.name ILIKE %s OR 
+                     di.name ILIKE %s OR 
+                     similarity(di.name, %s) > 0.2)
+                ORDER BY 
+                    CASE WHEN di.name ILIKE %s THEN 0
+                         WHEN di.name ILIKE %s THEN 1
+                         ELSE 2 END,
+                    match_score DESC,
+                    di.price DESC
                 LIMIT 20
-                ''', (f'%{search_term}%',))
+                ''', (
+                    search_term,
+                    f'%{search_term}%',  # Contains search term
+                    f'{search_term}%',   # Starts with search term
+                    search_term,         # For similarity match
+                    f'%{search_term}%',  # For ordering
+                    f'{search_term}%'    # For ordering
+                ))
+
                 
                 results = cursor.fetchall()
                 logger.info(f"Found {len(results)} matching drugs")
