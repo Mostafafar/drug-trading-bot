@@ -2749,19 +2749,14 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
                 # Search for drugs with similarity matching
                 cursor.execute('''
-                SELECT 
-                    di.id, di.user_id, di.name, di.price, di.date, di.quantity,
-                    p.name AS pharmacy_name,
-                    similarity(di.name, %s) AS match_score
+                SELECT di.id, di.name, di.price, di.date, di.quantity,
+                p.name AS pharmacy_name
                 FROM drug_items di
                 JOIN pharmacies p ON di.user_id = p.user_id
-                WHERE 
-                    di.quantity > 0 AND
-                    p.verified = TRUE AND
-                    (di.name ILIKE %s OR similarity(di.name, %s) > 0.3)
-                ORDER BY match_score DESC, di.price DESC
+                WHERE di.quantity > 0
+                AND di.name ILIKE %s
                 LIMIT 20
-                ''', (search_term, f'%{search_term}%', search_term))
+                ''', (f'%{search_term}%',))
                 
                 results = cursor.fetchall()
                 logger.info(f"Found {len(results)} matching drugs")
