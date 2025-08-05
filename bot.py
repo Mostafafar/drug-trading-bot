@@ -2843,6 +2843,7 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
             await query.edit_message_text(
                 "لطفا داروخانه مورد نظر را انتخاب کنید:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             return States.SELECT_PHARMACY
             
         if not query.data.startswith("offer_"):
