@@ -2746,11 +2746,10 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     message += "لطفا داروخانه مورد نظر را انتخاب کنید:"
                     
-                    
-                        await update.message.reply_text(
-                        message,
-                        reply_markup=reply_markup,
-                        parse_mode=ParseMode.MARKDOWN
+                    await update.message.reply_text(
+                    message,
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.MARKDOWN
                     )
                     return States.SELECT_PHARMACY
                 else:
