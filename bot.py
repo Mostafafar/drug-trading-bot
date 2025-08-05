@@ -2725,133 +2725,98 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in search_drug: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
-async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle drug search requests and display results"""
+async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Search for drugs in database"""
     try:
         search_term = update.message.text.strip().lower()
         context.user_data['search_term'] = search_term
+
+        if len(search_term) < 2:
+            await update.message.reply_text("حداقل ۲ حرف برای جستجو وارد کنید.")
+            return States.SEARCH_DRUG
 
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                # More flexible search query
-                cursor.execute('''
+                # Search in database
+                cursor.execute("""
                 SELECT 
-                    di.id, 
-                    di.user_id, 
-                    di.name, 
-                    di.price, 
-                    di.date, 
-                    di.quantity,
-                    p.name AS pharmacy_name,
-                    p.verified AS pharmacy_verified,
-                    similarity(di.name, %s) AS match_score
+                    di.id, di.name, di.price, di.date, di.quantity,
+                    p.name as pharmacy_name,
+                    p.user_id as pharmacy_id
                 FROM drug_items di
                 JOIN pharmacies p ON di.user_id = p.user_id
                 WHERE 
                     di.quantity > 0 AND
-                    (di.name ILIKE %s OR 
-                     di.name ILIKE %s OR 
-                     similarity(di.name, %s) > 0.2)
+                    (di.name ILIKE %s OR di.name ILIKE %s)
                 ORDER BY 
                     CASE WHEN di.name ILIKE %s THEN 0
-                         WHEN di.name ILIKE %s THEN 1
-                         ELSE 2 END,
-                    match_score DESC,
-                    di.price DESC
+                         ELSE 1 END,
+                    di.name
                 LIMIT 20
-                ''', (
-                    search_term,
-                    f'%{search_term}%',  # Contains search term
-                    f'{search_term}%',   # Starts with search term
-                    search_term,         # For similarity match
-                    f'%{search_term}%',  # For ordering
-                    f'{search_term}%'    # For ordering
+                """, (
+                    f'%{search_term}%',
+                    f'{search_term}%',
+                    f'{search_term}%'
                 ))
-
                 
                 results = cursor.fetchall()
-                logger.info(f"Found {len(results)} matching drugs")
 
                 if results:
-                    context.user_data['search_results'] = [dict(row) for row in results]
+                    context.user_data['search_results'] = results
                     
-                    # Group results by pharmacy
+                    # Group by pharmacy
                     pharmacies = {}
                     for item in results:
-                        pharmacy_id = item['user_id']
-                        if pharmacy_id not in pharmacies:
-                            pharmacies[pharmacy_id] = {
+                        if item['pharmacy_id'] not in pharmacies:
+                            pharmacies[item['pharmacy_id'] = {
                                 'name': item['pharmacy_name'],
-                                'count': 0,
                                 'items': []
                             }
-                        pharmacies[pharmacy_id]['count'] += 1
-                        pharmacies[pharmacy_id]['items'].append(dict(item))
+                        pharmacies[item['pharmacy_id']]['items'].append(dict(item))
                     
                     context.user_data['pharmacies'] = pharmacies
                     
-                    # Create keyboard with pharmacy options
+                    # Create keyboard
                     keyboard = []
-                    for pharmacy_id, pharmacy_data in pharmacies.items():
+                    for pharmacy_id, data in pharmacies.items():
                         keyboard.append([InlineKeyboardButton(
-                            f"🏥 {pharmacy_data['name']} ({pharmacy_data['count']} دارو)", 
+                            f"🏥 {data['name']} ({len(data['items'])} دارو)",
                             callback_data=f"pharmacy_{pharmacy_id}"
                         )])
                     
-                    keyboard.append([InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back")])
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    
-                    # Prepare message with search results
-                    message = "🔍 نتایج جستجو:\n\n"
-                    for idx, item in enumerate(results[:5]):  # Show first 5 results
-                        message += (
-                            f"🏥 داروخانه: {item['pharmacy_name']}\n"
-                            f"💊 دارو: {item['name']}\n"
-                            f"💰 قیمت: {item['price'] or 'نامشخص'}\n"
-                            f"📅 تاریخ انقضا: {item['date']}\n"
-                            f"📦 موجودی: {item['quantity']}\n\n"
-                        )
-                    
-                    if len(results) > 5:
-                                                message += f"➕ {len(results)-5} نتیجه دیگر...\n\n"
-                    
-                    message += "لطفا داروخانه مورد نظر را انتخاب کنید:"
+                    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
                     
                     await update.message.reply_text(
-                        message,
-                        reply_markup=reply_markup
-                    )
-                    return States.SELECT_PHARMACY
-                else:
-                    keyboard = [
-                        [InlineKeyboardButton("🔙 جستجوی مجدد", callback_data="back_to_search")],
-                        [InlineKeyboardButton("🏠 منوی اصلی", callback_data="back")]
-                    ]
-                    
-                    await update.message.reply_text(
-                        "هیچ دارویی با این مشخصات یافت نشد.\n\n"
-                        "می‌توانید دوباره جستجو کنید یا به منوی اصلی بازگردید.",
+                        f"🔍 {len(results)} نتیجه یافت شد. لطفا داروخانه را انتخاب کنید:",
                         reply_markup=InlineKeyboardMarkup(keyboard)
+                    return States.SELECT_PHARMACY
+                
+                else:
+                    await update.message.reply_text(
+                        "هیچ دارویی با این مشخصات یافت نشد. لطفا دوباره جستجو کنید."
                     )
                     return States.SEARCH_DRUG
-                    
+
         except Exception as e:
-            logger.error(f"Error searching drugs: {e}")
+            logger.error(f"Database search error: {str(e)}")
             await update.message.reply_text(
-                "خطا در جستجوی داروها. لطفا دوباره تلاش کنید.",
-                reply_markup=ReplyKeyboardRemove()
+                "خطا در جستجوی داروها. لطفا بعدا تلاش کنید."
             )
             return States.SEARCH_DRUG
+            
         finally:
             if conn:
                 conn.close()
+
     except Exception as e:
-        logger.error(f"Error in handle_search: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        logger.error(f"Search error: {str(e)}")
+        await update.message.reply_text(
+            "خطای غیرمنتظره در جستجو. لطفا دوباره تلاش کنید."
+        )
         return ConversationHandler.END
+
 
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Select pharmacy from search results"""
