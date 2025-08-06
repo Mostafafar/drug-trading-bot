@@ -2739,7 +2739,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 JOIN pharmacies p ON di.user_id = p.user_id
                 WHERE 
                     di.quantity > 0 AND
-                    p.verified = TRUE AND
+                    
                     (di.name ILIKE %s OR similarity(di.name, %s) > 0.3)
                 ORDER BY match_score DESC, di.price DESC
                 LIMIT 20
