@@ -2197,11 +2197,12 @@ async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
                 [InlineKeyboardButton("✏️ ویرایش تاریخ", callback_data="edit_date")],
                 [InlineKeyboardButton("✏️ ویرایش تعداد", callback_data="edit_quantity")],
                 [InlineKeyboardButton("🗑️ حذف دارو", callback_data="delete_drug")],
-                [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_list")]
+                [InlineKeyboardButton("🔙 بازگشت به لیست", callback_data="back_to_list")]
             ]
             
             await query.edit_message_text(
                 f"ویرایش دارو:\n\n"
+                f"نام: {drug['name']}\n"
                 f"تاریخ انقضا: {drug['date']}\n"
                 f"تعداد: {drug['quantity']}\n\n"
                 "لطفا گزینه مورد نظر را انتخاب کنید:",
@@ -2229,14 +2230,52 @@ async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
                     conn.commit()
                     logger.info(f"Drug {drug['name']} deleted successfully")
                     
+                    # Edit current message first
                     await query.edit_message_text(
-                        f"✅ داروی {drug['name']} با موفقیت حذف شد.")
+                        f"✅ داروی {drug['name']} با موفقیت حذف شد.",
+                        reply_markup=None
+                    )
                     
-                    # Return to drugs list
-                    return await list_my_drugs(update, context)
+                    # Then send a new message with drugs list
+                    try:
+                        # Clear any existing reply markup
+                        await context.bot.send_message(
+                            chat_id=update.effective_chat.id,
+                            text="در حال بارگذاری لیست داروها...",
+                            reply_markup=ReplyKeyboardRemove()
+                        )
+                        
+                        # Call list_my_drugs with fresh context
+                        fresh_update = Update(
+                            update.update_id,
+                            message=Message(
+                                message_id=update.effective_message.message_id + 1,
+                                date=update.effective_message.date,
+                                chat=update.effective_chat,
+                                text="لیست داروهای من"
+                            )
+                        )
+                        return await list_my_drugs(fresh_update, context)
+                    except Exception as e:
+                        logger.error(f"Error showing drugs list: {e}")
+                        # Fallback to main menu if list fails
+                        keyboard = [
+                            ['اضافه کردن دارو', 'جستجوی دارو'],
+                            ['تنظیم شاخه‌های دارویی', 'لیست داروهای من'],
+                            ['ثبت نیاز جدید', 'لیست نیازهای من']
+                        ]
+                        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                        await context.bot.send_message(
+                            chat_id=update.effective_chat.id,
+                            text="به منوی اصلی بازگشتید:",
+                            reply_markup=reply_markup
+                        )
+                        return ConversationHandler.END
                     
             except Exception as e:
                 logger.error(f"Database error during deletion: {e}")
+                if conn:
+                    conn.rollback()
                 await query.edit_message_text("خطا در حذف دارو. لطفا دوباره تلاش کنید.")
                 return States.EDIT_DRUG
             finally:
@@ -2251,10 +2290,16 @@ async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.error(f"Error in handle_drug_deletion: {e}")
         try:
             await query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        except:
-            await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        except Exception as e:
+            logger.error(f"Failed to edit message: {e}")
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="خطایی رخ داده است. لطفا دوباره تلاش کنید."
+                )
+            except Exception as e:
+                logger.error(f"Failed to send error message: {e}")
         return ConversationHandler.END
-
 # Needs Management
 async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a need"""
