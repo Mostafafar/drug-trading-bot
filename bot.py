@@ -506,68 +506,81 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
 
 # Command Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start command handler"""
+    """Start command handler with both registration options and verification check"""
     try:
         await ensure_user(update, context)
         
+        # Check verification status
+        is_verified = False
+        is_personnel = False
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                # Check if user is verified
                 cursor.execute('''
-                SELECT is_verified FROM users WHERE id = %s
+                SELECT is_verified, is_personnel FROM users WHERE id = %s
                 ''', (update.effective_user.id,))
                 result = cursor.fetchone()
-                
-                if not result or not result[0]:
-                    # User not verified - show registration options
-                    keyboard = [
-                        [InlineKeyboardButton("ثبت نام با کد ادمین", callback_data="admin_verify")],
-                        [InlineKeyboardButton("ثبت نام با مدارک", callback_data="register")],
-                        [InlineKeyboardButton("ورود با کد ساده", callback_data="simple_verify")]
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    
-                    try:
-                        await update.message.reply_text(
-                            "برای استفاده از ربات باید ثبت نام کنید. لطفا روش ثبت نام را انتخاب کنید:",
-                            reply_markup=reply_markup
-                        )
-                    except Exception as e:
-                        logger.error(f"Error sending start message: {e}")
-                        return States.START
-                    
-                    return States.START
+                if result:
+                    is_verified, is_personnel = result
         except Exception as e:
-            logger.error(f"Error checking verification status: {e}")
+            logger.error(f"Database error in start: {e}")
         finally:
             if conn:
                 conn.close()
-        
-        # User is verified - show main menu
-        context.application.create_task(check_for_matches(update.effective_user.id, context))
-        
-        keyboard = [
-            ['اضافه کردن دارو', 'جستجوی دارو'],
-            ['تنظیم شاخه‌های دارویی', 'لیست داروهای من'],
-            ['ثبت نیاز جدید', 'لیست نیازهای من']
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-        
-        try:
+
+        if not is_verified:
+            # Show registration options for unverified users
+            keyboard = [
+                [InlineKeyboardButton("ثبت نام با تایید ادمین", callback_data="admin_verify")],
+                [InlineKeyboardButton("ورود با کد پرسنل", callback_data="personnel_login")],
+                [InlineKeyboardButton("ثبت نام با مدارک", callback_data="register")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
             await update.message.reply_text(
-                "به ربات تبادل دارو خوش آمدید! لطفا یک گزینه را انتخاب کنید:",
+                "به ربات تبادل دارو خوش آمدید!\n"
+                "برای استفاده از ربات لطفاً روش ورود را انتخاب کنید:",
                 reply_markup=reply_markup
             )
-        except Exception as e:
-            logger.error(f"Error sending main menu: {e}")
+            return States.START
+
+        # For verified users - show appropriate main menu
+        context.application.create_task(check_for_matches(update.effective_user.id, context))
         
+        # Different menu for personnel vs pharmacy accounts
+        if is_personnel:
+            keyboard = [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['لیست داروهای داروخانه', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من']
+            ]
+            welcome_msg = "حساب پرسنل داروخانه فعال است.\nدسترسی شما محدود به امور داخلی داروخانه می‌باشد."
+        else:
+            keyboard = [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['تنظیم شاخه‌های دارویی', 'لیست داروهای من'],
+                ['ثبت نیاز جدید', 'لیست نیازهای من']
+            ]
+            welcome_msg = "به پنل مدیریت داروخانه خوش آمدید."
+            
+        reply_markup = ReplyKeyboardMarkup(
+            keyboard,
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+        
+        await update.message.reply_text(
+            f"{welcome_msg}\n\nلطفاً یک گزینه را انتخاب کنید:",
+            reply_markup=reply_markup
+        )
         return ConversationHandler.END
     
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        await update.message.reply_text(
+            "خطایی در پردازش درخواست شما رخ داد. لطفاً دوباره تلاش کنید."
+        )
         return ConversationHandler.END
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
