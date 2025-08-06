@@ -279,6 +279,7 @@ async def initialize_db():
                 used_by BIGINT[] DEFAULT array[]::BIGINT[],
                 max_uses INTEGER DEFAULT 5
             )''')
+            cursor.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
             
             # Insert default categories
             default_categories = ['اعصاب', 'قلب', 'ارتوپد', 'زنان', 'گوارش', 'پوست', 'اطفال']
