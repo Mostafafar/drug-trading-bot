@@ -738,30 +738,14 @@ async def simple_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE)
             with conn.cursor() as cursor:
                 # Check if code exists and has remaining uses
                 cursor.execute('''
-                SELECT code, used_by, max_uses 
-                FROM simple_codes 
+                UPDATE simple_codes 
+                SET used_by = array_append(used_by, %s)
                 WHERE code = %s AND array_length(used_by, 1) < max_uses
-                ''', (user_code,))
+                RETURNING code
+                ''', (update.effective_user.id, user_code))
                 result = cursor.fetchone()
                 
                 if result:
-                    code, used_by, max_uses = result
-                    used_by = used_by or []
-                    
-                    # Check if user already used this code
-                    if update.effective_user.id in used_by:
-                        await update.message.reply_text(
-                            "شما قبلاً با این کد ثبت نام کرده‌اید."
-                        )
-                        return ConversationHandler.END
-                    
-                    # Update the used_by array
-                    cursor.execute('''
-                    UPDATE simple_codes 
-                    SET used_by = array_append(used_by, %s)
-                    WHERE code = %s
-                    ''', (update.effective_user.id, user_code))
-                    
                     # Mark user as verified
                     cursor.execute('''
                     UPDATE users 
@@ -777,7 +761,6 @@ async def simple_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         "✅ حساب شما با موفقیت تایید شد!\n\n"
                         "شما می‌توانید از امکانات پایه ربات استفاده کنید."
                     )
-                    
                     return await start(update, context)
                 else:
                     await update.message.reply_text("کد تایید نامعتبر است یا به حداکثر استفاده رسیده است.")
@@ -785,6 +768,8 @@ async def simple_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     
         except Exception as e:
             logger.error(f"Error in simple verification: {e}")
+            if conn:
+                conn.rollback()
             await update.message.reply_text("خطا در تایید حساب. لطفا دوباره تلاش کنید.")
             return ConversationHandler.END
         finally:
@@ -794,7 +779,6 @@ async def simple_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.error(f"Error in simple_verify_code: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start admin verification process"""
     try:
@@ -820,71 +804,140 @@ async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
 
 async def admin_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Verify admin code for pharmacy registration"""
+    """Verify admin code for pharmacy registration with improved functionality"""
     try:
         user_code = update.message.text.strip()
         
+        if not user_code or len(user_code) != 5 or not user_code.isdigit():
+            await update.message.reply_text(
+                "⚠️ کد تایید باید یک عدد 5 رقمی باشد.\n"
+                "لطفا کد صحیح را وارد کنید:"
+            )
+            return States.ADMIN_VERIFICATION
+
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                # Check if code is valid and pharmacy is verified
+                # Check if code is valid and get pharmacy info
                 cursor.execute('''
-                SELECT user_id FROM pharmacies 
-                WHERE admin_code = %s AND verified = TRUE
+                SELECT user_id, name, verified 
+                FROM pharmacies 
+                WHERE admin_code = %s
                 ''', (user_code,))
                 result = cursor.fetchone()
                 
-                if result:
-                    pharmacy_id = result[0]
-                    
-                    # Check if user already registered as pharmacy
-                    cursor.execute('''
-                    SELECT 1 FROM pharmacies WHERE user_id = %s
-                    ''', (update.effective_user.id,))
-                    if cursor.fetchone():
-                        await update.message.reply_text(
-                            "شما قبلاً با یک داروخانه ثبت نام کرده‌اید."
-                        )
-                        return ConversationHandler.END
-                    
-                    # Register user with admin code
-                    cursor.execute('''
-                    INSERT INTO users (id, first_name, last_name, username, is_verified, verification_method)
-                    VALUES (%s, %s, %s, %s, TRUE, 'admin_code')
-                    ON CONFLICT (id) DO UPDATE SET
-                        first_name = EXCLUDED.first_name,
-                        last_name = EXCLUDED.last_name,
-                        username = EXCLUDED.username,
-                        is_verified = TRUE,
-                        verification_method = 'admin_code'
-                    ''', (
-                        update.effective_user.id,
-                        update.effective_user.first_name,
-                        update.effective_user.last_name,
-                        update.effective_user.username
-                    ))
-                    
+                if not result:
                     await update.message.reply_text(
-                        "✅ حساب شما با موفقیت تایید شد!\n\n"
-                        "شما می‌توانید دارو به لیست اضافه کنید و نیازها را ثبت نمایید."
+                        "❌ کد تایید نامعتبر است.\n"
+                        "لطفا کد صحیح را وارد کنید یا با پشتیبانی تماس بگیرید."
                     )
-                    
-                    return await start(update, context)
-                else:
-                    await update.message.reply_text("کد تایید نامعتبر است. لطفا دوباره تلاش کنید.")
                     return States.ADMIN_VERIFICATION
-                    
+                
+                pharmacy_id, pharmacy_name, is_verified = result
+                
+                # Check if pharmacy is verified
+                if not is_verified:
+                    await update.message.reply_text(
+                        "⚠️ داروخانه مربوط به این کد هنوز تایید نشده است.\n"
+                        "لطفا با ادمین تماس بگیرید."
+                    )
+                    return States.ADMIN_VERIFICATION
+                
+                # Check if user already registered as pharmacy
+                cursor.execute('''
+                SELECT 1 FROM pharmacies WHERE user_id = %s
+                ''', (update.effective_user.id,))
+                if cursor.fetchone():
+                    await update.message.reply_text(
+                        "⚠️ شما قبلاً با یک داروخانه ثبت نام کرده‌اید.\n"
+                        "هر کاربر فقط می‌تواند یک داروخانه داشته باشد."
+                    )
+                    return ConversationHandler.END
+                
+                # Register/update user with admin code
+                cursor.execute('''
+                INSERT INTO users (id, first_name, last_name, username, is_verified, verification_method)
+                VALUES (%s, %s, %s, %s, TRUE, 'admin_code')
+                ON CONFLICT (id) DO UPDATE SET
+                    first_name = EXCLUDED.first_name,
+                    last_name = EXCLUDED.last_name,
+                    username = EXCLUDED.username,
+                    is_verified = TRUE,
+                    verification_method = 'admin_code',
+                    last_active = CURRENT_TIMESTAMP
+                RETURNING id
+                ''', (
+                    update.effective_user.id,
+                    update.effective_user.first_name,
+                    update.effective_user.last_name,
+                    update.effective_user.username
+                ))
+                
+                # Link user to pharmacy if needed
+                cursor.execute('''
+                UPDATE pharmacies 
+                SET user_id = %s 
+                WHERE admin_code = %s AND user_id IS NULL
+                ''', (update.effective_user.id, user_code))
+                
+                conn.commit()
+                
+                # Send success message with pharmacy info
+                success_msg = (
+                    "✅ ثبت نام با موفقیت انجام شد!\n\n"
+                    f"🏥 داروخانه: {pharmacy_name}\n"
+                    f"🔑 کد ادمین: {user_code}\n\n"
+                    "شما اکنون می‌توانید:\n"
+                    "- دارو به لیست اضافه کنید\n"
+                    "- نیازهای دارویی ثبت کنید\n"
+                    "- با سایر داروخانه‌ها تبادل انجام دهید"
+                )
+                
+                await update.message.reply_text(success_msg)
+                
+                # Send welcome message with quick actions
+                keyboard = [
+                    ['اضافه کردن دارو', 'جستجوی دارو'],
+                    ['ثبت نیاز جدید', 'لیست نیازهای من']
+                ]
+                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="لطفا یکی از گزینه‌های زیر را انتخاب کنید:",
+                    reply_markup=reply_markup
+                )
+                
+                return ConversationHandler.END
+                
+        except psycopg2.Error as e:
+            logger.error(f"Database error in admin verification: {e}")
+            if conn:
+                conn.rollback()
+            await update.message.reply_text(
+                "⚠️ خطا در ارتباط با پایگاه داده.\n"
+                "لطفا دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
+            )
+            return States.ADMIN_VERIFICATION
         except Exception as e:
-            logger.error(f"Error in admin verification: {e}")
-            await update.message.reply_text("خطا در تایید حساب. لطفا دوباره تلاش کنید.")
-            return ConversationHandler.END
+            logger.error(f"Unexpected error in admin verification: {e}")
+            if conn:
+                conn.rollback()
+            await update.message.reply_text(
+                "⚠️ خطای غیرمنتظره رخ داد.\n"
+                "لطفا دوباره تلاش کنید."
+            )
+            return States.ADMIN_VERIFICATION
         finally:
             if conn:
                 conn.close()
     except Exception as e:
         logger.error(f"Error in admin_verify_code: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        await update.message.reply_text(
+            "⚠️ خطایی در پردازش درخواست شما رخ داد.\n"
+            "لطفا دوباره تلاش کنید."
+        )
         return ConversationHandler.END
 
 # Registration Handlers
