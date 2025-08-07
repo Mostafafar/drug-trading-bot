@@ -108,6 +108,8 @@ class States(Enum):
     EDIT_DRUG = auto()
     EDIT_NEED = auto()
     SETUP_CATEGORIES = auto()
+    PERSONNEL_VERIFICATION = auto()  # این خط را اضافه کنید
+    PERSONNEL_LOGIN = auto()
 
 def get_db_connection(max_retries=3, retry_delay=1.0):
     """Get a database connection with retry logic"""
