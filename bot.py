@@ -1612,8 +1612,9 @@ async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in verify_pharmacy: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
 
+
 async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Toggle medical category selection for user"""
+    """Toggle medical category selection for user with instant visual feedback"""
     try:
         query = update.callback_query
         await query.answer()
@@ -1660,20 +1661,28 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ''', (update.effective_user.id,))
                 categories = cursor.fetchall()
                 
-                # Rebuild keyboard
+                # Rebuild keyboard with instant visual feedback
                 keyboard = []
+                row = []
                 for cat in categories:
                     emoji = "✅ " if cat['selected'] else "◻️ "
-                    keyboard.append([InlineKeyboardButton(
+                    btn = InlineKeyboardButton(
                         f"{emoji}{cat['name']}", 
                         callback_data=f"togglecat_{cat['id']}"
-                    )])
+                    )
+                    row.append(btn)
+                    if len(row) == 2:
+                        keyboard.append(row)
+                        row = []
+                
+                if row:  # Add remaining buttons if any
+                    keyboard.append(row)
                 
                 keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
                 
+                # Edit the message markup to show changes immediately
                 await query.edit_message_reply_markup(
                     reply_markup=InlineKeyboardMarkup(keyboard)
-                )
                 
         except Exception as e:
             logger.error(f"Error toggling category: {e}")
@@ -1683,7 +1692,7 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 conn.close()
     except Exception as e:
         logger.error(f"Error in toggle_category: {e}")
-        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        await update.callback_query.answer("خطایی رخ داد. لطفا دوباره تلاش کنید.", show_alert=True)
 
 async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save selected medical categories"""
@@ -1714,7 +1723,7 @@ async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
 
 async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Setup medical categories for user"""
+    """Setup medical categories for user with two-column layout"""
     try:
         conn = None
         try:
@@ -1732,13 +1741,7 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
                 
                 if not categories:
                     await update.message.reply_text("هیچ شاخه دارویی تعریف نشده است.")
-                    return ConversationHandler.END
-                
-                # Store categories in context for later use
-                context.user_data['categories'] = [
-                    {'id': cat['id'], 'name': cat['name'], 'selected': cat['selected']}
-                    for cat in categories
-                ]
+                    return
                 
                 # Build keyboard with 2 columns
                 keyboard = []
@@ -1757,27 +1760,31 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
                 if row:  # Add remaining buttons if any
                     keyboard.append(row)
                 
-                keyboard.append([InlineKeyboardButton("💾 ذخیره تغییرات", callback_data="save_categories")])
-                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
+                keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
                 
-                await update.message.reply_text(
-                    "لطفا شاخه‌های دارویی مورد نظر خود را انتخاب کنید:\n"
-                    "✅ = انتخاب شده\n◻️ = انتخاب نشده",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
+                # For callback queries, edit the existing message
+                if update.callback_query:
+                    await update.callback_query.edit_message_text(
+                        "لطفا شاخه‌های دارویی مورد نظر خود را انتخاب کنید:",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                else:
+                    # For regular messages, send new message
+                    await update.message.reply_text(
+                        "لطفا شاخه‌های دارویی مورد نظر خود را انتخاب کنید:",
+                        reply_markup=InlineKeyboardMarkup(keyboard))
+                
                 return States.SETUP_CATEGORIES
                 
         except Exception as e:
             logger.error(f"Error setting up categories: {e}")
             await update.message.reply_text("خطا در دریافت لیست شاخه‌های دارویی.")
-            return ConversationHandler.END
         finally:
             if conn:
                 conn.close()
     except Exception as e:
         logger.error(f"Error in setup_medical_categories: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+
 # Drug Management
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a drug item"""
