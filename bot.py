@@ -165,8 +165,9 @@ async def initialize_db():
                 verification_code TEXT,
                 verification_method TEXT,
                 is_admin BOOLEAN DEFAULT FALSE,
+                is_pharmacy_admin BOOLEAN DEFAULT FALSE,
                 simple_code TEXT
-            )''')
+             )''')
             # در بخش initialize_db() این جدول را اضافه کنید:
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS personnel_codes (
@@ -721,6 +722,14 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not query.data:
             logger.warning("Empty callback data received")
             return
+
+        # Handle different callback patterns
+        if query.data.startswith("approve_user_"):
+            return await approve_user(update, context)
+        elif query.data.startswith("reject_user_"):
+            return await reject_user(update, context)
+        # بقیه هندلرهای موجود...
+        # ...
 
         # Handle different callback patterns
         if query.data == "back":
