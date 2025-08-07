@@ -3671,9 +3671,6 @@ def main():
                     CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
                     CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
                 ],
-                States.ADMIN_VERIFICATION: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_code)
-                ],
                 States.SIMPLE_VERIFICATION: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
                 ],
