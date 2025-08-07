@@ -1675,6 +1675,7 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     await query.edit_message_reply_markup(
                         reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
                 except Exception as e:
                     if "Message is not modified" in str(e):
                         # No change needed
