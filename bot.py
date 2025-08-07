@@ -957,6 +957,7 @@ async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 text="خطایی رخ داد. لطفا دوباره تلاش کنید."
             )
         return ConversationHandler.END
+
 async def receive_phone_for_admin_verify(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت شماره تلفن برای تایید ادمین"""
     try:
@@ -986,19 +987,28 @@ async def receive_phone_for_admin_verify(update: Update, context: ContextTypes.D
             if conn:
                 conn.close()
         
-        # ارسال اطلاعات به ادمین
+        # ارسال اطلاعات به ادمین با دکمه‌های تایید/رد
         admin_message = (
             f"📌 درخواست ثبت نام جدید:\n\n"
             f"👤 نام: {user.full_name}\n"
             f"🆔 آیدی: {user.id}\n"
             f"📌 یوزرنیم: @{user.username or 'ندارد'}\n"
             f"📞 تلفن: {phone_number}\n\n"
-            f"برای تایید از /approve_{user.id} و برای رد از /reject_{user.id} استفاده کنید."
+            f"لطفا این کاربر را تایید یا رد کنید:"
         )
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ تایید کاربر", callback_data=f"approve_user_{user.id}"),
+                InlineKeyboardButton("❌ رد کاربر", callback_data=f"reject_user_{user.id}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
         await context.bot.send_message(
             chat_id=ADMIN_CHAT_ID,
-            text=admin_message
+            text=admin_message,
+            reply_markup=reply_markup
         )
         
         await update.message.reply_text(
