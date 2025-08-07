@@ -1673,6 +1673,7 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await query.edit_message_reply_markup(
                     reply_markup=InlineKeyboardMarkup(keyboard)
+                )
             except Exception as e:
                 logger.error(f"Error updating message: {e}")
                 await query.answer("خطا در بروزرسانی", show_alert=True)
