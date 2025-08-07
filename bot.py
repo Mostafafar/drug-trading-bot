@@ -1023,20 +1023,131 @@ async def receive_phone_for_admin_verify(update: Update, context: ContextTypes.D
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
+async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """تایید کاربر توسط ادمین"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        user_id = int(query.data.split("_")[2])
+        
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                # تایید کاربر و تبدیل به مدیر داروخانه
+                cursor.execute('''
+                UPDATE users 
+                SET is_verified = TRUE, is_pharmacy_admin = TRUE
+                WHERE id = %s
+                ''', (user_id,))
+                
+                # ایجاد رکورد داروخانه
+                cursor.execute('''
+                INSERT INTO pharmacies (user_id, verified, verified_at, admin_id)
+                VALUES (%s, TRUE, CURRENT_TIMESTAMP, %s)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    verified = TRUE,
+                    verified_at = CURRENT_TIMESTAMP,
+                    admin_id = EXCLUDED.admin_id
+                ''', (user_id, update.effective_user.id))
+                
+                conn.commit()
+                
+                # ارسال پیام به کاربر
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text="✅ حساب شما توسط ادمین تایید شد!\n\n"
+                             "شما اکنون می‌توانید از تمام امکانات مدیریت داروخانه استفاده کنید."
+                    )
+                    
+                    keyboard = [
+                        ['اضافه کردن دارو', 'جستجوی دارو'],
+                        ['لیست داروهای من', 'ثبت نیاز جدید'],
+                        ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                        ['تنظیم شاخه‌های دارویی']
+                    ]
+                    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                    
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text="به پنل مدیریت داروخانه خوش آمدید:",
+                        reply_markup=reply_markup
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify user: {e}")
+                
+                await query.edit_message_text(
+                    f"✅ کاربر {user_id} با موفقیت تایید شد و به عنوان مدیر داروخانه تنظیم شد."
+                )
+                
+        except Exception as e:
+            logger.error(f"Error approving user: {e}")
+            await query.edit_message_text("خطا در تایید کاربر.")
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
+                
+    except Exception as e:
+        logger.error(f"Error in approve_user: {e}")
+        try:
+            await query.edit_message_text("خطایی در تایید کاربر رخ داد.")
+        except:
+            pass
 
 async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """رد کاربر توسط ادمین"""
     try:
-        user_id = int(context.args[0])
-        await update.message.reply_text(f"❌ کاربر {user_id} رد شد.")
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="متاسفانه درخواست ثبت نام شما رد شد.\n"
-                 "برای اطلاعات بیشتر با پشتیبانی تماس بگیرید."
-        )
+        query = update.callback_query
+        await query.answer()
+        
+        user_id = int(query.data.split("_")[2])
+        
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                # حذف کاربر از لیست انتظار تایید
+                cursor.execute('''
+                DELETE FROM pharmacies 
+                WHERE user_id = %s AND verified = FALSE
+                ''', (user_id,))
+                
+                conn.commit()
+                
+                # ارسال پیام به کاربر
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text="متاسفانه درخواست ثبت نام شما رد شد.\n"
+                             "برای اطلاعات بیشتر با پشتیبانی تماس بگیرید."
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify user: {e}")
+                
+                await query.edit_message_text(
+                    f"❌ کاربر {user_id} رد شد."
+                )
+                
+        except Exception as e:
+            logger.error(f"Error rejecting user: {e}")
+            await query.edit_message_text("خطا در رد کاربر.")
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
+                
     except Exception as e:
-        logger.error(f"Error rejecting user: {e}")
-        await update.message.reply_text("خطا در رد کاربر")
+        logger.error(f"Error in reject_user: {e}")
+        try:
+            await query.edit_message_text("خطایی در رد کاربر رخ داد.")
+        except:
+            pass
+
 async def generate_personnel_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ساخت کد پرسنل توسط داروخانه تایید شده"""
     conn = None
