@@ -1612,7 +1612,6 @@ async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in verify_pharmacy: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
 
-
 async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Toggle medical category selection with instant visual feedback"""
     query = update.callback_query
@@ -1621,6 +1620,7 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not query.data or not query.data.startswith("togglecat_"):
         return
     
+    conn = None
     try:
         category_id = int(query.data.split("_")[1])
         user_id = query.from_user.id
@@ -1640,50 +1640,52 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ''', (user_id, category_id, user_id, category_id))
             conn.commit()
             
-            # Get updated categories
-            cursor.execute('''
-            SELECT mc.id, mc.name, 
-                   EXISTS(SELECT 1 FROM user_categories uc 
-                          WHERE uc.user_id = %s AND uc.category_id = mc.id) as selected
-            FROM medical_categories mc
-            ORDER BY mc.name
-            ''', (user_id,))
-            categories = cursor.fetchall()
-            
-            # Build new keyboard
-            keyboard = []
-            row = []
-            for cat in categories:
-                emoji = "✅ " if cat['selected'] else "◻️ "
-                button = InlineKeyboardButton(
-                    f"{emoji}{cat['name']}",
-                    callback_data=f"togglecat_{cat['id']}"
-                )
-                row.append(button)
-                if len(row) == 2:
-                    keyboard.append(row)
-                    row = []
-            
-            if row:
-                keyboard.append(row)
-            
-            keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
-            
-            # Update the message immediately
-            try:
-                await query.edit_message_reply_markup(
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-            except Exception as e:
-                logger.error(f"Error updating message: {e}")
-                await query.answer("خطا در بروزرسانی", show_alert=True)
+            # Get updated categories - using DictCursor for named access
+            with conn.cursor(cursor_factory=extras.DictCursor) as dict_cursor:
+                dict_cursor.execute('''
+                SELECT mc.id, mc.name, 
+                       EXISTS(SELECT 1 FROM user_categories uc 
+                              WHERE uc.user_id = %s AND uc.category_id = mc.id) as selected
+                FROM medical_categories mc
+                ORDER BY mc.name
+                ''', (user_id,))
+                categories = dict_cursor.fetchall()
                 
+                # Build new keyboard
+                keyboard = []
+                row = []
+                for cat in categories:
+                    emoji = "✅ " if cat['selected'] else "◻️ "
+                    button = InlineKeyboardButton(
+                        f"{emoji}{cat['name']}",
+                        callback_data=f"togglecat_{cat['id']}"
+                    )
+                    row.append(button)
+                    if len(row) == 2:
+                        keyboard.append(row)
+                        row = []
+                
+                if row:
+                    keyboard.append(row)
+                
+                keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
+                
+                # Update the message immediately
+                try:
+                    await query.edit_message_reply_markup(
+                        reply_markup=InlineKeyboardMarkup(keyboard))
+                except Exception as e:
+                    logger.error(f"Error updating message: {e}")
+                    await query.answer("خطا در بروزرسانی", show_alert=True)
+                    
     except Exception as e:
         logger.error(f"Error in toggle_category: {e}")
         await query.answer("خطا در پردازش درخواست", show_alert=True)
     finally:
         if conn:
             conn.close()
+
+
 
 async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save selected medical categories"""
@@ -1716,6 +1718,7 @@ async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Initialize category selection screen"""
+    conn = None
     try:
         user_id = update.effective_user.id
         conn = get_db_connection()
