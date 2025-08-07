@@ -1615,21 +1615,37 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
                 
                 if not categories:
                     await update.message.reply_text("هیچ شاخه دارویی تعریف نشده است.")
-                    return
+                    return ConversationHandler.END
                 
-                # Build keyboard
+                # Store categories in context for later use
+                context.user_data['categories'] = [
+                    {'id': cat['id'], 'name': cat['name'], 'selected': cat['selected']}
+                    for cat in categories
+                ]
+                
+                # Build keyboard with 2 columns
                 keyboard = []
+                row = []
                 for cat in categories:
                     emoji = "✅ " if cat['selected'] else "◻️ "
-                    keyboard.append([InlineKeyboardButton(
+                    btn = InlineKeyboardButton(
                         f"{emoji}{cat['name']}", 
                         callback_data=f"togglecat_{cat['id']}"
-                    )])
+                    )
+                    row.append(btn)
+                    if len(row) == 2:
+                        keyboard.append(row)
+                        row = []
                 
-                keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
+                if row:  # Add remaining buttons if any
+                    keyboard.append(row)
+                
+                keyboard.append([InlineKeyboardButton("💾 ذخیره تغییرات", callback_data="save_categories")])
+                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
                 
                 await update.message.reply_text(
-                    "لطفا شاخه‌های دارویی مورد نظر خود را انتخاب کنید:",
+                    "لطفا شاخه‌های دارویی مورد نظر خود را انتخاب کنید:\n"
+                    "✅ = انتخاب شده\n◻️ = انتخاب نشده",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 return States.SETUP_CATEGORIES
@@ -1637,13 +1653,14 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
         except Exception as e:
             logger.error(f"Error setting up categories: {e}")
             await update.message.reply_text("خطا در دریافت لیست شاخه‌های دارویی.")
+            return ConversationHandler.END
         finally:
             if conn:
                 conn.close()
     except Exception as e:
         logger.error(f"Error in setup_medical_categories: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-
+        return ConversationHandler.END
 # Drug Management
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a drug item"""
