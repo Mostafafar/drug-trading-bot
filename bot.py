@@ -520,17 +520,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Check verification status
         is_verified = False
-        is_personnel = False
+        is_pharmacy = False
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
                 cursor.execute('''
-                SELECT is_verified, is_personnel FROM users WHERE id = %s
+                SELECT u.is_verified, p.user_id IS NOT NULL as is_pharmacy
+                FROM users u
+                LEFT JOIN pharmacies p ON u.id = p.user_id
+                WHERE u.id = %s
                 ''', (update.effective_user.id,))
                 result = cursor.fetchone()
                 if result:
-                    is_verified, is_personnel = result
+                    is_verified, is_pharmacy = result
         except Exception as e:
             logger.error(f"Database error in start: {e}")
         finally:
@@ -557,20 +560,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.application.create_task(check_for_matches(update.effective_user.id, context))
         
         # Different menu for personnel vs pharmacy accounts
-        if is_personnel:
+        if is_pharmacy:
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
-                ['لیست داروهای داروخانه', 'ثبت نیاز جدید'],
-                ['لیست نیازهای من']
+                ['لیست داروهای من', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من', 'ساخت کد پرسنل'],  # دکمه جدید برای داروخانه‌ها
+                ['تنظیم شاخه‌های دارویی']
             ]
-            welcome_msg = "حساب پرسنل داروخانه فعال است.\nدسترسی شما محدود به امور داخلی داروخانه می‌باشد."
+            welcome_msg = "به پنل مدیریت داروخانه خوش آمدید."
         else:
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
-                ['تنظیم شاخه‌های دارویی', 'لیست داروهای من'],
-                ['ثبت نیاز جدید', 'لیست نیازهای من']
+                ['لیست داروهای من', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من']
             ]
-            welcome_msg = "به پنل مدیریت داروخانه خوش آمدید."
+            welcome_msg = "حساب کاربری شما فعال است."
             
         reply_markup = ReplyKeyboardMarkup(
             keyboard,
