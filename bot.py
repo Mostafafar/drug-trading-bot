@@ -1611,11 +1611,10 @@ async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in verify_pharmacy: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-
 async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Toggle medical category selection with instant visual feedback"""
     query = update.callback_query
-    await query.answer()
+    await query.answer("🔄 در حال به‌روزرسانی...")  # بازخورد فوری
     
     if not query.data or not query.data.startswith("togglecat_"):
         return
@@ -1640,7 +1639,7 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ''', (user_id, category_id, user_id, category_id))
             conn.commit()
             
-            # Get updated categories - using DictCursor for named access
+            # Get updated categories
             with conn.cursor(cursor_factory=extras.DictCursor) as dict_cursor:
                 dict_cursor.execute('''
                 SELECT mc.id, mc.name, 
@@ -1651,11 +1650,12 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ''', (user_id,))
                 categories = dict_cursor.fetchall()
                 
-                # Build new keyboard
+                # Build new keyboard with better visual feedback
                 keyboard = []
                 row = []
                 for cat in categories:
-                    emoji = "✅ " if cat['selected'] else "◻️ "
+                    # Use more distinct emojis
+                    emoji = "🌟 " if cat['selected'] else "⚪ "
                     button = InlineKeyboardButton(
                         f"{emoji}{cat['name']}",
                         callback_data=f"togglecat_{cat['id']}"
@@ -1668,24 +1668,27 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if row:
                     keyboard.append(row)
                 
-                keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
+                # Add save button with better emoji
+                keyboard.append([InlineKeyboardButton("💾 ذخیره تغییرات", callback_data="save_categories")])
                 
-                # Update the message immediately
+                # Faster edit with less waiting time
                 try:
                     await query.edit_message_reply_markup(
-                        reply_markup=InlineKeyboardMarkup(keyboard))
+                        reply_markup=InlineKeyboardMarkup(keyboard)
                 except Exception as e:
-                    logger.error(f"Error updating message: {e}")
-                    await query.answer("خطا در بروزرسانی", show_alert=True)
+                    if "Message is not modified" in str(e):
+                        # No change needed
+                        await query.answer("✅")
+                    else:
+                        logger.error(f"Error updating message: {e}")
+                        await query.answer("⚠️ خطا در بروزرسانی", show_alert=True)
                     
     except Exception as e:
         logger.error(f"Error in toggle_category: {e}")
-        await query.answer("خطا در پردازش درخواست", show_alert=True)
+        await query.answer("⚠️ خطا در پردازش", show_alert=True)
     finally:
         if conn:
             conn.close()
-
-
 
 async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save selected medical categories"""
