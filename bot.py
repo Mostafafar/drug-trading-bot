@@ -523,20 +523,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Check verification status
         is_verified = False
-        is_pharmacy = False
+        is_pharmacy_admin = False
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
                 cursor.execute('''
-                SELECT u.is_verified, p.user_id IS NOT NULL as is_pharmacy
+                SELECT u.is_verified, u.is_pharmacy_admin
                 FROM users u
-                LEFT JOIN pharmacies p ON u.id = p.user_id
                 WHERE u.id = %s
                 ''', (update.effective_user.id,))
                 result = cursor.fetchone()
                 if result:
-                    is_verified, is_pharmacy = result
+                    is_verified, is_pharmacy_admin = result
         except Exception as e:
             logger.error(f"Database error in start: {e}")
         finally:
@@ -562,12 +561,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # For verified users - show appropriate main menu
         context.application.create_task(check_for_matches(update.effective_user.id, context))
         
-        # Different menu for personnel vs pharmacy accounts
-        if is_pharmacy:
+        # Different menu for pharmacy admin vs regular users
+        if is_pharmacy_admin:
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
                 ['لیست داروهای من', 'ثبت نیاز جدید'],
-                ['لیست نیازهای من', 'ساخت کد پرسنل'],  # دکمه جدید برای داروخانه‌ها
+                ['لیست نیازهای من', 'ساخت کد پرسنل'],
                 ['تنظیم شاخه‌های دارویی']
             ]
             welcome_msg = "به پنل مدیریت داروخانه خوش آمدید."
@@ -590,6 +589,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
         return ConversationHandler.END
+    # بقیه کد...
     
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
