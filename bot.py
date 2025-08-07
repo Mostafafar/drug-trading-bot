@@ -929,31 +929,70 @@ async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         query = update.callback_query
         await query.answer()
         
-        user = update.effective_user
-        conn = None
-        phone = None
+        # درخواست شماره تلفن از کاربر
+        keyboard = [[KeyboardButton("اشتراک گذاری شماره تلفن", request_contact=True)]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
         
+        await query.edit_message_text(
+            "لطفا برای تکمیل ثبت نام، شماره تلفن خود را با دکمه زیر به اشتراک بگذارید:",
+            reply_markup=None
+        )
+        
+        await context.bot.send_message(
+            chat_id=query.from_user.id,
+            text="لطفا شماره تلفن خود را به اشتراک بگذارید:",
+            reply_markup=reply_markup
+        )
+        
+        context.user_data['awaiting_phone'] = True
+        return States.REGISTER_PHONE
+        
+    except Exception as e:
+        logger.error(f"Error in admin_verify_start: {e}")
         try:
-            # دریافت شماره تلفن کاربر از دیتابیس
+            await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        except:
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                text="خطایی رخ داد. لطفا دوباره تلاش کنید."
+            )
+        return ConversationHandler.END
+async def receive_phone_for_admin_verify(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """دریافت شماره تلفن برای تایید ادمین"""
+    try:
+        if update.message.contact:
+            phone_number = update.message.contact.phone_number
+        else:
+            phone_number = update.message.text
+        
+        user = update.effective_user
+        context.user_data['phone'] = phone_number
+        
+        # ذخیره شماره تلفن در دیتابیس
+        conn = None
+        try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                cursor.execute('SELECT phone FROM users WHERE id = %s', (user.id,))
-                result = cursor.fetchone()
-                if result:
-                    phone = result[0]
+                cursor.execute('''
+                UPDATE users SET phone = %s 
+                WHERE id = %s
+                ''', (phone_number, user.id))
+                conn.commit()
         except Exception as e:
-            logger.error(f"Error getting user phone: {e}")
+            logger.error(f"Error saving phone: {e}")
+            if conn:
+                conn.rollback()
         finally:
             if conn:
                 conn.close()
         
-        # ارسال اطلاعات کاربر به ادمین
+        # ارسال اطلاعات به ادمین
         admin_message = (
             f"📌 درخواست ثبت نام جدید:\n\n"
             f"👤 نام: {user.full_name}\n"
             f"🆔 آیدی: {user.id}\n"
             f"📌 یوزرنیم: @{user.username or 'ندارد'}\n"
-            f"📞 تلفن: {phone or 'ثبت نشده'}\n\n"
+            f"📞 تلفن: {phone_number}\n\n"
             f"برای تایید از /approve_{user.id} و برای رد از /reject_{user.id} استفاده کنید."
         )
         
@@ -962,94 +1001,19 @@ async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
             text=admin_message
         )
         
-        try:
-            await query.edit_message_text(
-                "درخواست ثبت نام شما به ادمین ارسال شد.\n"
-                "پس از تایید، می‌توانید از ربات استفاده کنید.",
-                reply_markup=None  # حذف کیبورد اینلاین
-            )
-        except Exception as e:
-            logger.error(f"Error editing message: {e}")
-            # اگر ویرایش پیام با خطا مواجه شد، پیام جدید ارسال کنیم
-            await context.bot.send_message(
-                chat_id=user.id,
-                text="درخواست ثبت نام شما به ادمین ارسال شد.\n"
-                     "پس از تایید، می‌توانید از ربات استفاده کنید."
-            )
+        await update.message.reply_text(
+            "اطلاعات شما برای تایید به ادمین ارسال شد. پس از تایید می‌توانید از ربات استفاده کنید.",
+            reply_markup=ReplyKeyboardRemove()
+        )
         
         return ConversationHandler.END
         
     except Exception as e:
-        logger.error(f"Error in admin_verify_start: {e}")
-        try:
-            if update.callback_query:
-                await update.callback_query.answer("خطایی رخ داد. لطفا دوباره تلاش کنید.", show_alert=True)
-            elif update.message:
-                await update.message.reply_text("خطایی رخ داده است.")
-        except:
-            pass
+        logger.error(f"Error in receive_phone_for_admin_verify: {e}")
+        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """تایید کاربر توسط ادمین"""
-    try:
-        if not context.args:
-            await update.message.reply_text("لطفا ID کاربر را وارد کنید. مثال: /approve_12345")
-            return
-            
-        user_id = int(context.args[0])
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                # تایید کاربر
-                cursor.execute('''
-                UPDATE users SET is_verified = TRUE 
-                WHERE id = %s
-                RETURNING first_name, last_name, username, phone
-                ''', (user_id,))
-                result = cursor.fetchone()
-                
-                if not result:
-                    await update.message.reply_text(f"کاربر با شناسه {user_id} یافت نشد.")
-                    return
-                
-                first_name, last_name, username, phone = result
-                full_name = f"{first_name or ''} {last_name or ''}".strip()
-                
-                await update.message.reply_text(
-                    f"✅ کاربر {full_name} (آیدی: {user_id}) تایید شد.\n\n"
-                    f"📌 یوزرنیم: @{username or 'ندارد'}\n"
-                    f"📞 تلفن: {phone or 'ثبت نشده'}"
-                )
-                
-                # ارسال پیام به کاربر
-                try:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text="✅ حساب شما توسط ادمین تایید شد!\n\n"
-                             "اکنون می‌توانید از ربات استفاده کنید."
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to notify user: {e}")
-                    await update.message.reply_text(
-                        f"کاربر تایید شد اما ارسال پیام به کاربر با خطا مواجه شد:\n{e}"
-                    )
-                
-                conn.commit()
-                
-        except ValueError:
-            await update.message.reply_text("شناسه کاربر باید عددی باشد. مثال: /approve_12345")
-        except Exception as e:
-            logger.error(f"Error approving user: {e}")
-            await update.message.reply_text(f"خطا در تایید کاربر: {e}")
-            if conn:
-                conn.rollback()
-        finally:
-            if conn:
-                conn.close()
-    except Exception as e:
-        logger.error(f"Error in approve_user: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+
+
 async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """رد کاربر توسط ادمین"""
     try:
