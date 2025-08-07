@@ -3661,7 +3661,7 @@ def main():
                 CommandHandler('start', start),
                 CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$"),
                 CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
-                CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
+                CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$"),
                 CallbackQueryHandler(personnel_login_start, pattern="^personnel_login$"),
                 MessageHandler(filters.Regex('^ساخت کد پرسنل$'), generate_personnel_code)
             ],
