@@ -165,6 +165,14 @@ async def initialize_db():
                 is_admin BOOLEAN DEFAULT FALSE,
                 simple_code TEXT
             )''')
+            # در بخش initialize_db() این جدول را اضافه کنید:
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS personnel_codes (
+                code TEXT PRIMARY KEY,
+                creator_id BIGINT REFERENCES pharmacies(user_id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      
+              )''')
             
             # Pharmacies table
             cursor.execute('''
