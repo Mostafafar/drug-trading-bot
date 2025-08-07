@@ -594,6 +594,121 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "خطایی در پردازش درخواست شما رخ داد. لطفاً دوباره تلاش کنید."
         )
         return ConversationHandler.END
+async def generate_personnel_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ساخت کد پرسنل توسط داروخانه تایید شده"""
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # بررسی تایید بودن داروخانه
+            cursor.execute('''
+            SELECT 1 FROM pharmacies 
+            WHERE user_id = %s AND verified = TRUE
+            ''', (update.effective_user.id,))
+            
+            if not cursor.fetchone():
+                await update.message.reply_text("❌ فقط داروخانه‌های تایید شده می‌توانند کد ایجاد کنند.")
+                return
+
+            # ساخت کد 6 رقمی
+            code = str(random.randint(100000, 999999))
+            
+            # ذخیره کد
+            cursor.execute('''
+            INSERT INTO personnel_codes (code, creator_id)
+            VALUES (%s, %s)
+            ON CONFLICT (code) DO NOTHING
+            ''', (code, update.effective_user.id))
+            conn.commit()
+            
+            await update.message.reply_text(
+                f"✅ کد پرسنل شما:\n\n{code}\n\n"
+                "این کد نامحدود کاربر می‌تواند استفاده کند."
+            )
+    except Exception as e:
+        logger.error(f"Error generating personnel code: {e}")
+        await update.message.reply_text("خطا در ساخت کد پرسنل")
+    finally:
+        if conn:
+            conn.close()
+
+async def personnel_login_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """شروع فرآیند ورود با کد پرسنل"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        await query.edit_message_text(
+            "لطفا کد پرسنل خود را وارد کنید:",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return States.PERSONNEL_LOGIN
+    except Exception as e:
+        logger.error(f"Error in personnel_login_start: {e}")
+        await update.message.reply_text("خطایی رخ داده است.")
+        return ConversationHandler.END
+
+async def verify_personnel_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """تایید کد پرسنل"""
+    code = update.message.text.strip()
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # بررسی وجود کد و دریافت اطلاعات سازنده
+            cursor.execute('''
+            SELECT creator_id FROM personnel_codes 
+            WHERE code = %s
+            ''', (code,))
+            
+            result = cursor.fetchone()
+            if not result:
+                await update.message.reply_text("❌ کد نامعتبر است.")
+                return States.PERSONNEL_LOGIN
+                
+            creator_id = result[0]
+            
+            # ذخیره اطلاعات کاربر به عنوان پرسنل
+            cursor.execute('''
+            UPDATE users 
+            SET is_verified = TRUE, 
+                is_personnel = TRUE,
+                personnel_code = %s,
+                creator_id = %s
+            WHERE id = %s
+            ''', (code, creator_id, update.effective_user.id))
+            
+            conn.commit()
+            
+            await update.message.reply_text(
+                "✅ ورود با کد پرسنل موفقیت آمیز بود!\n\n"
+                "شما می‌توانید:\n"
+                "- دارو اضافه/ویرایش کنید\n"
+                "- نیازها را مدیریت کنید\n\n"
+                "⚠️ توجه: امکان انجام تبادل را ندارید."
+            )
+            
+            # بازگشت به منوی اصلی
+            keyboard = [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['لیست داروهای من', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من']
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="به منوی اصلی پرسنل خوش آمدید:",
+                reply_markup=reply_markup
+            )
+            
+            return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error verifying personnel code: {e}")
+        await update.message.reply_text("خطا در تایید کد پرسنل")
+    finally:
+        if conn:
+            conn.close()
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Central callback query handler"""
