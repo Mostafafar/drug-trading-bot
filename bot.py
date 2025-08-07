@@ -922,6 +922,7 @@ async def simple_verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
+
 async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """درخواست ثبت نام با تایید ادمین"""
     try:
@@ -929,49 +930,65 @@ async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer()
         
         user = update.effective_user
+        conn = None
+        phone = None
+        
+        try:
+            # دریافت شماره تلفن کاربر از دیتابیس
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('SELECT phone FROM users WHERE id = %s', (user.id,))
+                result = cursor.fetchone()
+                if result:
+                    phone = result[0]
+        except Exception as e:
+            logger.error(f"Error getting user phone: {e}")
+        finally:
+            if conn:
+                conn.close()
+        
         # ارسال اطلاعات کاربر به ادمین
-        await context.bot.send_message(
-            chat_id=ADMIN_CHAT_ID,
-            text=f"📌 درخواست ثبت نام جدید:\n\n"
-                 f"👤 نام: {user.full_name}\n"
-                 f"🆔 آیدی: {user.id}\n"
-                 f"📌 یوزرنیم: @{user.username}\n\n"
-                 f"برای تایید از /approve_{user.id} و برای رد از /reject_{user.id} استفاده کنید."
+        admin_message = (
+            f"📌 درخواست ثبت نام جدید:\n\n"
+            f"👤 نام: {user.full_name}\n"
+            f"🆔 آیدی: {user.id}\n"
+            f"📌 یوزرنیم: @{user.username or 'ندارد'}\n"
+            f"📞 تلفن: {phone or 'ثبت نشده'}\n\n"
+            f"برای تایید از /approve_{user.id} و برای رد از /reject_{user.id} استفاده کنید."
         )
         
-        await query.edit_message_text(
-            "درخواست ثبت نام شما به ادمین ارسال شد.\n"
-            "پس از تایید، می‌توانید از ربات استفاده کنید.",
-            reply_markup=ReplyKeyboardRemove()
+        await context.bot.send_message(
+            chat_id=ADMIN_CHAT_ID,
+            text=admin_message
         )
+        
+        try:
+            await query.edit_message_text(
+                "درخواست ثبت نام شما به ادمین ارسال شد.\n"
+                "پس از تایید، می‌توانید از ربات استفاده کنید.",
+                reply_markup=None  # حذف کیبورد اینلاین
+            )
+        except Exception as e:
+            logger.error(f"Error editing message: {e}")
+            # اگر ویرایش پیام با خطا مواجه شد، پیام جدید ارسال کنیم
+            await context.bot.send_message(
+                chat_id=user.id,
+                text="درخواست ثبت نام شما به ادمین ارسال شد.\n"
+                     "پس از تایید، می‌توانید از ربات استفاده کنید."
+            )
+        
         return ConversationHandler.END
         
     except Exception as e:
         logger.error(f"Error in admin_verify_start: {e}")
-        await update.message.reply_text("خطایی رخ داده است.")
+        try:
+            if update.callback_query:
+                await update.callback_query.answer("خطایی رخ داد. لطفا دوباره تلاش کنید.", show_alert=True)
+            elif update.message:
+                await update.message.reply_text("خطایی رخ داده است.")
+        except:
+            pass
         return ConversationHandler.END
-async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """تایید کاربر توسط ادمین"""
-    try:
-        user_id = int(context.args[0])
-        conn = get_db_connection()
-        with conn.cursor() as cursor:
-            cursor.execute('''
-            UPDATE users SET is_verified = TRUE 
-            WHERE id = %s
-            ''', (user_id,))
-            conn.commit()
-        
-        await update.message.reply_text(f"✅ کاربر {user_id} تایید شد.")
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="✅ حساب شما توسط ادمین تایید شد!\n\n"
-                 "اکنون می‌توانید از ربات استفاده کنید."
-        )
-    except Exception as e:
-        logger.error(f"Error approving user: {e}")
-        await update.message.reply_text("خطا در تایید کاربر")
-
 async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """رد کاربر توسط ادمین"""
     try:
