@@ -989,6 +989,67 @@ async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except:
             pass
         return ConversationHandler.END
+async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """تایید کاربر توسط ادمین"""
+    try:
+        if not context.args:
+            await update.message.reply_text("لطفا ID کاربر را وارد کنید. مثال: /approve_12345")
+            return
+            
+        user_id = int(context.args[0])
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                # تایید کاربر
+                cursor.execute('''
+                UPDATE users SET is_verified = TRUE 
+                WHERE id = %s
+                RETURNING first_name, last_name, username, phone
+                ''', (user_id,))
+                result = cursor.fetchone()
+                
+                if not result:
+                    await update.message.reply_text(f"کاربر با شناسه {user_id} یافت نشد.")
+                    return
+                
+                first_name, last_name, username, phone = result
+                full_name = f"{first_name or ''} {last_name or ''}".strip()
+                
+                await update.message.reply_text(
+                    f"✅ کاربر {full_name} (آیدی: {user_id}) تایید شد.\n\n"
+                    f"📌 یوزرنیم: @{username or 'ندارد'}\n"
+                    f"📞 تلفن: {phone or 'ثبت نشده'}"
+                )
+                
+                # ارسال پیام به کاربر
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text="✅ حساب شما توسط ادمین تایید شد!\n\n"
+                             "اکنون می‌توانید از ربات استفاده کنید."
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify user: {e}")
+                    await update.message.reply_text(
+                        f"کاربر تایید شد اما ارسال پیام به کاربر با خطا مواجه شد:\n{e}"
+                    )
+                
+                conn.commit()
+                
+        except ValueError:
+            await update.message.reply_text("شناسه کاربر باید عددی باشد. مثال: /approve_12345")
+        except Exception as e:
+            logger.error(f"Error approving user: {e}")
+            await update.message.reply_text(f"خطا در تایید کاربر: {e}")
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
+    except Exception as e:
+        logger.error(f"Error in approve_user: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
 async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """رد کاربر توسط ادمین"""
     try:
