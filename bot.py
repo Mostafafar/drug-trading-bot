@@ -1615,84 +1615,78 @@ async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Toggle medical category selection for user with instant visual feedback"""
+    query = update.callback_query
+    await query.answer()
+    
+    if not query.data.startswith("togglecat_"):
+        return
+        
+    category_id = int(query.data.split("_")[1])
+    
+    conn = None
     try:
-        query = update.callback_query
-        await query.answer()
-        
-        if not query.data.startswith("togglecat_"):
-            return
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # Check if user already has this category
+            cursor.execute('''
+            SELECT 1 FROM user_categories 
+            WHERE user_id = %s AND category_id = %s
+            ''', (query.from_user.id, category_id))
             
-        category_id = int(query.data.split("_")[1])
-        
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                # Check if user already has this category
+            if cursor.fetchone():
+                # Remove category
                 cursor.execute('''
-                SELECT 1 FROM user_categories 
+                DELETE FROM user_categories 
                 WHERE user_id = %s AND category_id = %s
-                ''', (update.effective_user.id, category_id))
-                
-                if cursor.fetchone():
-                    # Remove category
-                    cursor.execute('''
-                    DELETE FROM user_categories 
-                    WHERE user_id = %s AND category_id = %s
-                    ''', (update.effective_user.id, category_id))
-                    action = "حذف شد"
-                else:
-                    # Add category
-                    cursor.execute('''
-                    INSERT INTO user_categories (user_id, category_id)
-                    VALUES (%s, %s)
-                    ''', (update.effective_user.id, category_id))
-                    action = "اضافه شد"
-                
-                conn.commit()
-                
-                # Get updated category list
+                ''', (query.from_user.id, category_id))
+            else:
+                # Add category
                 cursor.execute('''
-                SELECT mc.id, mc.name, 
-                       EXISTS(SELECT 1 FROM user_categories uc 
-                              WHERE uc.user_id = %s AND uc.category_id = mc.id) as selected
-                FROM medical_categories mc
-                ORDER BY mc.name
-                ''', (update.effective_user.id,))
-                categories = cursor.fetchall()
-                
-                # Rebuild keyboard with instant visual feedback
-                keyboard = []
-                row = []
-                for cat in categories:
-                    emoji = "✅ " if cat['selected'] else "◻️ "
-                    btn = InlineKeyboardButton(
-                        f"{emoji}{cat['name']}", 
-                        callback_data=f"togglecat_{cat['id']}"
-                    )
-                    row.append(btn)
-                    if len(row) == 2:
-                        keyboard.append(row)
-                        row = []
-                
-                if row:  # Add remaining buttons if any
+                INSERT INTO user_categories (user_id, category_id)
+                VALUES (%s, %s)
+                ''', (query.from_user.id, category_id))
+            
+            conn.commit()
+            
+            # Get updated category list
+            cursor.execute('''
+            SELECT mc.id, mc.name, 
+                   EXISTS(SELECT 1 FROM user_categories uc 
+                          WHERE uc.user_id = %s AND uc.category_id = mc.id) as selected
+            FROM medical_categories mc
+            ORDER BY mc.name
+            ''', (query.from_user.id,))
+            categories = cursor.fetchall()
+            
+            # Rebuild keyboard with instant visual feedback
+            keyboard = []
+            row = []
+            for cat in categories:
+                emoji = "✅ " if cat['selected'] else "◻️ "
+                btn = InlineKeyboardButton(
+                    f"{emoji}{cat['name']}", 
+                    callback_data=f"togglecat_{cat['id']}"
+                )
+                row.append(btn)
+                if len(row) == 2:
                     keyboard.append(row)
-                
-                keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
-                
-                # Edit the message markup to show changes immediately
-                await query.edit_message_reply_markup(
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                
-        except Exception as e:
-            logger.error(f"Error toggling category: {e}")
-            await query.answer("خطا در تغییر وضعیت دسته‌بندی", show_alert=True)
-        finally:
-            if conn:
-                conn.close()
+                    row = []
+            
+            if row:  # Add remaining buttons if any
+                keyboard.append(row)
+            
+            keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
+            
+            # Edit the message markup to show changes immediately
+            await query.edit_message_reply_markup(
+                reply_markup=InlineKeyboardMarkup(keyboard))
+            
     except Exception as e:
-        logger.error(f"Error in toggle_category: {e}")
-        await update.callback_query.answer("خطایی رخ داد. لطفا دوباره تلاش کنید.", show_alert=True)
+        logger.error(f"Error toggling category: {e}")
+        await query.answer("خطا در تغییر وضعیت دسته‌بندی", show_alert=True)
+    finally:
+        if conn:
+            conn.close()
 
 async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save selected medical categories"""
@@ -1722,69 +1716,65 @@ async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in save_categories: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
 
+
 async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Setup medical categories for user with two-column layout"""
+    conn = None
     try:
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                # Get all categories and user's selected categories
-                cursor.execute('''
-                SELECT mc.id, mc.name, 
-                       EXISTS(SELECT 1 FROM user_categories uc 
-                              WHERE uc.user_id = %s AND uc.category_id = mc.id) as selected
-                FROM medical_categories mc
-                ORDER BY mc.name
-                ''', (update.effective_user.id,))
-                categories = cursor.fetchall()
-                
-                if not categories:
-                    await update.message.reply_text("هیچ شاخه دارویی تعریف نشده است.")
-                    return
-                
-                # Build keyboard with 2 columns
-                keyboard = []
-                row = []
-                for cat in categories:
-                    emoji = "✅ " if cat['selected'] else "◻️ "
-                    btn = InlineKeyboardButton(
-                        f"{emoji}{cat['name']}", 
-                        callback_data=f"togglecat_{cat['id']}"
-                    )
-                    row.append(btn)
-                    if len(row) == 2:
-                        keyboard.append(row)
-                        row = []
-                
-                if row:  # Add remaining buttons if any
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+            # Get all categories and user's selected categories
+            cursor.execute('''
+            SELECT mc.id, mc.name, 
+                   EXISTS(SELECT 1 FROM user_categories uc 
+                          WHERE uc.user_id = %s AND uc.category_id = mc.id) as selected
+            FROM medical_categories mc
+            ORDER BY mc.name
+            ''', (update.effective_user.id,))
+            categories = cursor.fetchall()
+            
+            if not categories:
+                await update.message.reply_text("هیچ شاخه دارویی تعریف نشده است.")
+                return
+            
+            # Build keyboard with 2 columns
+            keyboard = []
+            row = []
+            for cat in categories:
+                emoji = "✅ " if cat['selected'] else "◻️ "
+                btn = InlineKeyboardButton(
+                    f"{emoji}{cat['name']}", 
+                    callback_data=f"togglecat_{cat['id']}"
+                )
+                row.append(btn)
+                if len(row) == 2:
                     keyboard.append(row)
-                
-                keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
-                
-                # For callback queries, edit the existing message
-                if update.callback_query:
-                    await update.callback_query.edit_message_text(
-                        "لطفا شاخه‌های دارویی مورد نظر خود را انتخاب کنید:",
-                        reply_markup=InlineKeyboardMarkup(keyboard)
-                else:
-                    # For regular messages, send new message
-                    await update.message.reply_text(
-                        "لطفا شاخه‌های دارویی مورد نظر خود را انتخاب کنید:",
-                        reply_markup=InlineKeyboardMarkup(keyboard))
-                
-                return States.SETUP_CATEGORIES
-                
-        except Exception as e:
-            logger.error(f"Error setting up categories: {e}")
-            await update.message.reply_text("خطا در دریافت لیست شاخه‌های دارویی.")
-        finally:
-            if conn:
-                conn.close()
+                    row = []
+            
+            if row:  # Add remaining buttons if any
+                keyboard.append(row)
+            
+            keyboard.append([InlineKeyboardButton("💾 ذخیره", callback_data="save_categories")])
+            
+            # For callback queries, edit the existing message
+            if update.callback_query:
+                await update.callback_query.edit_message_text(
+                    "لطفا شاخه‌های دارویی مورد نظر خود را انتخاب کنید:",
+                    reply_markup=InlineKeyboardMarkup(keyboard))
+            else:
+                # For regular messages, send new message
+                await update.message.reply_text(
+                    "لطفا شاخه‌های دارویی مورد نظر خود را انتخاب کنید:",
+                    reply_markup=InlineKeyboardMarkup(keyboard))
+            
+            return States.SETUP_CATEGORIES
+            
     except Exception as e:
-        logger.error(f"Error in setup_medical_categories: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-
+        logger.error(f"Error setting up categories: {e}")
+        await update.message.reply_text("خطا در دریافت لیست شاخه‌های دارویی.")
+    finally:
+        if conn:
+            conn.close()
 # Drug Management
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a drug item"""
