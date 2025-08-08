@@ -176,6 +176,14 @@ async def initialize_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       
               )''')
+            logger.info("Verifying tables exist...")
+            
+            # بررسی جدول users
+            cursor.execute("SELECT to_regclass('users')")
+            users_table = cursor.fetchone()[0]
+            logger.info(f"Users table exists: {users_table}")
+            if not users_table:
+                raise Exception("Users table creation failed")
             
             # Pharmacies table
             cursor.execute('''
@@ -1033,7 +1041,6 @@ async def receive_phone_for_admin_verify(update: Update, context: ContextTypes.D
         return ConversationHandler.END
 
 async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """تایید کاربر توسط ادمین"""
     try:
         query = update.callback_query
         await query.answer()
@@ -1044,6 +1051,12 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
+                # First check if user exists
+                cursor.execute('SELECT id FROM users WHERE id = %s', (user_id,))
+                if not cursor.fetchone():
+                    await query.edit_message_text(f"❌ کاربر با آیدی {user_id} یافت نشد.")
+                    return
+                
                 # تایید کاربر و تبدیل به مدیر داروخانه
                 cursor.execute('''
                 UPDATE users 
@@ -1086,6 +1099,10 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 except Exception as e:
                     logger.error(f"Failed to notify user: {e}")
+                    await query.edit_message_text(
+                        f"✅ کاربر {user_id} تایید شد اما ارسال پیام به کاربر ناموفق بود."
+                    )
+                    return
                 
                 await query.edit_message_text(
                     f"✅ کاربر {user_id} با موفقیت تایید شد و به عنوان مدیر داروخانه تنظیم شد."
@@ -1093,7 +1110,7 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
         except Exception as e:
             logger.error(f"Error approving user: {e}")
-            await query.edit_message_text("خطا در تایید کاربر.")
+            await query.edit_message_text("خطا در تایید کاربر. لطفا لاگ‌ها را بررسی کنید.")
             if conn:
                 conn.rollback()
         finally:
