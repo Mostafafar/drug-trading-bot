@@ -3236,6 +3236,19 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                # دریافت اطلاعات داروخانه
+                cursor.execute('''
+                SELECT p.user_id, p.name as pharmacy_name, u.first_name, u.last_name
+                FROM pharmacies p
+                JOIN users u ON p.user_id = u.id
+                WHERE p.user_id = %s
+                ''', (pharmacy_id,))
+                pharmacy = cursor.fetchone()
+                
+                if not pharmacy:
+                    await query.edit_message_text("داروخانه یافت نشد.")
+                    return States.SEARCH_DRUG
+                
                 # دریافت داروهای داروخانه هدف
                 cursor.execute('''
                 SELECT id, name, price, quantity, date 
@@ -3256,6 +3269,7 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # ذخیره در context
                 context.user_data.update({
+                    'selected_pharmacy': dict(pharmacy),  # Store pharmacy info
                     'target_drugs': target_drugs,
                     'my_drugs': my_drugs,
                     'selected_pharmacy_id': pharmacy_id,
@@ -3276,16 +3290,13 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         finally:
             if conn:
                 conn.close()
-                
-    except Exception as e:
-        logger.error(f"خطا در select_pharmacy: {str(e)}")
-        await query.edit_message_text("خطایی در پردازش رخ داد.")
-        return ConversationHandler.END
+
+
 async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش داروها به صورت دکمه‌های قابل انتخاب"""
-    target_drugs = context.user_data['target_drugs']
-    my_drugs = context.user_data['my_drugs']
-    selected_items = context.user_data['selected_items']
+    target_drugs = context.user_data.get('target_drugs', [])
+    my_drugs = context.user_data.get('my_drugs', [])
+    selected_items = context.user_data.get('selected_items', {'target': [], 'mine': []})
     
     # ایجاد دکمه‌های داروهای داروخانه مقابل
     target_buttons = []
@@ -3313,7 +3324,7 @@ async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         *my_buttons[:5],
         [
             InlineKeyboardButton("📤 ارسال پیشنهاد", callback_data="submit_offer"),
-            InlineKeyboardButton("🔙 بازگشت", callback_data="back")
+            InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_pharmacies")
         ]
     ]
     
@@ -3337,15 +3348,12 @@ async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.callback_query.edit_message_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard)
-            )
         else:
             await update.message.reply_text(
                 message,
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+                reply_markup=InlineKeyboardMarkup(keyboard))
     except Exception as e:
         logger.error(f"خطا در نمایش دکمه‌ها: {str(e)}")
-
 async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug selection for offer"""
     try:
@@ -3353,14 +3361,14 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
 
         if query.data == "back_to_items":
-            return await handle_offer_response(update, context)
+            return await show_drug_buttons(update, context)
             
         if query.data.startswith("select_target_"):
             drug_id = int(query.data.split('_')[2])
             
-            # Find the drug in pharmacy items
-            pharmacy = context.user_data['selected_pharmacy']
-            selected_drug = next((item for item in pharmacy['items'] if item['id'] == drug_id), None)
+            # Find the drug in target drugs
+            target_drugs = context.user_data.get('target_drugs', [])
+            selected_drug = next((item for item in target_drugs if item['id'] == drug_id), None)
             
             if selected_drug:
                 context.user_data['current_drug'] = {
@@ -3382,7 +3390,7 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
             drug_id = int(query.data.split('_')[2])
             
             # Find the drug in my items
-            my_drugs = context.user_data['my_drugs']
+            my_drugs = context.user_data.get('my_drugs', [])
             selected_drug = next((item for item in my_drugs if item['id'] == drug_id), None)
             
             if selected_drug:
