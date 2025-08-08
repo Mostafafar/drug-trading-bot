@@ -178,9 +178,9 @@ async def initialize_db():
             CREATE TABLE IF NOT EXISTS personnel_codes (
                 code TEXT PRIMARY KEY,
                 creator_id BIGINT REFERENCES pharmacies(user_id),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      
-              )''')
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT TRUE
+            )''')
             logger.info("Verifying tables exist...")
             
             # بررسی جدول users
@@ -1229,27 +1229,14 @@ async def generate_personnel_code(update: Update, context: ContextTypes.DEFAULT_
             conn.close()
 
 async def verify_personnel_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """تایید کد پرسنل"""
+    """Verify personnel code"""
     try:
         code = update.message.text.strip()
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                # First check if the column exists
-                cursor.execute('''
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name='users' AND column_name='is_personnel'
-                ''')
-                column_exists = cursor.fetchone()
-                
-                if not column_exists:
-                    # Add the column if it doesn't exist
-                    cursor.execute('ALTER TABLE users ADD COLUMN is_personnel BOOLEAN DEFAULT FALSE')
-                    conn.commit()
-                
-                # Verify personnel code
+                # First verify the personnel code exists
                 cursor.execute('''
                 SELECT creator_id FROM personnel_codes 
                 WHERE code = %s
@@ -1263,21 +1250,15 @@ async def verify_personnel_code(update: Update, context: ContextTypes.DEFAULT_TY
                 creator_id = result[0]
                 
                 # Update user record
-                update_query = '''
+                cursor.execute('''
                 UPDATE users 
                 SET is_verified = TRUE, 
-                    creator_id = %s
-                '''
-                params = [creator_id]
+                    is_personnel = TRUE,
+                    creator_id = %s,
+                    verification_method = 'personnel_code'
+                WHERE id = %s
+                ''', (creator_id, update.effective_user.id))
                 
-                # Only include is_personnel if column exists
-                if column_exists:
-                    update_query += ', is_personnel = TRUE'
-                
-                update_query += ' WHERE id = %s'
-                params.append(update.effective_user.id)
-                
-                cursor.execute(update_query, tuple(params))
                 conn.commit()
                 
                 await update.message.reply_text(
