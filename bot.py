@@ -3534,48 +3534,59 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError:
         await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
         return States.SELECT_QUANTITY
-async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """ارسال پیشنهاد نهایی"""
-    query = update.callback_query
-    await query.answer()
 
-    selected_items = context.user_data['selected_items']
-    
-    if not selected_items['target'] and not selected_items['mine']:
-        await query.answer("هیچ دارویی انتخاب نشده است!", show_alert=True)
-        return
+async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle offer submission"""
+    try:
+        query = update.callback_query
+        await query.answer()
+
+        # Get selected items from context
+        selected_items = context.user_data.get('selected_items', {'target': [], 'mine': []})
         
-    # محاسبه قیمت کل
-    target_total = sum(item['price'] * item['quantity'] for item in selected_items['target'])
-    my_total = sum(item['price'] * item['quantity'] for item in selected_items['mine'])
-    
-    # ایجاد پیام خلاصه
-    message = "📋 خلاصه پیشنهاد تبادل:\n\n"
-    message += "📌 از داروخانه مقابل:\n"
-    for item in selected_items['target']:
-        message += f"- {item['name']} (تعداد: {item['quantity']}, قیمت واحد: {item['price']}, جمع: {item['price'] * item['quantity']})\n"
-    message += f"💰 جمع کل: {target_total}\n\n"
-    
-    message += "📌 از داروهای شما:\n"
-    for item in selected_items['mine']:
-        message += f"- {item['name']} (تعداد: {item['quantity']}, قیمت واحد: {item['price']}, جمع: {item['price'] * item['quantity']})\n"
-    message += f"💰 جمع کل: {my_total}\n\n"
-    
-    if target_total != my_total:
-        message += f"⚠️ توجه: اختلاف قیمت {abs(target_total - my_total)} تومان\n\n"
-    
-    message += "آیا مایل به ارسال این پیشنهاد هستید؟"
-    
-    keyboard = [
-        [InlineKeyboardButton("✅ تأیید و ارسال", callback_data="confirm_offer")],
-        [InlineKeyboardButton("✏️ ویرایش", callback_data="back_to_list")]
-    ]
-    
-    await query.edit_message_text(
-        message,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return States.CONFIRM_OFFER
+        # Check if any items are selected
+        if not selected_items['target'] and not selected_items['mine']:
+            await query.answer("هیچ دارویی انتخاب نشده است!", show_alert=True)
+            return States.SELECT_DRUGS
+
+        # Calculate totals using parse_price
+        target_total = sum(parse_price(item['price']) * item['quantity'] for item in selected_items['target'])
+        my_total = sum(parse_price(item['price']) * item['quantity'] for item in selected_items['mine'])
+        
+        # Prepare message
+        message = "📋 خلاصه پیشنهاد تبادل:\n\n"
+        if selected_items['target']:
+            message += "📌 از داروخانه مقابل:\n"
+            for item in selected_items['target']:
+                message += f"- {item['name']} ({item['quantity']} عدد) - {item['price']}\n"
+            message += f"💰 جمع کل: {target_total:,.0f}\n\n"
+        
+        if selected_items['mine']:
+            message += "📌 از داروهای شما:\n"
+            for item in selected_items['mine']:
+                message += f"- {item['name']} ({item['quantity']} عدد) - {item['price']}\n"
+            message += f"💰 جمع کل: {my_total:,.0f}\n\n"
+        
+        if target_total != my_total:
+            message += f"⚠️ توجه: اختلاف قیمت {abs(target_total - my_total):,.0f} تومان\n\n"
+        
+        message += "آیا مایل به ارسال این پیشنهاد هستید؟"
+        
+        keyboard = [
+            [InlineKeyboardButton("✅ تأیید و ارسال", callback_data="confirm_offer")],
+            [InlineKeyboardButton("✏️ ویرایش", callback_data="back_to_selection")]
+        ]
+        
+        await query.edit_message_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard))
+        
+        return States.CONFIRM_OFFER
+        
+    except Exception as e:
+        logger.error(f"Error in submit_offer: {e}")
+        await query.edit_message_text("خطایی در ارسال پیشنهاد رخ داد.")
+        return States.SELECT_DRUGS
 async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug selection for offer"""
     try:
