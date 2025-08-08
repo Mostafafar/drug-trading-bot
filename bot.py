@@ -3223,7 +3223,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """پس از انتخاب داروخانه، دو لیست داروها نمایش داده میشود"""
+    """نمایش داروهای دو طرف به صورت دکمه‌های قابل انتخاب"""
     try:
         query = update.callback_query
         await query.answer()
@@ -3255,56 +3255,18 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 my_drugs = cursor.fetchall()
                 
                 # ذخیره در context
-                context.user_data['target_drugs'] = target_drugs
-                context.user_data['my_drugs'] = my_drugs
-                context.user_data['selected_pharmacy_id'] = pharmacy_id
-                context.user_data['selected_items'] = {
-                    'target': [],
-                    'mine': []
-                }
+                context.user_data.update({
+                    'target_drugs': target_drugs,
+                    'my_drugs': my_drugs,
+                    'selected_pharmacy_id': pharmacy_id,
+                    'selected_items': {
+                        'target': [],
+                        'mine': []
+                    }
+                })
                 
-                # نمایش لیست داروها با قابلیت انتخاب
-                message = "📋 لطفا داروها را برای تبادل انتخاب کنید:\n\n"
-                message += "| داروهای داروخانه مقابل | داروهای شما |\n"
-                message += "|------------------------|-------------|\n"
-                
-                max_rows = max(len(target_drugs), len(my_drugs))
-                for i in range(max_rows):
-                    left = target_drugs[i] if i < len(target_drugs) else None
-                    right = my_drugs[i] if i < len(my_drugs) else None
-                    
-                    # علامت انتخاب برای داروهای انتخاب شده
-                    left_selected = any(item['id'] == left['id'] for item in context.user_data['selected_items']['target']) if left else False
-                    right_selected = any(item['id'] == right['id'] for item in context.user_data['selected_items']['mine']) if right else False
-                    
-                    left_text = f"{'✅ ' if left_selected else '◻️ '}{left['name']}" if left else ""
-                    right_text = f"{'✅ ' if right_selected else '◻️ '}{right['name']}" if right else ""
-                    
-                    message += f"| {left_text} | {right_text} |\n"
-                
-                # نمایش داروهای انتخاب شده فعلی
-                if context.user_data['selected_items']['target'] or context.user_data['selected_items']['mine']:
-                    message += "\n📌 داروهای انتخاب شده:\n"
-                    for item in context.user_data['selected_items']['target']:
-                        message += f"← {item['name']} (تعداد: {item['quantity']})\n"
-                    for item in context.user_data['selected_items']['mine']:
-                        message += f"→ {item['name']} (تعداد: {item['quantity']})\n"
-                
-                # ایجاد دکمه‌های مدیریت
-                keyboard = [
-                    [
-                        InlineKeyboardButton("➕ انتخاب از مقابل", callback_data="select_target"),
-                        InlineKeyboardButton("➕ انتخاب از من", callback_data="select_mine")
-                    ],
-                    [InlineKeyboardButton("📤 ارسال پیشنهاد", callback_data="submit_offer")],
-                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
-                ]
-                
-                await query.edit_message_text(
-                    message,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode=ParseMode.MARKDOWN
-                )
+                # نمایش دکمه‌های انتخاب دارو
+                await show_drug_buttons(update, context)
                 return States.SELECT_DRUGS
                 
         except Exception as e:
@@ -3319,27 +3281,120 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"خطا در select_pharmacy: {str(e)}")
         await query.edit_message_text("خطایی در پردازش رخ داد.")
         return ConversationHandler.END
-async def select_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت انتخاب داروها از دو لیست"""
+async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """نمایش داروها به صورت دکمه‌های قابل انتخاب"""
+    target_drugs = context.user_data['target_drugs']
+    my_drugs = context.user_data['my_drugs']
+    selected_items = context.user_data['selected_items']
+    
+    # ایجاد دکمه‌های داروهای داروخانه مقابل
+    target_buttons = []
+    for drug in target_drugs:
+        is_selected = any(item['id'] == drug['id'] for item in selected_items['target'])
+        target_buttons.append([InlineKeyboardButton(
+            f"{'✅ ' if is_selected else '◻️ '}{drug['name']}",
+            callback_data=f"select_target_{drug['id']}"
+        )])
+    
+    # ایجاد دکمه‌های داروهای کاربر
+    my_buttons = []
+    for drug in my_drugs:
+        is_selected = any(item['id'] == drug['id'] for item in selected_items['mine'])
+        my_buttons.append([InlineKeyboardButton(
+            f"{'✅ ' if is_selected else '◻️ '}{drug['name']}",
+            callback_data=f"select_mine_{drug['id']}"
+        )])
+    
+    # ایجاد صفحه بندی اگر داروها زیاد باشند
+    keyboard = [
+        [InlineKeyboardButton("--- داروهای مقابل ---", callback_data="none")],
+        *target_buttons[:5],  # حداکثر 5 دارو در هر صفحه
+        [InlineKeyboardButton("--- داروهای من ---", callback_data="none")],
+        *my_buttons[:5],
+        [
+            InlineKeyboardButton("📤 ارسال پیشنهاد", callback_data="submit_offer"),
+            InlineKeyboardButton("🔙 بازگشت", callback_data="back")
+        ]
+    ]
+    
+    # نمایش داروهای انتخاب شده
+    message = "📋 داروها را انتخاب کنید:\n\n"
+    if selected_items['target']:
+        message += "از داروخانه مقابل:\n"
+        for item in selected_items['target']:
+            message += f"✅ {item['name']} (تعداد: {item['quantity']})\n"
+    
+    if selected_items['mine']:
+        message += "\nاز داروهای شما:\n"
+        for item in selected_items['mine']:
+            message += f"✅ {item['name']} (تعداد: {item['quantity']})\n"
+    
+    if not selected_items['target'] and not selected_items['mine']:
+        message += "هنوز دارویی انتخاب نکرده‌اید."
+    
+    try:
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            await update.message.reply_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+    except Exception as e:
+        logger.error(f"خطا در نمایش دکمه‌ها: {str(e)}")
+
+async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت انتخاب داروها"""
     query = update.callback_query
     await query.answer()
 
-    if query.data == "select_target":
-        context.user_data['selecting_from'] = 'target'
-        await show_drug_selection(update, context, is_target=True)
-        return States.SELECT_QUANTITY
-        
-    elif query.data == "select_mine":
-        context.user_data['selecting_from'] = 'mine'
-        await show_drug_selection(update, context, is_target=False)
-        return States.SELECT_QUANTITY
-        
+    if query.data.startswith("select_target_"):
+        drug_id = int(query.data.split('_')[2])
+        drug = next((d for d in context.user_data['target_drugs'] if d['id'] == drug_id), None)
+        if drug:
+            context.user_data['current_drug'] = {
+                'id': drug['id'],
+                'name': drug['name'],
+                'max_quantity': drug['quantity'],
+                'type': 'target'
+            }
+            await query.edit_message_text(
+                f"تعداد مورد نیاز برای {drug['name']} را وارد کنید (حداکثر: {drug['quantity']}):",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_list")]
+                ])
+            )
+            return States.ENTER_QUANTITY
+    
+    elif query.data.startswith("select_mine_"):
+        drug_id = int(query.data.split('_')[2])
+        drug = next((d for d in context.user_data['my_drugs'] if d['id'] == drug_id), None)
+        if drug:
+            context.user_data['current_drug'] = {
+                'id': drug['id'],
+                'name': drug['name'],
+                'max_quantity': drug['quantity'],
+                'type': 'mine'
+            }
+            await query.edit_message_text(
+                f"تعداد مورد نظر برای {drug['name']} را وارد کنید (حداکثر: {drug['quantity']}):",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_list")]
+                ])
+            )
+            return States.ENTER_QUANTITY
+    
     elif query.data == "submit_offer":
         return await submit_offer(update, context)
-        
+    
     elif query.data == "back":
         return await handle_back(update, context)
-
+    
+    elif query.data == "back_to_list":
+        return await show_drug_buttons(update, context)
 async def show_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, is_target: bool):
     """نمایش لیست داروها برای انتخاب"""
     drug_list = context.user_data['target_drugs'] if is_target else context.user_data['my_drugs']
@@ -3391,37 +3446,41 @@ async def select_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYP
         return States.ENTER_QUANTITY
 
 async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """ذخیره تعداد انتخاب شده"""
+    """دریافت تعداد داروی انتخاب شده"""
     try:
         quantity = int(update.message.text)
-        current_selection = context.user_data['current_selection']
-        selected_drug = current_selection['drug']
-        is_target = current_selection['is_target']
+        current_drug = context.user_data['current_drug']
         
         if quantity <= 0:
             await update.message.reply_text("تعداد باید بیشتر از صفر باشد.")
             return States.ENTER_QUANTITY
             
-        if quantity > selected_drug['quantity']:
-            await update.message.reply_text(f"موجودی کافی نیست. حداکثر: {selected_drug['quantity']}")
+        if quantity > current_drug['max_quantity']:
+            await update.message.reply_text(f"موجودی کافی نیست. حداکثر: {current_drug['max_quantity']}")
             return States.ENTER_QUANTITY
         
         # ذخیره انتخاب
-        key = 'target' if is_target else 'mine'
-        context.user_data['selected_items'][key].append({
-            'id': selected_drug['id'],
-            'name': selected_drug['name'],
-            'price': selected_drug['price'],
+        drug_type = current_drug['type']
+        selected_items = context.user_data['selected_items'][drug_type]
+        
+        # اگر دارو قبلا انتخاب شده، آن را حذف می‌کنیم
+        selected_items = [item for item in selected_items if item['id'] != current_drug['id']]
+        
+        # اضافه کردن انتخاب جدید
+        selected_items.append({
+            'id': current_drug['id'],
+            'name': current_drug['name'],
             'quantity': quantity
         })
         
-        # بازگشت به لیست اصلی
-        return await select_pharmacy(update, context)
+        context.user_data['selected_items'][drug_type] = selected_items
+        
+        # بازگشت به لیست داروها
+        return await show_drug_buttons(update, context)
         
     except ValueError:
         await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
         return States.ENTER_QUANTITY
-
 async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ارسال پیشنهاد نهایی"""
     query = update.callback_query
