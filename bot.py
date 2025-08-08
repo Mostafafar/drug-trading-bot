@@ -1612,7 +1612,7 @@ async def upload_excel_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
 
 async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle Excel file upload from admin"""
+    """Handle Excel file upload with merging functionality"""
     try:
         if update.message.document:
             # Handle document upload
@@ -1620,18 +1620,54 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
             file_path = await download_file(file, "drug_prices", "admin")
             
             try:
-                # Process Excel file
-                df = pd.read_excel(file_path, engine='openpyxl')
-                df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
-                drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
-                drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
+                # Process new Excel file
+                new_df = pd.read_excel(file_path, engine='openpyxl')
                 
-                # Save to local file
-                df.to_excel(excel_file, index=False, engine='openpyxl')
+                # Rename columns to standard names
+                column_mapping = {
+                    'نام فارسی': 'name',
+                    'قیمت واحد': 'price',
+                    'name': 'name',  # For backward compatibility
+                    'price': 'price'  # For backward compatibility
+                }
+                new_df = new_df.rename(columns=column_mapping)
+                
+                # Clean and prepare new data
+                new_df = new_df[['name', 'price']].dropna()
+                new_df['name'] = new_df['name'].astype(str).str.strip()
+                new_df['price'] = new_df['price'].astype(str).str.strip()
+                new_df = new_df.drop_duplicates()
+                
+                # Load existing data if available
+                try:
+                    existing_df = pd.read_excel(excel_file, engine='openpyxl')
+                    existing_df = existing_df[['name', 'price']].dropna()
+                    existing_df['name'] = existing_df['name'].astype(str).str.strip()
+                    existing_df['price'] = existing_df['price'].astype(str).str.strip()
+                except:
+                    existing_df = pd.DataFrame(columns=['name', 'price'])
+                
+                # Merge data - keep higher price for duplicates
+                merged_df = pd.concat([existing_df, new_df])
+                merged_df['price'] = merged_df['price'].apply(parse_price)
+                merged_df = merged_df.sort_values('price', ascending=False)
+                merged_df = merged_df.drop_duplicates('name', keep='first')
+                merged_df = merged_df.sort_values('name')
+                
+                # Save merged data
+                merged_df.to_excel(excel_file, index=False, engine='openpyxl')
+                
+                # Prepare statistics
+                added_count = len(new_df)
+                total_count = len(merged_df)
+                duplicates_count = len(new_df) + len(existing_df) - len(merged_df)
                 
                 await update.message.reply_text(
-                    f"✅ فایل اکسل با موفقیت آپلود شد!\n\n"
-                    f"تعداد داروهای بارگذاری شده: {len(drug_list)}\n"
+                    f"✅ فایل اکسل با موفقیت ادغام شد!\n\n"
+                    f"آمار:\n"
+                    f"- داروهای جدید اضافه شده: {added_count}\n"
+                    f"- موارد تکراری: {duplicates_count}\n"
+                    f"- کل داروها پس از ادغام: {total_count}\n\n"
                     f"برای استفاده از داده‌های جدید، ربات را ریستارت کنید."
                 )
                 
@@ -1657,61 +1693,17 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
             except Exception as e:
                 logger.error(f"Error processing excel file: {e}")
                 await update.message.reply_text(
-                    "❌ خطا در پردازش فایل اکسل. لطفا مطمئن شوید فرمت فایل صحیح است."
+                    "❌ خطا در پردازش فایل اکسل. لطفا مطمئن شوید:\n"
+                    "1. فایل دارای ستون‌های 'نام فارسی' و 'قیمت واحد' است\n"
+                    "2. فرمت فایل صحیح است (xlsx یا xls)"
                 )
                 
         elif update.message.text and update.message.text.startswith('http'):
-            # Handle GitHub URL
-            github_url = update.message.text.strip()
-            
-            try:
-                response = requests.get(github_url)
-                if response.status_code == 200:
-                    excel_data = BytesIO(response.content)
-                    df = pd.read_excel(excel_data, engine='openpyxl')
-                    df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
-                    drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
-                    drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
-                    
-                    df.to_excel(excel_file, index=False, engine='openpyxl')
-                    
-                    await update.message.reply_text(
-                        f"✅ فایل اکسل از گیتهاب با موفقیت بارگذاری شد!\n\n"
-                        f"تعداد داروهای بارگذاری شده: {len(drug_list)}\n"
-                        f"برای استفاده از داده‌های جدید، ربات را ریستارت کنید."
-                    )
-                    
-                    # Save to database
-                    conn = None
-                    try:
-                        conn = get_db_connection()
-                        with conn.cursor() as cursor:
-                            cursor.execute('''
-                            INSERT INTO admin_settings (excel_url, last_updated)
-                            VALUES (%s, CURRENT_TIMESTAMP)
-                            ON CONFLICT (id) DO UPDATE SET
-                                excel_url = EXCLUDED.excel_url,
-                                last_updated = EXCLUDED.last_updated
-                            ''', (github_url,))
-                            conn.commit()
-                    except Exception as e:
-                        logger.error(f"Error saving excel info: {e}")
-                    finally:
-                        if conn:
-                            conn.close()
-                else:
-                    await update.message.reply_text(
-                        "❌ خطا در دریافت فایل از گیتهاب. لطفا از صحت لینک اطمینان حاصل کنید."
-                    )
-                    
-            except Exception as e:
-                logger.error(f"Error processing github excel: {e}")
-                await update.message.reply_text(
-                    "❌ خطا در پردازش فایل اکسل از گیتهاب. لطفا مطمئن شوید لینک صحیح است."
-                )
+            # Handle URL (similar logic as above can be implemented)
+            await update.message.reply_text("در حال حاضر آپلود از لینک برای این ورژن غیرفعال است")
         else:
             await update.message.reply_text(
-                "لطفا فایل اکسل یا لینک گیتهاب را ارسال کنید."
+                "لطفا یک فایل اکسل با ستون‌های 'نام فارسی' و 'قیمت واحد' ارسال کنید"
             )
             return States.ADMIN_UPLOAD_EXCEL
         
@@ -1720,6 +1712,8 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"Error in handle_excel_upload: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
+
 
 async def generate_simple_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Generate a simple verification code (admin only)"""
