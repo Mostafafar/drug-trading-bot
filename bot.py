@@ -90,6 +90,7 @@ class States(Enum):
     SIMPLE_VERIFICATION = auto()
     SEARCH_DRUG = auto()
     SELECT_PHARMACY = auto()
+    SELECT_DRUGS = auto()
     SELECT_ITEMS = auto()
     SELECT_QUANTITY = auto()
     CONFIRM_OFFER = auto()
@@ -4480,6 +4481,9 @@ def main():
                 ],
                 States.SELECT_ITEMS: [
                     CallbackQueryHandler(handle_offer_response, pattern="^offer_|back_to_items$")
+                ],
+                States.SELECT_DRUGS: [  # این state جدید
+                   CallbackQueryHandler(select_drugs, pattern="^select_target|select_mine|submit_offer|back$")
                 ],
                 States.SELECT_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, select_quantity),
