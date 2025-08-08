@@ -1173,6 +1173,7 @@ async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("خطایی در رد کاربر رخ داد.")
         except:
             pass
+async def retry_approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def generate_personnel_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ساخت کد پرسنل توسط داروخانه تایید شده"""
