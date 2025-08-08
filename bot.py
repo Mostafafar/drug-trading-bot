@@ -4651,6 +4651,9 @@ def main():
         # Add callback query handler
         application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
         application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_user_"))
+        # Add this to your main() function where you set up handlers:
+        application.add_handler(CallbackQueryHandler(select_drug, pattern="^select_target_"))
+        application.add_handler(CallbackQueryHandler(select_drug, pattern="^select_mine_"))
         application.add_handler(CallbackQueryHandler(callback_handler))
         
         # Add error handler
