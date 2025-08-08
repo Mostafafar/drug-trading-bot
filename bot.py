@@ -430,13 +430,28 @@ def load_drug_data() -> bool:
         return False
 
 def parse_price(price_str: str) -> float:
-    """Parse price string into float"""
+    """Convert price string to float by removing commas and currency symbols"""
     if not price_str:
-        return 0
+        return 0.0
     try:
-        return float(str(price_str).replace(',', ''))
+        # Remove any non-digit characters except decimal point
+        cleaned = ''.join(c for c in price_str if c.isdigit() or c in ['.', ','])
+        # Replace comma with nothing (for thousands separator)
+        cleaned = cleaned.replace(',', '')
+        return float(cleaned)
     except ValueError:
-        return 0
+        return 0.0
+
+def format_price(price: float) -> str:
+    """Format price with comma separators every 3 digits from right"""
+    try:
+        # Convert to integer if it's a whole number
+        if price.is_integer():
+            return "{:,}".format(int(price)).replace(",", "،")  # Using Persian comma
+        else:
+            return "{:,.2f}".format(price).replace(",", "،")  # Using Persian comma for decimal numbers
+    except (ValueError, TypeError):
+        return "0"
 
 def similarity(a: str, b: str) -> float:
     """Calculate similarity between two strings"""
