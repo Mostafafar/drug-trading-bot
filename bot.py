@@ -3347,54 +3347,73 @@ async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"خطا در نمایش دکمه‌ها: {str(e)}")
 
 async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت انتخاب داروها"""
-    query = update.callback_query
-    await query.answer()
+    """Handle drug selection for offer"""
+    try:
+        query = update.callback_query
+        await query.answer()
 
-    if query.data.startswith("select_target_"):
-        drug_id = int(query.data.split('_')[2])
-        drug = next((d for d in context.user_data['target_drugs'] if d['id'] == drug_id), None)
-        if drug:
-            context.user_data['current_drug'] = {
-                'id': drug['id'],
-                'name': drug['name'],
-                'max_quantity': drug['quantity'],
-                'type': 'target'
-            }
-            await query.edit_message_text(
-                f"تعداد مورد نیاز برای {drug['name']} را وارد کنید (حداکثر: {drug['quantity']}):",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_list")]
-                ])
-            )
-            return States.ENTER_QUANTITY
-    
-    elif query.data.startswith("select_mine_"):
-        drug_id = int(query.data.split('_')[2])
-        drug = next((d for d in context.user_data['my_drugs'] if d['id'] == drug_id), None)
-        if drug:
-            context.user_data['current_drug'] = {
-                'id': drug['id'],
-                'name': drug['name'],
-                'max_quantity': drug['quantity'],
-                'type': 'mine'
-            }
-            await query.edit_message_text(
-                f"تعداد مورد نظر برای {drug['name']} را وارد کنید (حداکثر: {drug['quantity']}):",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_list")]
-                ])
-            )
-            return States.SELECT_QUANTITY
-    
-    elif query.data == "submit_offer":
-        return await submit_offer(update, context)
-    
-    elif query.data == "back":
-        return await handle_back(update, context)
-    
-    elif query.data == "back_to_list":
-        return await show_drug_buttons(update, context)
+        if query.data == "back_to_items":
+            return await handle_offer_response(update, context)
+            
+        if query.data.startswith("select_target_"):
+            drug_id = int(query.data.split('_')[2])
+            
+            # Find the drug in pharmacy items
+            pharmacy = context.user_data['selected_pharmacy']
+            selected_drug = next((item for item in pharmacy['items'] if item['id'] == drug_id), None)
+            
+            if selected_drug:
+                context.user_data['current_drug'] = {
+                    'id': selected_drug['id'],
+                    'name': selected_drug['name'],
+                    'price': selected_drug['price'],
+                    'max_quantity': selected_drug['quantity'],
+                    'type': 'target'
+                }
+                await query.edit_message_text(
+                    f"تعداد مورد نیاز برای {selected_drug['name']} را وارد کنید (حداکثر: {selected_drug['quantity']}):",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_selection")]
+                    ])
+                )
+                return States.SELECT_QUANTITY
+        
+        elif query.data.startswith("select_mine_"):
+            drug_id = int(query.data.split('_')[2])
+            
+            # Find the drug in my items
+            my_drugs = context.user_data['my_drugs']
+            selected_drug = next((item for item in my_drugs if item['id'] == drug_id), None)
+            
+            if selected_drug:
+                context.user_data['current_drug'] = {
+                    'id': selected_drug['id'],
+                    'name': selected_drug['name'],
+                    'price': selected_drug['price'],
+                    'max_quantity': selected_drug['quantity'],
+                    'type': 'mine'
+                }
+                await query.edit_message_text(
+                    f"تعداد مورد نظر برای {selected_drug['name']} را وارد کنید (حداکثر: {selected_drug['quantity']}):",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_selection")]
+                    ])
+                )
+                return States.SELECT_QUANTITY
+        
+        elif query.data == "submit_offer":
+            return await submit_offer(update, context)
+        
+        elif query.data == "back":
+            return await handle_back(update, context)
+        
+        elif query.data == "back_to_selection":
+            return await show_drug_buttons(update, context)
+            
+    except Exception as e:
+        logger.error(f"Error in select_drug: {e}")
+        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
 async def show_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, is_target: bool):
     """نمایش لیست داروها برای انتخاب"""
     drug_list = context.user_data['target_drugs'] if is_target else context.user_data['my_drugs']
@@ -3446,41 +3465,46 @@ async def select_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYP
         return States.ENTER_QUANTITY
 
 async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """دریافت تعداد داروی انتخاب شده"""
+    """Handle quantity input for selected drug"""
     try:
         quantity = int(update.message.text)
-        current_drug = context.user_data['current_drug']
+        current_drug = context.user_data.get('current_drug')
         
+        if not current_drug:
+            await update.message.reply_text("اطلاعات دارو یافت نشد. لطفا دوباره تلاش کنید.")
+            return ConversationHandler.END
+            
         if quantity <= 0:
-            await update.message.reply_text("تعداد باید بیشتر از صفر باشد.")
-            return States.ENTER_QUANTITY
+            await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
+            return States.SELECT_QUANTITY
             
         if quantity > current_drug['max_quantity']:
-            await update.message.reply_text(f"موجودی کافی نیست. حداکثر: {current_drug['max_quantity']}")
-            return States.ENTER_QUANTITY
+            await update.message.reply_text(f"موجودی کافی نیست. حداکثر تعداد قابل انتخاب: {current_drug['max_quantity']}")
+            return States.SELECT_QUANTITY
         
-        # ذخیره انتخاب
+        # Save the selected quantity
         drug_type = current_drug['type']
         selected_items = context.user_data['selected_items'][drug_type]
         
-        # اگر دارو قبلا انتخاب شده، آن را حذف می‌کنیم
+        # Remove if already exists
         selected_items = [item for item in selected_items if item['id'] != current_drug['id']]
         
-        # اضافه کردن انتخاب جدید
+        # Add new selection
         selected_items.append({
             'id': current_drug['id'],
             'name': current_drug['name'],
+            'price': current_drug['price'],
             'quantity': quantity
         })
         
         context.user_data['selected_items'][drug_type] = selected_items
         
-        # بازگشت به لیست داروها
+        # Return to drug selection
         return await show_drug_buttons(update, context)
         
     except ValueError:
-        await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
-        return States.ENTER_QUANTITY
+        await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
+        return States.SELECT_QUANTITY
 async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ارسال پیشنهاد نهایی"""
     query = update.callback_query
@@ -4521,54 +4545,51 @@ def main():
         
         # Add conversation handler for search and trade
         trade_handler = ConversationHandler(
-            entry_points=[
-                MessageHandler(filters.Regex('^جستجوی دارو$'), search_drug),
-                CallbackQueryHandler(handle_match_notification, pattern="^view_match_"),
-                CallbackQueryHandler(select_pharmacy, pattern="^pharmacy_"),
-                CallbackQueryHandler(handle_offer_response, pattern="^offer_"),
-                CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"),
-                CallbackQueryHandler(handle_compensation_selection, pattern="^(compensate|comp_)"),
-                CallbackQueryHandler(confirm_totals, pattern="^(finish_selection|confirm_totals)$"),
-                CallbackQueryHandler(send_offer, pattern="^send_offer$")
-            ],
-            states={
-                States.SEARCH_DRUG: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
-                ],
-                States.SELECT_PHARMACY: [
-                    CallbackQueryHandler(select_pharmacy, pattern="^pharmacy_|back_to_pharmacies$")
-                ],
-                States.SELECT_ITEMS: [
-                    CallbackQueryHandler(handle_offer_response, pattern="^offer_|back_to_items$")
-                ],
-                States.SELECT_DRUGS: [  # این state جدید
-                   CallbackQueryHandler(select_drug, pattern="^select_target|select_mine|submit_offer|back$")
-                ],
-                States.SELECT_QUANTITY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, select_quantity),
-                    CallbackQueryHandler(handle_offer_response, pattern="^back_to_items$")
-                ],
-                States.CONFIRM_OFFER: [
-                    CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"),
-                    CallbackQueryHandler(handle_offer_response, pattern="^back_to_items$")
-                ],
-                States.COMPENSATION_SELECTION: [
-                    CallbackQueryHandler(show_two_column_selection, pattern="^add_more$"),
-                    CallbackQueryHandler(handle_compensation_selection, pattern="^(compensate|comp_)"),
-                    CallbackQueryHandler(confirm_totals, pattern="^finish_selection$")
-                ],
-                States.COMPENSATION_QUANTITY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation_quantity)
-                ],
-                States.CONFIRM_TOTALS: [
-                    CallbackQueryHandler(show_two_column_selection, pattern="^edit_selection$"),
-                    CallbackQueryHandler(confirm_totals, pattern="^back_to_totals$"),
-                    CallbackQueryHandler(send_offer, pattern="^send_offer$")
-                ]
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
-        )
+           entry_points=[
+               MessageHandler(filters.Regex('^جستجوی دارو$'), search_drug),
+               CallbackQueryHandler(handle_match_notification, pattern="^view_match_")
+               ],
+           states={
+               States.SEARCH_DRUG: [
+                   MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
+               ],
+               States.SELECT_PHARMACY: [
+                   CallbackQueryHandler(select_pharmacy, pattern="^pharmacy_\d+$"),
+                   CallbackQueryHandler(handle_back, pattern="^back_to_pharmacies$")
+               ],
+               States.SELECT_DRUGS: [
+                   CallbackQueryHandler(select_drug, pattern="^select_target_\d+$"),
+                   CallbackQueryHandler(select_drug, pattern="^select_mine_\d+$"),
+                   CallbackQueryHandler(submit_offer, pattern="^submit_offer$"),
+                   CallbackQueryHandler(handle_back, pattern="^back$")
+               ],
+               States.SELECT_QUANTITY: [
+                   MessageHandler(filters.TEXT & ~filters.COMMAND, enter_quantity),
+                   CallbackQueryHandler(show_drug_buttons, pattern="^back_to_selection$")
+               ],
+               States.CONFIRM_OFFER: [
+                   CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"),
+                   CallbackQueryHandler(show_drug_buttons, pattern="^back_to_selection$")
+               ],
+               States.COMPENSATION_SELECTION: [
+                   CallbackQueryHandler(show_two_column_selection, pattern="^add_more$"),
+                   CallbackQueryHandler(handle_compensation_selection, pattern="^compensate$"),
+                   CallbackQueryHandler(handle_compensation_selection, pattern="^comp_\d+$"),
+                   CallbackQueryHandler(confirm_totals, pattern="^finish_selection$")
+               ],
+               States.COMPENSATION_QUANTITY: [
+                   MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation_quantity),
+                   CallbackQueryHandler(show_two_column_selection, pattern="^back_to_compensation$")
+               ],
+               States.CONFIRM_TOTALS: [
+                   CallbackQueryHandler(show_two_column_selection, pattern="^edit_selection$"),
+                   CallbackQueryHandler(confirm_totals, pattern="^back_to_totals$"),
+                   CallbackQueryHandler(send_offer, pattern="^send_offer$")
+               ]
+           },
+           fallbacks=[CommandHandler('cancel', cancel)],
+           allow_reentry=True
+       )
         
         # Add conversation handler for medical categories
         categories_handler = ConversationHandler(
