@@ -1040,35 +1040,50 @@ async def receive_phone_for_admin_verify(update: Update, context: ContextTypes.D
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
+
 async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """تایید کاربر توسط ادمین"""
     try:
         query = update.callback_query
         await query.answer()
         
         user_id = int(query.data.split("_")[2])
-        logger.info(f"Attempting to approve user {user_id}")
+        logger.info(f"شروع فرآیند تایید برای کاربر {user_id}")
         
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                cursor.execute('SELECT id FROM users WHERE id = %s', (user_id,))
-                user_exists = cursor.fetchone()
-                logger.info(f"User exists check: {user_exists}")
-                # First check if user exists
-                cursor.execute('SELECT id FROM users WHERE id = %s', (user_id,))
-                if not cursor.fetchone():
-                    await query.edit_message_text(f"❌ کاربر با آیدی {user_id} یافت نشد.")
+                # بررسی وجود کاربر
+                cursor.execute('SELECT id, is_verified FROM users WHERE id = %s', (user_id,))
+                user_data = cursor.fetchone()
+                
+                if not user_data:
+                    logger.error(f"کاربر {user_id} یافت نشد")
+                    await query.edit_message_text(f"❌ کاربر با آیدی {user_id} در سیستم ثبت نشده است")
                     return
                 
-                # تایید کاربر و تبدیل به مدیر داروخانه
+                if user_data[1]:  # اگر کاربر از قبل تایید شده باشد
+                    logger.warning(f"کاربر {user_id} از قبل تایید شده است")
+                    await query.edit_message_text(f"⚠️ کاربر {user_id} قبلاً تایید شده بود")
+                    return
+                
+                # تایید کاربر
                 cursor.execute('''
                 UPDATE users 
-                SET is_verified = TRUE, is_pharmacy_admin = TRUE
+                SET is_verified = TRUE, 
+                    is_pharmacy_admin = TRUE,
+                    verification_method = 'admin_approved'
                 WHERE id = %s
+                RETURNING id
                 ''', (user_id,))
                 
-                # ایجاد رکورد داروخانه
+                if not cursor.fetchone():
+                    logger.error(f"خطا در به‌روزرسانی کاربر {user_id}")
+                    await query.edit_message_text("خطا در به‌روزرسانی وضعیت کاربر")
+                    return
+                
+                # ایجاد/به‌روزرسانی داروخانه
                 cursor.execute('''
                 INSERT INTO pharmacies (user_id, verified, verified_at, admin_id)
                 VALUES (%s, TRUE, CURRENT_TIMESTAMP, %s)
@@ -1076,9 +1091,17 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     verified = TRUE,
                     verified_at = CURRENT_TIMESTAMP,
                     admin_id = EXCLUDED.admin_id
+                RETURNING user_id
                 ''', (user_id, update.effective_user.id))
                 
+                if not cursor.fetchone():
+                    logger.error(f"خطا در ثبت داروخانه برای کاربر {user_id}")
+                    await query.edit_message_text("خطا در ثبت اطلاعات داروخانه")
+                    conn.rollback()
+                    return
+                
                 conn.commit()
+                logger.info(f"کاربر {user_id} با موفقیت تایید شد")
                 
                 # ارسال پیام به کاربر
                 try:
@@ -1087,34 +1110,16 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         text="✅ حساب شما توسط ادمین تایید شد!\n\n"
                              "شما اکنون می‌توانید از تمام امکانات مدیریت داروخانه استفاده کنید."
                     )
-                    
-                    keyboard = [
-                        ['اضافه کردن دارو', 'جستجوی دارو'],
-                        ['لیست داروهای من', 'ثبت نیاز جدید'],
-                        ['لیست نیازهای من', 'ساخت کد پرسنل'],
-                        ['تنظیم شاخه‌های دارویی']
-                    ]
-                    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-                    
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text="به پنل مدیریت داروخانه خوش آمدید:",
-                        reply_markup=reply_markup
-                    )
                 except Exception as e:
-                    logger.error(f"Failed to notify user: {e}")
-                    await query.edit_message_text(
-                        f"✅ کاربر {user_id} تایید شد اما ارسال پیام به کاربر ناموفق بود."
-                    )
-                    return
+                    logger.error(f"خطا در ارسال پیام به کاربر {user_id}: {str(e)}")
                 
                 await query.edit_message_text(
                     f"✅ کاربر {user_id} با موفقیت تایید شد و به عنوان مدیر داروخانه تنظیم شد."
                 )
                 
         except Exception as e:
-            logger.error(f"Error approving user: {e}")
-            await query.edit_message_text("خطا در تایید کاربر. لطفا لاگ‌ها را بررسی کنید.")
+            logger.error(f"خطا در تایید کاربر {user_id}: {str(e)}")
+            await query.edit_message_text(f"خطا در تایید کاربر: {str(e)}")
             if conn:
                 conn.rollback()
         finally:
@@ -1122,12 +1127,11 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 conn.close()
                 
     except Exception as e:
-        logger.error(f"Error in approve_user: {e}")
+        logger.error(f"خطای سیستمی در approve_user: {str(e)}")
         try:
-            await query.edit_message_text("خطایی در تایید کاربر رخ داد.")
+            await query.edit_message_text("خطای سیستمی در پردازش درخواست")
         except:
             pass
-
 async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """رد کاربر توسط ادمین"""
     try:
