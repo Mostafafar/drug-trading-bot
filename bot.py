@@ -4650,6 +4650,8 @@ def main():
         
         # Add callback query handler
         application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
+        # In your main() function:
+        application.add_handler(CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"))
         application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_user_"))
         # In your main() function where you set up handlers:
         application.add_handler(CallbackQueryHandler(submit_offer, pattern="^submit_offer$"))
