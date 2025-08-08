@@ -3385,7 +3385,7 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_list")]
                 ])
             )
-            return States.ENTER_QUANTITY
+            return States.SELECT_QUANTITY
     
     elif query.data == "submit_offer":
         return await submit_offer(update, context)
