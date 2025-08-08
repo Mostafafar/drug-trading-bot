@@ -3931,50 +3931,98 @@ async def send_exchange_final(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
 
 async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Confirm drug offer and proceed to compensation selection"""
+    """Confirm and send the offer"""
     try:
         query = update.callback_query
         await query.answer()
 
-        if query.data == "back_to_items":
-            return await handle_offer_response(update, context)
-            
-        selected_item = context.user_data.get('selected_item')
-        quantity = context.user_data.get('selected_quantity')
+        selected_items = context.user_data.get('selected_items', {'target': [], 'mine': []})
+        pharmacy_id = context.user_data.get('selected_pharmacy_id')
         
-        if not selected_item or not quantity:
-            await query.edit_message_text("اطلاعات ناقص است.")
+        if not pharmacy_id or (not selected_items['target'] and not selected_items['mine']):
+            await query.edit_message_text("اطلاعات ناقص است. لطفا دوباره تلاش کنید.")
             return States.SEARCH_DRUG
-            
-        # Initialize offer items list if not exists
-        if 'offer_items' not in context.user_data:
-            context.user_data['offer_items'] = []
-            
-        # Add item to offer
-        context.user_data['offer_items'].append({
-            'drug_name': selected_item['name'],
-            'price': selected_item['price'],
-            'quantity': quantity,
-            'pharmacy_id': context.user_data['selected_pharmacy_id']
-        })
+
+        # Calculate totals using parse_price
+        target_total = sum(parse_price(item['price']) * item['quantity'] for item in selected_items['target'])
+        my_total = sum(parse_price(item['price']) * item['quantity'] for item in selected_items['mine'])
         
-        keyboard = [
-            [InlineKeyboardButton("➕ افزودن داروی دیگر", callback_data="add_more")],
-            [InlineKeyboardButton("💵 پرداخت نقدی", callback_data="compensate")],
-            [InlineKeyboardButton("🔚 اتمام انتخاب", callback_data="finish_selection")]
-        ]
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                # Create offer record
+                cursor.execute('''
+                INSERT INTO offers (pharmacy_id, buyer_id, total_price, status)
+                VALUES (%s, %s, %s, 'pending')
+                RETURNING id
+                ''', (pharmacy_id, update.effective_user.id, target_total))
+                offer_id = cursor.fetchone()[0]
+                
+                # Add offer items
+                for item in selected_items['target']:
+                    cursor.execute('''
+                    INSERT INTO offer_items (offer_id, drug_name, price, quantity)
+                    VALUES (%s, %s, %s, %s)
+                    ''', (offer_id, item['name'], item['price'], item['quantity']))
+                
+                # Add compensation items if any
+                for item in selected_items['mine']:
+                    cursor.execute('''
+                    INSERT INTO compensation_items (offer_id, drug_id, quantity)
+                    VALUES (%s, %s, %s)
+                    ''', (offer_id, item['id'], item['quantity']))
+                
+                conn.commit()
+                
+                # Notify pharmacy
+                try:
+                    message = "📬 پیشنهاد تبادل جدید دریافت شد:\n\n"
+                    if selected_items['target']:
+                        message += "📌 داروهای درخواستی:\n"
+                        for item in selected_items['target']:
+                            message += f"- {item['name']} ({item['quantity']} عدد) - {item['price']}\n"
+                        message += f"💰 جمع کل: {target_total:,.0f}\n\n"
+                    
+                    if selected_items['mine']:
+                        message += "📌 داروهای پیشنهادی:\n"
+                        for item in selected_items['mine']:
+                            message += f"- {item['name']} ({item['quantity']} عدد)\n"
+                    
+                    keyboard = [
+                        [InlineKeyboardButton("✅ تأیید پیشنهاد", callback_data=f"accept_{offer_id}")],
+                        [InlineKeyboardButton("❌ رد پیشنهاد", callback_data=f"reject_{offer_id}")]
+                    ]
+                    
+                    await context.bot.send_message(
+                        chat_id=pharmacy_id,
+                        text=message,
+                        reply_markup=InlineKeyboardMarkup(keyboard))
+                    
+                    await query.edit_message_text(
+                        "✅ پیشنهاد شما با موفقیت ارسال شد!\n\n"
+                        "پس از تأیید داروخانه، جزئیات نهایی به شما اعلام خواهد شد.")
+                except Exception as e:
+                    logger.error(f"Failed to notify pharmacy: {e}")
+                    await query.edit_message_text(
+                        "پیشنهاد شما ثبت شد اما خطا در اطلاع‌رسانی به داروخانه رخ داد.\n"
+                        "لطفا با داروخانه تماس بگیرید.")
+                
+        except Exception as e:
+            logger.error(f"Error saving offer: {e}")
+            if conn:
+                conn.rollback()
+            await query.edit_message_text("خطا در ثبت پیشنهاد. لطفا دوباره تلاش کنید.")
+        finally:
+            if conn:
+                conn.close()
         
-        await query.edit_message_text(
-            "✅ دارو به لیست پیشنهادات اضافه شد.\n\n"
-            "می‌توانید داروی دیگری اضافه کنید یا روش جبران را انتخاب نمایید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return States.COMPENSATION_SELECTION
+        return ConversationHandler.END
+        
     except Exception as e:
         logger.error(f"Error in confirm_offer: {e}")
-        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
-
+        await query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return States.CONFIRM_OFFER
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show two-column selection for items and compensation"""
     try:
