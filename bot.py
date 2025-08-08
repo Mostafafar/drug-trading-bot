@@ -1236,6 +1236,20 @@ async def verify_personnel_code(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
+                # First check if the column exists
+                cursor.execute('''
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name='users' AND column_name='is_personnel'
+                ''')
+                column_exists = cursor.fetchone()
+                
+                if not column_exists:
+                    # Add the column if it doesn't exist
+                    cursor.execute('ALTER TABLE users ADD COLUMN is_personnel BOOLEAN DEFAULT FALSE')
+                    conn.commit()
+                
+                # Verify personnel code
                 cursor.execute('''
                 SELECT creator_id FROM personnel_codes 
                 WHERE code = %s
@@ -1248,14 +1262,22 @@ async def verify_personnel_code(update: Update, context: ContextTypes.DEFAULT_TY
                     
                 creator_id = result[0]
                 
-                cursor.execute('''
+                # Update user record
+                update_query = '''
                 UPDATE users 
                 SET is_verified = TRUE, 
-                    is_personnel = TRUE,
                     creator_id = %s
-                WHERE id = %s
-                ''', (creator_id, update.effective_user.id))
+                '''
+                params = [creator_id]
                 
+                # Only include is_personnel if column exists
+                if column_exists:
+                    update_query += ', is_personnel = TRUE'
+                
+                update_query += ' WHERE id = %s'
+                params.append(update.effective_user.id)
+                
+                cursor.execute(update_query, tuple(params))
                 conn.commit()
                 
                 await update.message.reply_text(
@@ -1285,6 +1307,7 @@ async def verify_personnel_code(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception as e:
             logger.error(f"Error verifying personnel code: {e}")
             await update.message.reply_text("خطا در تایید کد پرسنل")
+            return States.PERSONNEL_LOGIN
         finally:
             if conn:
                 conn.close()
