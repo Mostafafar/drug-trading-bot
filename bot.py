@@ -3290,8 +3290,12 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         finally:
             if conn:
                 conn.close()
+    except Exception as e:
+        logger.error(f"Error in select_pharmacy: {str(e)}")
+        await query.edit_message_text("خطایی در پردازش رخ داد.")
+        return ConversationHandler.END
 
-
+# This should be at the top level, not inside any try/except block
 async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش داروها به صورت دکمه‌های قابل انتخاب"""
     target_drugs = context.user_data.get('target_drugs', [])
@@ -3347,13 +3351,15 @@ async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.callback_query:
             await update.callback_query.edit_message_text(
                 message,
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                reply_markup=InlineKeyboardMarkup(keyboard))
         else:
             await update.message.reply_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard))
     except Exception as e:
         logger.error(f"خطا در نمایش دکمه‌ها: {str(e)}")
+
+
 async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug selection for offer"""
     try:
