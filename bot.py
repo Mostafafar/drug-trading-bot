@@ -3200,7 +3200,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     keyboard = []
                     for pharmacy_id, pharmacy_data in pharmacies.items():
                         keyboard.append([InlineKeyboardButton(
-                            f"🏥 {pharmacy_data['name']} ({len(pharmacy_data['items']} دارو)", 
+                            f"🏥 {pharmacy_data['name']} ({len(pharmacy_data['items'])} دارو)", 
                             callback_data=f"pharmacy_{pharmacy_id}"
                         )])
                     
