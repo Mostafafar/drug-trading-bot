@@ -3830,25 +3830,26 @@ def main():
         # Create application
         application = ApplicationBuilder().token("7584437136:AAFVtfF9RjCyteONcz8DSg2F2CfhgQT2GcQ").build()
         
-        # Add conversation handler with registration states
-        registration_handler = ConversationHandler(
+        # Add conversation handler for admin verification process
+        admin_verify_handler = ConversationHandler(
             entry_points=[
-                CommandHandler('start', start),
-                CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$"),
-                CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
-                CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$"),
-                CallbackQueryHandler(personnel_login_start, pattern="^personnel_login$"),
-                MessageHandler(filters.Regex('^ساخت کد پرسنل$'), generate_personnel_code)
+                CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$")
             ],
             states={
-                States.START: [
-                    CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$"),
-                    CallbackQueryHandler(register_pharmacy_name, pattern="^register$"),
-                    CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
-                ],
-                States.SIMPLE_VERIFICATION: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
-                ],
+                States.REGISTER_PHONE: [
+                    MessageHandler(filters.CONTACT | filters.TEXT, receive_phone_for_admin_verify)
+                ]
+            },
+            fallbacks=[CommandHandler('cancel', cancel)],
+            allow_reentry=True
+        )
+        
+        # Add conversation handler with registration states (normal registration)
+        registration_handler = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(register_pharmacy_name, pattern="^register$")
+            ],
+            states={
                 States.REGISTER_PHARMACY_NAME: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, register_founder_name)
                 ],
@@ -3878,14 +3879,50 @@ def main():
                 ],
                 States.VERIFICATION_CODE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, complete_registration)
-                ],
-                States.PERSONNEL_LOGIN: [
-                   MessageHandler(filters.TEXT & ~filters.COMMAND, verify_personnel_code)
-                ],
+                ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
             allow_reentry=True
         )
+        
+        # Add conversation handler for simple verification
+        simple_verify_handler = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
+            ],
+            states={
+                States.SIMPLE_VERIFICATION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
+                ]
+            },
+            fallbacks=[CommandHandler('cancel', cancel)],
+            allow_reentry=True
+        )
+        
+        # Add conversation handler for personnel login
+        personnel_handler = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(personnel_login_start, pattern="^personnel_login$")
+            ],
+            states={
+                States.PERSONNEL_LOGIN: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, verify_personnel_code)
+                ]
+            },
+            fallbacks=[CommandHandler('cancel', cancel)],
+            allow_reentry=True
+        )
+        
+        # Add all handlers
+        application.add_handler(CommandHandler('start', start))
+        application.add_handler(admin_verify_handler)
+        application.add_handler(registration_handler)
+        application.add_handler(simple_verify_handler)
+        application.add_handler(personnel_handler)
+        application.add_handler(MessageHandler(filters.Regex('^ساخت کد پرسنل$'), generate_personnel_code))
+        
+
+        
         
         # Add conversation handler for drug management
         drug_handler = ConversationHandler(
@@ -4040,6 +4077,8 @@ def main():
         )
         
         # Add handlers
+                # Add callback query handler for admin actions
+
         application.add_handler(registration_handler)
         application.add_handler(drug_handler)
         application.add_handler(needs_handler)
@@ -4048,6 +4087,8 @@ def main():
         application.add_handler(admin_handler)
         
         # Add callback query handler
+        application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
+        application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_user_"))
         application.add_handler(CallbackQueryHandler(callback_handler))
         
         # Add error handler
