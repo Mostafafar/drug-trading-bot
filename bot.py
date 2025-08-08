@@ -691,15 +691,37 @@ async def personnel_login_start(update: Update, context: ContextTypes.DEFAULT_TY
         query = update.callback_query
         await query.answer()
         
+        # Create a simple inline keyboard with a back button
+        keyboard = [
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await query.edit_message_text(
             "لطفا کد پرسنل خود را وارد کنید:",
-            reply_markup=ReplyKeyboardRemove()
+            reply_markup=reply_markup
         )
         return States.PERSONNEL_LOGIN
+        
     except Exception as e:
         logger.error(f"Error in personnel_login_start: {e}")
-        await update.message.reply_text("خطایی رخ داده است.")
-        return ConversationHandler.END
+        try:
+            # Try to send a new message if editing fails
+            if update.callback_query:
+                await context.bot.send_message(
+                    chat_id=update.callback_query.message.chat_id,
+                    text="لطفا کد پرسنل خود را وارد کنید:",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+            elif update.message:
+                await update.message.reply_text(
+                    "لطفا کد پرسنل خود را وارد کنید:",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+            return States.PERSONNEL_LOGIN
+        except Exception as e2:
+            logger.error(f"Failed to handle error in personnel_login_start: {e2}")
+            return ConversationHandler.END
 
 async def verify_personnel_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """تایید کد پرسنل"""
