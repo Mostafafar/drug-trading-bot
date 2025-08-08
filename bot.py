@@ -3549,6 +3549,7 @@ async def confirm_exchange(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             message,
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return States.CONFIRM_EXCHANGE
         
     except Exception as e:
