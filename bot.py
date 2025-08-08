@@ -3132,7 +3132,7 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug search requests and display results with inventory and expiry"""
     try:
