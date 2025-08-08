@@ -1052,9 +1052,9 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
-            cursor.execute('SELECT id FROM users WHERE id = %s', (user_id,))
-            user_exists = cursor.fetchone()
-            logger.info(f"User exists check: {user_exists}")
+                cursor.execute('SELECT id FROM users WHERE id = %s', (user_id,))
+                user_exists = cursor.fetchone()
+                logger.info(f"User exists check: {user_exists}")
                 # First check if user exists
                 cursor.execute('SELECT id FROM users WHERE id = %s', (user_id,))
                 if not cursor.fetchone():
