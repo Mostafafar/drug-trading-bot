@@ -4542,7 +4542,7 @@ def main():
                     CallbackQueryHandler(handle_offer_response, pattern="^offer_|back_to_items$")
                 ],
                 States.SELECT_DRUGS: [  # این state جدید
-                   CallbackQueryHandler(select_drugs, pattern="^select_target|select_mine|submit_offer|back$")
+                   CallbackQueryHandler(select_drug, pattern="^select_target|select_mine|submit_offer|back$")
                 ],
                 States.SELECT_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, select_quantity),
