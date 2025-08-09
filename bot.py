@@ -4030,18 +4030,19 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # Notify pharmacy
                 try:
-                    message = "📬 پیشنهاد تبادل جدید دریافت شد:\n\n"
+                    # در تابع confirm_offer:
+                    # در تابع confirm_offer:
+                    message = "📋 خلاصه پیشنهاد تبادل:\n\n"
                     if selected_items['target']:
                         message += "📌 داروهای درخواستی:\n"
                         for item in selected_items['target']:
                             message += f"- {item['name']} ({item['quantity']} عدد) - {item['price']}\n"
                         message += f"💰 جمع کل: {target_total:,.0f}\n\n"
-                    
+
                     if selected_items['mine']:
                         message += "📌 داروهای پیشنهادی:\n"
                         for item in selected_items['mine']:
                             message += f"- {item['name']} ({item['quantity']} عدد)\n"
-                    
                     keyboard = [
                         [InlineKeyboardButton("✅ تأیید پیشنهاد", callback_data=f"accept_{offer_id}")],
                         [InlineKeyboardButton("❌ رد پیشنهاد", callback_data=f"reject_{offer_id}")]
@@ -4403,20 +4404,21 @@ async def handle_match_notification(update: Update, context: ContextTypes.DEFAUL
                     [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
                 ]
                 
+                # در تابع handle_match_notification:
+                # در تابع handle_match_notification:
                 await query.edit_message_text(
                     f"💊 داروی مطابق نیاز:\n\n"
                     f"🏥 داروخانه: {drug['pharmacy_name']}\n"
                     f"🔹 دارو: {drug['name']}\n"
-                    f"💰 قیمت: {drug['price']}\n"
+                    f"💰 قیمت: {format_button_text(drug['price'], max_length=40)}\n"
                     f"📅 تاریخ انقضا: {drug['date']}\n"
                     f"📦 موجودی: {drug['quantity']}\n\n"
                     f"📝 نیاز شما:\n"
                     f"🔹 دارو: {need['name']}\n"
                     f"📦 تعداد مورد نیاز: {need['quantity']}\n\n"
-                    "آیا مایل به مبادله هستید؟",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
+                   "آیا مایل به مبادله هستید؟",
+                   reply_markup=InlineKeyboardMarkup(keyboard)
                 )
-                return States.CONFIRM_OFFER
                 
         except Exception as e:
             logger.error(f"Error handling match: {e}")
