@@ -2117,7 +2117,7 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         keyboard = []
         try:
             for idx, (name, price) in enumerate(matched_drugs[:10]):  # Limit to 10 results
-                display_text = f"{name} ({price})"
+                display_text = f"{format_button_text(name)}\n{format_button_text(price)}"
                 keyboard.append([InlineKeyboardButton(display_text, callback_data=f"select_drug_{idx}")])
         except Exception as e:
             logger.error(f"Error preparing keyboard: {e}")
@@ -2126,6 +2126,7 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
                 reply_markup=ReplyKeyboardRemove()
             )
             return States.SEARCH_DRUG_FOR_ADDING
+
 
         # Add navigation buttons
         keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
