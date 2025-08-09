@@ -2344,52 +2344,53 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List user's drug items"""
+    conn = None
     try:
         await ensure_user(update, context)
         
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                cursor.execute('''
-                SELECT id, name, price, date, quantity 
-                FROM drug_items 
-                WHERE user_id = %s AND quantity > 0
-                ORDER BY name
-                ''', (update.effective_user.id,))
-                drugs = cursor.fetchall()
-                
-                if drugs:
-                  message = "💊 لیست داروهای شما:\n\n"
-                  for drug in drugs:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+            cursor.execute('''
+            SELECT id, name, price, date, quantity 
+            FROM drug_items 
+            WHERE user_id = %s AND quantity > 0
+            ORDER BY name
+            ''', (update.effective_user.id,))
+            drugs = cursor.fetchall()
+            
+            if drugs:
+                message = "💊 لیست داروهای شما:\n\n"
+                for drug in drugs:
                     message += (
-                    f"• {drug['name']}\n"
-                    f"  قیمت: {drug['price']}\n"
-                    f"  تاریخ انقضا: {drug['date']}\n"
-                    f"  موجودی: {drug['quantity']}\n\n"
-                )
-            
-            keyboard = [
-                [InlineKeyboardButton(
-                    f"✏️ ویرایش داروها\n({len(drugs)} دارو)",
-                    callback_data="edit_drugs"
-                )],
-                [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
-            ]
-            
-            await update.message.reply_text(
-                message,
-                reply_markup=InlineKeyboardMarkup(keyboard))
-            return States.EDIT_DRUG
-        else:
-            await update.message.reply_text("شما هنوز هیچ دارویی اضافه نکرده‌اید.")
-        finally:
-            if conn:
-                conn.close()
+                        f"• {drug['name']}\n"
+                        f"  قیمت: {drug['price']}\n"
+                        f"  تاریخ انقضا: {drug['date']}\n"
+                        f"  موجودی: {drug['quantity']}\n\n"
+                    )
+                
+                keyboard = [
+                    [InlineKeyboardButton(
+                        f"✏️ ویرایش داروها\n({len(drugs)} دارو)",
+                        callback_data="edit_drugs"
+                    )],
+                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+                ]
+                
+                await update.message.reply_text(
+                    message,
+                    reply_markup=InlineKeyboardMarkup(keyboard))
+                return States.EDIT_DRUG
+            else:
+                await update.message.reply_text("شما هنوز هیچ دارویی اضافه نکرده‌اید.")
+                
     except Exception as e:
-        logger.error(f"Error in list_my_drugs: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+        logger.error(f"Error listing drugs: {e}")
+        await update.message.reply_text("خطا در دریافت لیست داروها. لطفا دوباره تلاش کنید.")
+    finally:
+        if conn:
+            conn.close()
+    
+    return ConversationHandler.END
 
 async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start drug editing process"""
