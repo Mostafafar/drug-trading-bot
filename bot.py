@@ -2145,16 +2145,17 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         # Prepare keyboard with drug options
         # در تابع search_drug_for_adding، قسمت ایجاد keyboard را تغییر دهید:
         keyboard = []
-        for idx, (name, price) in enumerate(matched_drugs[:10]):  # Limit to 10 results
-            display_text = f"{format_button_text(name)}\nقیمت: {format_button_text(price)}"
-            keyboard.append([InlineKeyboardButton(display_text, callback_data=f"select_drug_{idx}")])
-        except Exception as e:
-            logger.error(f"Error preparing keyboard: {e}")
-            await message.reply_text(
-                "خطایی در آماده‌سازی لیست داروها رخ داد.",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            return States.SEARCH_DRUG_FOR_ADDING
+        try:
+           for idx, (name, price) in enumerate(matched_drugs[:10]):  # Limit to 10 results
+           display_text = f"{format_button_text(name)}\nقیمت: {format_button_text(price)}"
+           keyboard.append([InlineKeyboardButton(display_text, callback_data=f"select_drug_{idx}")])
+       except Exception as e:
+           logger.error(f"Error preparing keyboard: {e}")
+           await message.reply_text(
+              "خطایی در آماده‌سازی لیست داروها رخ داد.",
+              reply_markup=ReplyKeyboardRemove()
+           )
+           return States.SEARCH_DRUG_FOR_ADDING
 
 
         # Add navigation buttons
