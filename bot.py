@@ -355,52 +355,35 @@ async def initialize_db():
     finally:
         if conn:
             conn.close()
-def format_button_text(text, max_length=25, max_lines=3):
-    """Format text for button display with proper line breaks"""
+def format_button_text(text, max_line_length=25, max_lines=2):
+    """
+    Format text for Telegram button with proper line breaks
+    Returns: Text formatted for button display
+    """
     if not text:
         return ""
     
-    # Split into words while preserving newlines
-    words = []
-    for line in text.split('\n'):
-        words.extend(line.split(' '))
-        words.append('\n')
-    
-    # Remove last newline if exists
-    if words and words[-1] == '\n':
-        words.pop()
-    
+    # Split into words
+    words = text.split()
     lines = []
     current_line = ""
     
     for word in words:
-        if word == '\n':
-            if current_line:
-                lines.append(current_line.strip())
-                current_line = ""
-            continue
-            
-        if len(current_line) + len(word) + 1 <= max_length:
-            current_line += f" {word}"
+        if len(current_line) + len(word) + 1 <= max_line_length:
+            current_line += f" {word}" if current_line else word
         else:
-            if current_line:
-                lines.append(current_line.strip())
-                current_line = word
-            else:
-                # Handle very long words
-                for i in range(0, len(word), max_length):
-                    lines.append(word[i:i+max_length])
+            lines.append(current_line)
+            current_line = word
+            if len(lines) >= max_lines:
+                break
     
-    if current_line:
-        lines.append(current_line.strip())
-    
-    # Limit number of lines
-    lines = lines[:max_lines]
+    if current_line and len(lines) < max_lines:
+        lines.append(current_line)
     
     # Join with newlines and truncate if too long
     result = '\n'.join(lines)
-    if len(result) > max_length * max_lines:
-        result = result[:max_length * max_lines - 3] + "..."
+    if len(result) > max_line_length * max_lines:
+        result = result[:max_line_length * max_lines - 3] + "..."
     
     return result
 
