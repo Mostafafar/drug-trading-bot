@@ -355,6 +355,25 @@ async def initialize_db():
     finally:
         if conn:
             conn.close()
+def format_button_text(text, max_length=30):
+    """Format text for button display with proper line breaks"""
+    if not text:
+        return ""
+    
+    # Split into lines if already contains newlines
+    lines = []
+    for line in text.split('\n'):
+        while len(line) > max_length:
+            # Find the last space within max_length
+            space_pos = line.rfind(' ', 0, max_length)
+            if space_pos == -1:
+                space_pos = max_length
+            lines.append(line[:space_pos])
+            line = line[space_pos+1:]
+        if line:
+            lines.append(line)
+    
+    return '\n'.join(lines)
 
 async def ensure_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ensure user exists in database"""
