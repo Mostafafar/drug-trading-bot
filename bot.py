@@ -355,7 +355,7 @@ async def initialize_db():
     finally:
         if conn:
             conn.close()
-def format_button_text(text, max_length=30, max_lines=2):
+def format_button_text(text, max_length=40, max_lines=3):
     """Format text for button display with proper line breaks"""
     if not text:
         return ""
