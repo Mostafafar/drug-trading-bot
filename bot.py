@@ -2443,13 +2443,14 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text("هیچ دارویی برای ویرایش وجود ندارد.")
                     return ConversationHandler.END
                 
+                # در تابع edit_drugs:
                 keyboard = []
                 for drug in drugs:
-                  display_text = f"{format_button_text(drug['name'])}\nموجودی: {drug['quantity']}"
-                  keyboard.append([InlineKeyboardButton(
-                  display_text,
-                  callback_data=f"edit_drug_{drug['id']}"
-            )])
+                    display_text = f"{format_button_text(drug['name'])}\nموجودی: {drug['quantity']}"
+                    keyboard.append([InlineKeyboardButton(
+                        display_text,
+                        callback_data=f"edit_drug_{drug['id']}"
+                    )])
                 keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
                 await query.edit_message_text(
                     "لطفا دارویی که می‌خواهید ویرایش کنید را انتخاب کنید:",
