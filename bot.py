@@ -3358,25 +3358,24 @@ async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     selected_items = context.user_data.get('selected_items', {'target': [], 'mine': []})
     
     # ایجاد دکمه‌های داروهای داروخانه مقابل
+    # در تابع show_drug_buttons:
     target_buttons = []
     for drug in target_drugs:
-        display_text = f"{format_button_text(drug['name'])}\n{format_button_text(drug['price'])}"
+        display_text = f"{format_button_text(drug['name'])}\nقیمت: {format_button_text(drug['price'])}"
         is_selected = any(item['id'] == drug['id'] for item in selected_items['target'])
         target_buttons.append([InlineKeyboardButton(
-            f"{'✅ ' if is_selected else '◻️ '}{display_text}",
-            callback_data=f"select_target_{drug['id']}"
+        f"{'✅ ' if is_selected else '◻️ '}{display_text}",
+        callback_data=f"select_target_{drug['id']}"
         )])
-    
-    # ایجاد دکمه‌های داروهای کاربر
+
     my_buttons = []
     for drug in my_drugs:
-        display_text = f"{format_button_text(drug['name'])}\n{format_button_text(drug['price'])}"
+        display_text = f"{format_button_text(drug['name'])}\nقیمت: {format_button_text(drug['price'])}"
         is_selected = any(item['id'] == drug['id'] for item in selected_items['mine'])
         my_buttons.append([InlineKeyboardButton(
-            f"{'✅ ' if is_selected else '◻️ '}{display_text}",
-            callback_data=f"select_mine_{drug['id']}"
+        f"{'✅ ' if is_selected else '◻️ '}{display_text}",
+        callback_data=f"select_mine_{drug['id']}"
         )])
-    
     # ایجاد صفحه بندی اگر داروها زیاد باشند
     keyboard = [
         [InlineKeyboardButton("--- داروهای مقابل ---", callback_data="none")],
