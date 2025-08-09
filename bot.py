@@ -355,25 +355,54 @@ async def initialize_db():
     finally:
         if conn:
             conn.close()
-def format_button_text(text, max_length=30):
+def format_button_text(text, max_length=30, max_lines=2):
     """Format text for button display with proper line breaks"""
     if not text:
         return ""
     
-    # Split into lines if already contains newlines
-    lines = []
+    # Split into words while preserving newlines
+    words = []
     for line in text.split('\n'):
-        while len(line) > max_length:
-            # Find the last space within max_length
-            space_pos = line.rfind(' ', 0, max_length)
-            if space_pos == -1:
-                space_pos = max_length
-            lines.append(line[:space_pos])
-            line = line[space_pos+1:]
-        if line:
-            lines.append(line)
+        words.extend(line.split(' '))
+        words.append('\n')
     
-    return '\n'.join(lines)
+    # Remove last newline if exists
+    if words and words[-1] == '\n':
+        words.pop()
+    
+    lines = []
+    current_line = ""
+    
+    for word in words:
+        if word == '\n':
+            if current_line:
+                lines.append(current_line.strip())
+                current_line = ""
+            continue
+            
+        if len(current_line) + len(word) + 1 <= max_length:
+            current_line += f" {word}"
+        else:
+            if current_line:
+                lines.append(current_line.strip())
+                current_line = word
+            else:
+                # Handle very long words
+                for i in range(0, len(word), max_length):
+                    lines.append(word[i:i+max_length])
+    
+    if current_line:
+        lines.append(current_line.strip())
+    
+    # Limit number of lines
+    lines = lines[:max_lines]
+    
+    # Join with newlines and truncate if too long
+    result = '\n'.join(lines)
+    if len(result) > max_length * max_lines:
+        result = result[:max_length * max_lines - 3] + "..."
+    
+    return result
 
 async def ensure_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ensure user exists in database"""
