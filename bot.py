@@ -2080,14 +2080,11 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     results = []
     for idx, (name, price) in enumerate(drug_list):
         if query.lower() in name.lower():
-            # نمایش نام کامل دارو با رفتن به خط بعدی برای قیمت
-            display_text = f"{name}\nقیمت: {price}"
-            
             results.append(
                 InlineQueryResultArticle(
                     id=str(idx),
-                    title=name,
-                    description=price,
+                    title=f"{name} - {price}",
+                    description=f"قیمت: {price}",
                     input_message_content=InputTextMessageContent(
                         f"💊 {name}\n💰 قیمت: {price}"
                     ),
@@ -2096,18 +2093,13 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                             "➕ اضافه به لیست داروها",
                             callback_data=f"add_drug_{idx}"
                         )]
-                    ]),
-                    # استفاده از متن نمایشی با خط جدید
-                    thumb_url="https://example.com/drug_icon.png" if idx % 2 == 0 else None,
-                    thumb_width=48,
-                    thumb_height=48
+                    ])
                 )
             )
         if len(results) >= 50:
             break
     
     await update.inline_query.answer(results)
-
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle selected inline result"""
     result_id = update.chosen_inline_result.result_id
