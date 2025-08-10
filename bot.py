@@ -2049,6 +2049,30 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
         if conn:
             conn.close()
 # Drug Management
+async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle add drug from inline query result"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        idx = int(query.data.split("_")[2])
+        if 0 <= idx < len(drug_list):
+            selected_drug = drug_list[idx]
+            context.user_data['selected_drug'] = {
+                'name': selected_drug[0],
+                'price': selected_drug[1]
+            }
+            
+            await query.edit_message_text(
+                f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
+                "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
+            )
+            return States.ADD_DRUG_DATE
+            
+    except Exception as e:
+        logger.error(f"Error handling add drug callback: {e}")
+        await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
 
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a drug item with inline query"""
