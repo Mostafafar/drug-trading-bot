@@ -4666,6 +4666,7 @@ def main():
             ],
             states={
                 States.SEARCH_DRUG_FOR_ADDING: [
+                    CallbackQueryHandler(add_drug_item, pattern="^back$"),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
                 ],
                 States.SELECT_DRUG_FOR_ADDING: [
@@ -4738,8 +4739,8 @@ def main():
                    CallbackQueryHandler(handle_back, pattern="^back_to_pharmacies$")
                ],
                States.SELECT_DRUGS: [
-                   CallbackQueryHandler(select_drug, pattern="^select_target_\d+$"),
-                   CallbackQueryHandler(select_drug, pattern="^select_mine_\d+$"),
+                   MessageHandler(select_drug, pattern="^select_target_\d+$"),
+                   MessageHandler(select_drug, pattern="^select_mine_\d+$"),
                    CallbackQueryHandler(submit_offer, pattern="^submit_offer$"),
                    CallbackQueryHandler(handle_back, pattern="^back$")
                ],
@@ -4813,6 +4814,8 @@ def main():
         application.add_handler(trade_handler)
         application.add_handler(categories_handler)
         application.add_handler(admin_handler)
+        application.add_handler(InlineQueryHandler(handle_inline_query))
+        application.add_handler(ChosenInlineResultHandler(handle_chosen_inline_result))
         
         # Add callback query handler
         application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
