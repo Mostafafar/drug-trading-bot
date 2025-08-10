@@ -2067,6 +2067,58 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in add_drug_item: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle inline query for drug search"""
+    query = update.inline_query.query
+    if not query:
+        return
+    
+    results = []
+    for idx, (name, price) in enumerate(drug_list):
+        if query.lower() in name.lower():
+            results.append(
+                InlineQueryResultArticle(
+                    id=str(idx),
+                    title=name,
+                    description=price,
+                    input_message_content=InputTextMessageContent(
+                        f"💊 {name}\n💰 قیمت: {price}"
+                    ),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "➕ اضافه به لیست داروها",
+                            callback_data=f"add_drug_{idx}"
+                        )]
+                    ])
+                )
+            )
+        if len(results) >= 50:  # محدودیت تعداد نتایج
+            break
+    
+    await update.inline_query.answer(results)
+
+async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle selected inline result"""
+    result_id = update.chosen_inline_result.result_id
+    try:
+        idx = int(result_id)
+        if 0 <= idx < len(drug_list):
+            selected_drug = drug_list[idx]
+            context.user_data['selected_drug'] = {
+                'name': selected_drug[0],
+                'price': selected_drug[1]
+            }
+            
+            await context.bot.send_message(
+                chat_id=update.chosen_inline_result.from_user.id,
+                text=f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
+                     "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
+            )
+            return States.ADD_DRUG_DATE
+    except Exception as e:
+        logger.error(f"Error handling chosen inline result: {e}")
+    
+    return ConversationHandler.END
 
 
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
