@@ -3389,7 +3389,7 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # محاسبه تعداد صفحات
                 items_per_page = 10
-                total_pages = (len(target_drugs) // items_per_page + (1 if len(target_drugs) % items_per_page != 0 else 0)
+                total_pages = (len(target_drugs) // items_per_page + (1 if len(target_drugs) % items_per_page != 0 else 0))
                 
                 # ساخت کیبرد معمولی برای داروها با صفحه‌بندی
                 keyboard = []
