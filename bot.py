@@ -2071,8 +2071,23 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in add_drug_item: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
+
+def split_drug_info(full_text):
+    """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
+    # پیدا کردن اولین عدد در متن
+    match = re.search(r'\d', full_text)
+    if match:
+        split_pos = match.start()
+        title = full_text[:split_pos].strip()
+        description = full_text[split_pos:].strip()
+    else:
+        title = full_text
+        description = "قیمت نامشخص"
+    return title, description
+
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle inline query for drug search"""
+    """Handle inline query for drug search with smart splitting"""
     query = update.inline_query.query
     if not query:
         return
@@ -2080,11 +2095,14 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     results = []
     for idx, (name, price) in enumerate(drug_list):
         if query.lower() in name.lower():
+            # جدا کردن نام و توضیحات
+            title_part, desc_part = split_drug_info(name)
+            
             results.append(
                 InlineQueryResultArticle(
                     id=str(idx),
-                    title=f"{name} - {price}",
-                    description=f"قیمت: {price}",
+                    title=title_part,
+                    description=f"{desc_part} 💰 {price}",
                     input_message_content=InputTextMessageContent(
                         f"💊 {name}\n💰 قیمت: {price}"
                     ),
