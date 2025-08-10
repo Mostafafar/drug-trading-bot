@@ -3449,6 +3449,58 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in select_pharmacy: {str(e)}")
         await query.edit_message_text("خطایی در پردازش رخ داد.")
         return ConversationHandler.END
+async def handle_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت انتخاب دارو و صفحه‌بندی"""
+    user_input = update.message.text
+    
+    # بررسی دکمه‌های صفحه‌بندی
+    if user_input == "⬅️ صفحه قبل":
+        context.user_data['current_page'] -= 1
+        return await select_pharmacy(update, context)
+    elif user_input == "➡️ صفحه بعد":
+        context.user_data['current_page'] += 1
+        return await select_pharmacy(update, context)
+    elif user_input == "🔙 بازگشت به نتایج جستجو":
+        # بازگشت به نتایج جستجو
+        context.user_data.pop('current_page', None)
+        return await search_drug(update, context)
+    elif user_input == "📤 ارسال پیشنهاد تبادل":
+        # ارسال پیشنهاد تبادل
+        return await submit_offer(update, context)
+    else:
+        # پردازش انتخاب دارو
+        try:
+            # پیدا کردن داروی انتخاب شده
+            drug_name = user_input.split(' - ')[0][2:]  # حذف emoji و جداکننده
+            target_drugs = context.user_data.get('target_drugs', [])
+            
+            selected_drug = next((d for d in target_drugs if d['name'] == drug_name), None)
+            
+            if selected_drug:
+                context.user_data['selected_drug'] = {
+                    'id': selected_drug['id'],
+                    'name': selected_drug['name'],
+                    'price': selected_drug['price'],
+                    'max_quantity': selected_drug['quantity'],
+                    'type': 'target'
+                }
+                
+                await update.message.reply_text(
+                    f"💊 داروی انتخاب شده: {selected_drug['name']}\n"
+                    f"💰 قیمت: {selected_drug['price']}\n\n"
+                    f"لطفا تعداد مورد نیاز را وارد کنید (حداکثر {selected_drug['quantity']}):",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+                
+                return States.SELECT_QUANTITY
+            else:
+                await update.message.reply_text("دارو یافت نشد. لطفا دوباره انتخاب کنید.")
+                return States.SELECT_DRUGS
+                
+        except Exception as e:
+            logger.error(f"Error in handle_drug_selection: {e}")
+            await update.message.reply_text("خطایی در پردازش انتخاب دارو رخ داد.")
+            return States.SELECT_DRUGS
 # This should be at the top level, not inside any try/except block
 async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش داروها به صورت دکمه‌های قابل انتخاب"""
