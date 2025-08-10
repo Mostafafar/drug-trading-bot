@@ -40,7 +40,8 @@ from telegram.ext import (
     ContextTypes,
     filters,
     CallbackContext,
-    ExtBot
+    ExtBot,
+    InlineQueryHandler
 )
 from telegram.constants import ParseMode
 from psycopg2 import sql, extras
