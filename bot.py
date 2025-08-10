@@ -2043,19 +2043,31 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
         if conn:
             conn.close()
 # Drug Management
+
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start process to add a drug item"""
+    """Start process to add a drug item with inline query"""
     try:
         await ensure_user(update, context)
+        
+        # ایجاد دکمه برای جستجوی اینلاین
+        keyboard = [
+            [InlineKeyboardButton(
+                "🔍 جستجوی دارو", 
+                switch_inline_query_current_chat=""
+            )],
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+        ]
+        
         await update.message.reply_text(
-            "لطفا نام دارویی که می‌خواهید اضافه کنید را جستجو کنید:",
-            reply_markup=ReplyKeyboardRemove()
+            "برای اضافه کردن دارو، روی دکمه جستجو کلیک کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return States.SEARCH_DRUG_FOR_ADDING
     except Exception as e:
         logger.error(f"Error in add_drug_item: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Search for drug to add with comprehensive error handling and logging"""
