@@ -4828,51 +4828,51 @@ def main():
         
         # Add conversation handler for search and trade
         trade_handler = ConversationHandler(
-           entry_points=[
-               MessageHandler(filters.Regex('^جستجوی دارو$'), search_drug),
-               CallbackQueryHandler(handle_match_notification, pattern="^view_match_")
-               ],
-           states={
-               States.SEARCH_DRUG: [
-                   MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
-               ],
-               States.SELECT_PHARMACY: [
-                   CallbackQueryHandler(select_pharmacy, pattern="^pharmacy_\d+$"),
-                   CallbackQueryHandler(handle_back, pattern="^back_to_pharmacies$")
-               ],
-               States.SELECT_DRUGS: [
-                   MessageHandler(select_drug, pattern="^select_target_\d+$"),
-                   MessageHandler(select_drug, pattern="^select_mine_\d+$"),
-                   CallbackQueryHandler(submit_offer, pattern="^submit_offer$"),
-                   CallbackQueryHandler(handle_back, pattern="^back$")
-               ],
-               States.SELECT_QUANTITY: [
-                   MessageHandler(filters.TEXT & ~filters.COMMAND, enter_quantity),
-                   CallbackQueryHandler(show_drug_buttons, pattern="^back_to_selection$")
-               ],
-               States.CONFIRM_OFFER: [
-                   CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"),
-                   CallbackQueryHandler(show_drug_buttons, pattern="^back_to_selection$")
-               ],
-               States.COMPENSATION_SELECTION: [
-                   CallbackQueryHandler(show_two_column_selection, pattern="^add_more$"),
-                   CallbackQueryHandler(handle_compensation_selection, pattern="^compensate$"),
-                   CallbackQueryHandler(handle_compensation_selection, pattern="^comp_\d+$"),
-                   CallbackQueryHandler(confirm_totals, pattern="^finish_selection$")
-               ],
-               States.COMPENSATION_QUANTITY: [
-                   MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation_quantity),
-                   CallbackQueryHandler(show_two_column_selection, pattern="^back_to_compensation$")
-               ],
-               States.CONFIRM_TOTALS: [
-                   CallbackQueryHandler(show_two_column_selection, pattern="^edit_selection$"),
-                   CallbackQueryHandler(confirm_totals, pattern="^back_to_totals$"),
-                   CallbackQueryHandler(send_offer, pattern="^send_offer$")
-               ]
-           },
-           fallbacks=[CommandHandler('cancel', cancel)],
-           allow_reentry=True
-       )
+            entry_points=[
+                MessageHandler(filters.Regex(r'^جستجوی دارو$'), search_drug),
+                CallbackQueryHandler(handle_match_notification, pattern=r'^view_match_')
+            ],
+            states={
+                States.SEARCH_DRUG: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
+            ],
+                States.SELECT_PHARMACY: [
+                    CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_\d+$')
+            ],
+                States.SELECT_DRUGS: [
+                    MessageHandler(filters.Regex(r'^select_target_\d+$'), select_drug),
+                    MessageHandler(filters.Regex(r'^select_mine_\d+$'), select_drug),
+                    MessageHandler(filters.Regex(r'^submit_offer$'), submit_offer),
+                    MessageHandler(filters.Regex(r'^back$'), handle_back)
+           ],
+                States.SELECT_QUANTITY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, enter_quantity),
+                    CallbackQueryHandler(show_drug_buttons, pattern=r'^back_to_selection$')
+           ],
+                States.CONFIRM_OFFER: [
+                    CallbackQueryHandler(confirm_offer, pattern=r'^confirm_offer$'),
+                    CallbackQueryHandler(show_drug_buttons, pattern=r'^back_to_selection$')
+           ],
+                States.COMPENSATION_SELECTION: [
+                    CallbackQueryHandler(show_two_column_selection, pattern=r'^add_more$'),
+                    CallbackQueryHandler(handle_compensation_selection, pattern=r'^compensate$'),
+                    CallbackQueryHandler(handle_compensation_selection, pattern=r'^comp_\d+$'),
+                    CallbackQueryHandler(confirm_totals, pattern=r'^finish_selection$')
+          ],
+                States.COMPENSATION_QUANTITY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation_quantity),
+                    CallbackQueryHandler(show_two_column_selection, pattern=r'^back_to_compensation$')
+          ],
+                States.CONFIRM_TOTALS: [
+                    CallbackQueryHandler(show_two_column_selection, pattern=r'^edit_selection$'),
+                    CallbackQueryHandler(confirm_totals, pattern=r'^back_to_totals$'),
+                    CallbackQueryHandler(send_offer, pattern=r'^send_offer$')
+                ]  
+         },
+         fallbacks=[CommandHandler('cancel', cancel)],
+         allow_reentry=True,
+         per_message=True  # To address the PTBUserWarning
+        )
         
         # Add conversation handler for medical categories
         categories_handler = ConversationHandler(
