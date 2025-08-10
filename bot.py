@@ -4967,6 +4967,7 @@ def main():
         application.add_handler(ChosenInlineResultHandler(handle_chosen_inline_result))
         
         # Add callback query handler
+        application.add_handler(CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"))
         application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
         # In your main() function:
         application.add_handler(CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"))
