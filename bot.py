@@ -4662,7 +4662,7 @@ def main():
             logger.warning("Failed to load drug data - some features may not work")
         
         # Create application
-        application = ApplicationBuilder().token("7584437136:AAFVtfF9RjCyteONcz8DSg2F2CfhgQT2GcQ").build()
+        application = ApplicationBuilder().token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY").build()
         
         # Add conversation handler for admin verification process
         admin_verify_handler = ConversationHandler(
