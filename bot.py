@@ -3327,7 +3327,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش داروهای دو طرف به صورت دکمه‌های قابل انتخاب"""
+    """نمایش داروهای دو طرف به صورت کیبرد معمولی با صفحه‌بندی"""
     try:
         query = update.callback_query
         await query.answer()
@@ -3335,6 +3335,10 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # دریافت اطلاعات داروخانه انتخاب شده
         pharmacy_id = int(query.data.split('_')[1])
         user_id = update.effective_user.id
+        
+        # تنظیم صفحه فعلی اگر وجود ندارد
+        if 'current_page' not in context.user_data:
+            context.user_data['current_page'] = 0
         
         conn = None
         try:
@@ -3373,7 +3377,7 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # ذخیره در context
                 context.user_data.update({
-                    'selected_pharmacy': dict(pharmacy),  # Store pharmacy info
+                    'selected_pharmacy': dict(pharmacy),
                     'target_drugs': target_drugs,
                     'my_drugs': my_drugs,
                     'selected_pharmacy_id': pharmacy_id,
@@ -3383,8 +3387,55 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     }
                 })
                 
-                # نمایش دکمه‌های انتخاب دارو
-                await show_drug_buttons(update, context)
+                # محاسبه تعداد صفحات
+                items_per_page = 10
+                total_pages = (len(target_drugs) // items_per_page + (1 if len(target_drugs) % items_per_page != 0 else 0)
+                
+                # ساخت کیبرد معمولی برای داروها با صفحه‌بندی
+                keyboard = []
+                
+                # محاسبه محدوده داروهای صفحه فعلی
+                start_idx = context.user_data['current_page'] * items_per_page
+                end_idx = start_idx + items_per_page
+                current_page_drugs = target_drugs[start_idx:end_idx]
+                
+                # اضافه کردن داروهای صفحه فعلی
+                for drug in current_page_drugs:
+                    keyboard.append([f"💊 {drug['name']} - {drug['price']}"])
+                
+                # اضافه کردن دکمه‌های صفحه‌بندی اگر نیاز باشد
+                pagination_buttons = []
+                if context.user_data['current_page'] > 0:
+                    pagination_buttons.append("⬅️ صفحه قبل")
+                if context.user_data['current_page'] < total_pages - 1:
+                    pagination_buttons.append("➡️ صفحه بعد")
+                
+                if pagination_buttons:
+                    keyboard.append(pagination_buttons)
+                
+                # اضافه کردن دکمه‌های ناوبری
+                keyboard.append(["🔙 بازگشت به نتایج جستجو"])
+                keyboard.append(["📤 ارسال پیشنهاد تبادل"])
+                
+                reply_markup = ReplyKeyboardMarkup(
+                    keyboard, 
+                    resize_keyboard=True,
+                    one_time_keyboard=False  # برای صفحه‌بندی بهتر است one_time_keyboard=False باشد
+                )
+                
+                await query.edit_message_text(
+                    f"🏥 داروخانه: {pharmacy['pharmacy_name']}\n\n"
+                    f"📄 صفحه {context.user_data['current_page'] + 1} از {total_pages}\n\n"
+                    "لطفا داروی مورد نظر را از کیبرد زیر انتخاب کنید:",
+                    reply_markup=None  # حذف کیبرد اینلاین
+                )
+                
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="داروهای موجود در این داروخانه:",
+                    reply_markup=reply_markup
+                )
+                
                 return States.SELECT_DRUGS
                 
         except Exception as e:
@@ -3398,7 +3449,6 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in select_pharmacy: {str(e)}")
         await query.edit_message_text("خطایی در پردازش رخ داد.")
         return ConversationHandler.END
-
 # This should be at the top level, not inside any try/except block
 async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش داروها به صورت دکمه‌های قابل انتخاب"""
