@@ -28,7 +28,9 @@ from telegram import (
     InlineKeyboardMarkup,
     KeyboardButton,
     constants,
-    error
+    error,
+    InlineQueryResultArticle,  # Add this
+    InputTextMessageContent  # Add this
 )
 from telegram.ext import (
     Application,
@@ -41,7 +43,8 @@ from telegram.ext import (
     filters,
     CallbackContext,
     ExtBot,
-    InlineQueryHandler
+    InlineQueryHandler,
+    ChosenInlineResultHandler
 )
 from telegram.constants import ParseMode
 from psycopg2 import sql, extras
