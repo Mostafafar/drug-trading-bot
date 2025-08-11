@@ -1958,10 +1958,12 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
             await update.callback_query.edit_message_text(
                 "برای جستجوی دارو روی دکمه زیر کلیک کنید:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
+            )
         else:
             await update.message.reply_text(
                 "برای جستجوی دارو روی دکمه زیر کلیک کنید:",
-                reply_markup=InlineKeyboardMarkup(keyboard))
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             
         return States.SEARCH_DRUG_FOR_ADDING
         
@@ -1969,6 +1971,7 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         logger.error(f"Error in search_drug_for_adding: {e}")
         await update.message.reply_text("خطایی در شروع جستجو رخ داد.")
         return ConversationHandler.END
+
 
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline queries for drug search"""
