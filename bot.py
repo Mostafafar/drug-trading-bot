@@ -1974,6 +1974,7 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline queries for drug search"""
     try:
         query = update.inline_query.query
@@ -1981,27 +1982,22 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
         
         results = []
-        for drug in drug_list[:50]:  # Limit to 50 results
-            name, price = drug
+        for idx, (name, price) in enumerate(drug_list[:50]):  # Limit to 50 results
             if query.lower() in name.lower():
+                # Create a unique ID using hash and index
+                unique_id = f"{hash(name)}_{idx}"
                 results.append(
                     InlineQueryResultArticle(
-                        id=f"{name}|{price}",
+                        id=unique_id,
                         title=name,
                         description=f"قیمت: {price}",
                         input_message_content=InputTextMessageContent(
                             f"داروی انتخاب شده: {name}\nقیمت: {price}"
-                        ),
-                        reply_markup=InlineKeyboardMarkup([[
-                            InlineKeyboardButton(
-                                "انتخاب این دارو",
-                                callback_data=f"select_drug_{hash(name)}_{name}_{price}"
-                            )
-                        ]])
+                        )
                     )
                 )
         
-        await update.inline_query.answer(results)
+        await update.inline_query.answer(results, cache_time=1)
     except Exception as e:
         logger.error(f"Error in handle_inline_query: {e}")
 
