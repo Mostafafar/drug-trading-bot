@@ -2309,7 +2309,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
             item_texts.append(item_text)
         
         # Split into two columns
-        half = (len(item_texts) // 2
+        half = (len(item_texts) // 2)
         col1 = item_texts[:half]
         col2 = item_texts[half:]
         
