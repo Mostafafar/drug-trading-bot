@@ -2218,40 +2218,24 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
 
 
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Search for drug to add with comprehensive error handling and logging"""
+    """Search for drug to add"""
     try:
-        # Get the search term with proper error handling
-        try:
-            if update.callback_query and update.callback_query.message:
-                # Handle case when coming from back button
-                await update.callback_query.answer()
-                search_term = context.user_data.get('search_term', '')
-                message = update.callback_query.message
-            elif update.message:
-                search_term = update.message.text.strip().lower()
-                message = update.message
-                context.user_data['search_term'] = search_term
-            else:
-                logger.error("No message or callback_query in update")
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text="خطایی در دریافت پیام رخ داد. لطفا دوباره تلاش کنید."
-                )
-                return States.SEARCH_DRUG_FOR_ADDING
-        except Exception as e:
-            logger.error(f"Error getting search term: {e}")
-            await update.message.reply_text(
-                "خطایی در دریافت نام دارو رخ داد. لطفا دوباره وارد کنید:",
-                reply_markup=ReplyKeyboardRemove()
-            )
+        # Handle both callback queries and messages
+        if update.callback_query:
+            query = update.callback_query
+            await query.answer()
+            message = query.message
+            search_term = context.user_data.get('search_term', '')
+        elif update.message:
+            message = update.message
+            search_term = update.message.text.strip().lower()
+            context.user_data['search_term'] = search_term
+        else:
+            logger.error("Invalid update type in search_drug_for_adding")
             return States.SEARCH_DRUG_FOR_ADDING
 
-        # Validate search term
         if not search_term or len(search_term) < 2:
-            await message.reply_text(
-                "حداقل ۲ حرف برای جستجو وارد کنید:",
-                reply_markup=ReplyKeyboardRemove()
-            )
+            await message.reply_text("حداقل ۲ حرف برای جستجو وارد کنید:")
             return States.SEARCH_DRUG_FOR_ADDING
 
         # Search in drug list
@@ -2262,13 +2246,9 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
                     matched_drugs.append((name, price))
         except Exception as e:
             logger.error(f"Error searching drug list: {e}")
-            await message.reply_text(
-                "خطایی در جستجوی داروها رخ داد. لطفا دوباره تلاش کنید.",
-                reply_markup=ReplyKeyboardRemove()
-            )
+            await message.reply_text("خطایی در جستجوی داروها رخ داد.")
             return States.SEARCH_DRUG_FOR_ADDING
 
-        # Handle no results case
         if not matched_drugs:
             keyboard = [
                 [InlineKeyboardButton("🔙 بازگشت به جستجو", callback_data="back_to_search")],
@@ -2282,69 +2262,33 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
             )
             return States.SEARCH_DRUG_FOR_ADDING
 
-        # Store matched drugs in context
         context.user_data['matched_drugs'] = matched_drugs
         
         # Prepare keyboard with drug options
-        # در تابع search_drug_for_adding، قسمت ایجاد keyboard را تغییر دهید:
         keyboard = []
-        try:
-           for idx, (name, price) in enumerate(matched_drugs[:10]):  # Limit to 10 results
-               display_text = f"{format_button_text(name, max_length=25)}\n{format_button_text(price, max_length=25)}"
-               keyboard.append([InlineKeyboardButton(display_text, callback_data=f"select_drug_{idx}")])
-        except Exception as e:
-           logger.error(f"Error preparing keyboard: {e}")
-           await message.reply_text(
-              "خطایی در آماده‌سازی لیست داروها رخ داد.",
-              reply_markup=ReplyKeyboardRemove()
-           )
-           return States.SEARCH_DRUG_FOR_ADDING
+        for idx, (name, price) in enumerate(matched_drugs[:10]):  # Limit to 10 results
+            display_text = f"{name[:25]}{'...' if len(name) > 25 else ''}\n{price}"
+            keyboard.append([InlineKeyboardButton(display_text, callback_data=f"select_drug_{idx}")])
 
-
-        # Add navigation buttons
         keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
-        keyboard.append([InlineKeyboardButton("❌ لغو", callback_data="cancel")])
-
-        # Prepare message with search results
-        message_text = "🔍 نتایج جستجو:\n\n"
-        try:
-            for idx, (name, price) in enumerate(matched_drugs[:10]):
-                message_text += f"{idx+1}. {name} - {price}\n"
-            
-            if len(matched_drugs) > 10:
-                message_text += f"\n➕ {len(matched_drugs)-10} نتیجه دیگر...\n"
-            
-            message_text += "\nلطفا از لیست بالا انتخاب کنید:"
-        except Exception as e:
-            logger.error(f"Error preparing message: {e}")
-            message_text = "لطفا داروی مورد نظر را انتخاب کنید:"
-
-        # Send the message with keyboard
-        try:
-            await message.reply_text(
-                text=message_text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return States.SELECT_DRUG_FOR_ADDING
-        except Exception as e:
-            logger.error(f"Error sending message: {e}")
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="خطایی در نمایش نتایج رخ داد. لطفا دوباره تلاش کنید."
-            )
-            return States.SEARCH_DRUG_FOR_ADDING
+        
+        await message.reply_text(
+            "🔍 نتایج جستجو:\n\nلطفا داروی مورد نظر را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return States.SELECT_DRUG_FOR_ADDING
 
     except Exception as e:
-        logger.error(f"Unexpected error in search_drug_for_adding: {e}")
+        logger.error(f"Error in search_drug_for_adding: {e}")
         try:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="خطای غیرمنتظره‌ای رخ داد. لطفا دوباره تلاش کنید."
+                text="خطایی در پردازش درخواست شما رخ داد."
             )
         except:
             pass
         return ConversationHandler.END
+        
 
 async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Select drug from search results to add"""
@@ -4774,17 +4718,17 @@ def main():
                 States.REGISTER_NATIONAL_CARD: [
                     MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license),
                     MessageHandler(filters.ALL & ~(filters.PHOTO | filters.Document.IMAGE), 
-                                 lambda u, c: u.message.reply_text("لطفا تصویر کارت ملی را ارسال کنید."))
+                                 lambda u, c: u.effective_message.reply_text("لطفا تصویر کارت ملی را ارسال کنید."))
                 ],
                 States.REGISTER_LICENSE: [
                     MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card),
                     MessageHandler(filters.ALL & ~(filters.PHOTO | filters.Document.IMAGE), 
-                                 lambda u, c: u.message.reply_text("لطفا تصویر پروانه داروخانه را ارسال کنید."))
+                                 lambda u, c: u.effective_message.reply_text("لطفا تصویر پروانه داروخانه را ارسال کنید."))
                 ],
                 States.REGISTER_MEDICAL_CARD: [
                     MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_phone),
                     MessageHandler(filters.ALL & ~(filters.PHOTO | filters.Document.IMAGE), 
-                                 lambda u, c: u.message.reply_text("لطفا تصویر کارت نظام پزشکی را ارسال کنید."))
+                                 lambda u, c: u.effective_message.reply_text("لطفا تصویر کارت نظام پزشکی را ارسال کنید."))
                 ],
                 States.REGISTER_PHONE: [
                     MessageHandler(filters.CONTACT | filters.TEXT, register_address)
@@ -4836,9 +4780,6 @@ def main():
         application.add_handler(personnel_handler)
         application.add_handler(MessageHandler(filters.Regex('^ساخت کد پرسنل$'), generate_personnel_code))
         
-
-        
-        
         # Add conversation handler for drug management
         drug_handler = ConversationHandler(
             entry_points=[
@@ -4849,7 +4790,8 @@ def main():
                 CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
                 CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$"),
                 CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$"),
-                CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$")
+                CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$"),
+                CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_")
             ],
             states={
                 States.SEARCH_DRUG_FOR_ADDING: [
@@ -4920,43 +4862,43 @@ def main():
             states={
                 States.SEARCH_DRUG: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
-            ],
+                ],
                 States.SELECT_PHARMACY: [
                     CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_\d+$')
-            ],
+                ],
                 States.SELECT_DRUGS: [
-                    MessageHandler(filters.Regex(r'^select_target_\d+$'), select_drug),
-                    MessageHandler(filters.Regex(r'^select_mine_\d+$'), select_drug),
-                    MessageHandler(filters.Regex(r'^submit_offer$'), submit_offer),
-                    MessageHandler(filters.Regex(r'^back$'), handle_back)
-           ],
+                    CallbackQueryHandler(select_drug, pattern=r'^select_target_\d+$'),
+                    CallbackQueryHandler(select_drug, pattern=r'^select_mine_\d+$'),
+                    CallbackQueryHandler(submit_offer, pattern=r'^submit_offer$'),
+                    CallbackQueryHandler(handle_back, pattern=r'^back$')
+                ],
                 States.SELECT_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, enter_quantity),
                     CallbackQueryHandler(show_drug_buttons, pattern=r'^back_to_selection$')
-           ],
+                ],
                 States.CONFIRM_OFFER: [
                     CallbackQueryHandler(confirm_offer, pattern=r'^confirm_offer$'),
                     CallbackQueryHandler(show_drug_buttons, pattern=r'^back_to_selection$')
-           ],
+                ],
                 States.COMPENSATION_SELECTION: [
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^add_more$'),
                     CallbackQueryHandler(handle_compensation_selection, pattern=r'^compensate$'),
                     CallbackQueryHandler(handle_compensation_selection, pattern=r'^comp_\d+$'),
                     CallbackQueryHandler(confirm_totals, pattern=r'^finish_selection$')
-          ],
+                ],
                 States.COMPENSATION_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation_quantity),
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^back_to_compensation$')
-          ],
+                ],
                 States.CONFIRM_TOTALS: [
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^edit_selection$'),
                     CallbackQueryHandler(confirm_totals, pattern=r'^back_to_totals$'),
                     CallbackQueryHandler(send_offer, pattern=r'^send_offer$')
                 ]  
-         },
-         fallbacks=[CommandHandler('cancel', cancel)],
-         allow_reentry=True,
-         per_message=True  # To address the PTBUserWarning
+            },
+            fallbacks=[CommandHandler('cancel', cancel)],
+            allow_reentry=True,
+            per_message=True
         )
         
         # Add conversation handler for medical categories
@@ -4992,9 +4934,7 @@ def main():
             allow_reentry=True
         )
         
-        # Add handlers
-                # Add callback query handler for admin actions
-
+        # Add all handlers
         application.add_handler(registration_handler)
         application.add_handler(drug_handler)
         application.add_handler(needs_handler)
@@ -5004,17 +4944,10 @@ def main():
         application.add_handler(InlineQueryHandler(handle_inline_query))
         application.add_handler(ChosenInlineResultHandler(handle_chosen_inline_result))
         
-        # Add callback query handler
-        application.add_handler(CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"))
+        # Add callback query handlers
         application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
-        # In your main() function:
-        application.add_handler(CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"))
         application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_user_"))
-        # In your main() function where you set up handlers:
-        application.add_handler(CallbackQueryHandler(submit_offer, pattern="^submit_offer$"))
-        # Add this to your main() function where you set up handlers:
-        application.add_handler(CallbackQueryHandler(select_drug, pattern="^select_target_"))
-        application.add_handler(CallbackQueryHandler(select_drug, pattern="^select_mine_"))
+        application.add_handler(CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"))
         application.add_handler(CallbackQueryHandler(callback_handler))
         
         # Add error handler
