@@ -2134,40 +2134,37 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Error handling remains the same
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query.strip().lower()
-    print(f"دریافت جستجو برای: '{query}'")  # لاگ برای دیباگ
-    print(drug_list[:3])  # باید خروجی شبیه این بدهد:
-# [('استامینوفن', '5000 تومان'), ('آموکسی سیلین', '12000 تومان'), ...]
+    print(f"جستجوی دریافت شده: '{query}'")
     
-    if not query or len(query) < 2:
-        return await update.inline_query.answer([])
+    if not drug_list:
+        await update.inline_query.answer([
+            InlineQueryResultArticle(
+                id="no_data",
+                title="خطا: لیست داروها خالی است",
+                input_message_content=InputTextMessageContent("سیستم دارویی در دسترس نیست")
+            )
+        ])
+        return
     
     results = []
-    for idx, (name, price) in enumerate(drug_list):
-        try:
-            if query in name.lower():
-                results.append(InlineQueryResultArticle(
+    for idx, (name, price) in enumerate(drug_list[:50]):  # محدودیت برای تست
+        if query in name.lower():
+            results.append(
+                InlineQueryResultArticle(
                     id=str(idx),
-                    title=f"{name[:25]} - {price}",
-                    description=f"قیمت: {price}",
+                    title=f"{name} - {price}",
+                    description=price,
                     input_message_content=InputTextMessageContent(
                         f"💊 {name}\n💰 قیمت: {price}"
                     ),
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton(
-                            "➕ اضافه کردن",
-                            callback_data=f"add_drug_{idx}"
-                        )
-                    ]])
-                ))
-                
-                if len(results) >= 20:  # محدودیت نتایج
-                    break
-                    
-        except Exception as e:
-            print(f"خطا در پردازش داروی {name}: {str(e)}")
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("➕ اضافه کردن", callback_data=f"add_drug_{idx}")]
+                    ])
+                )
+            )
     
     print(f"تعداد نتایج یافت شده: {len(results)}")
-    await update.inline_query.answer(results)
+    await update.inline_query.answer(results if results else [])
 def split_drug_info(full_text):
     """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
     # پیدا کردن اولین عدد در متن
