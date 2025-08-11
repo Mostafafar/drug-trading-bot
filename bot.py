@@ -3497,14 +3497,21 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if update.callback_query:
             await update.callback_query.answer()
-            await update.callback_query.edit_message_text("عملیات لغو شد.")
-        else:
+            try:
+                await update.callback_query.edit_message_text("عملیات لغو شد.")
+            except Exception as e:
+                logger.error(f"Error editing message: {e}")
+        elif update.message:
             await update.message.reply_text("عملیات لغو شد.")
         
         return await start(update, context)
     except Exception as e:
         logger.error(f"Error in cancel: {e}")
-        await update.message.reply_text("خطایی در لغو عملیات رخ داد.")
+        try:
+            if update.effective_message:
+                await update.effective_message.reply_text("خطایی در لغو عملیات رخ داد.")
+        except:
+            pass
         return ConversationHandler.END
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3542,12 +3549,23 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Start the bot"""
-    load_drug_data()
-    
-    application = ApplicationBuilder() \
-        .token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY") \
-        .post_init(initialize_db) \
-        .build()
+    try:
+        load_drug_data()
+        
+        application = (
+            ApplicationBuilder()
+            .token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY")
+            .post_init(initialize_db)
+            .build()
+        )
+
+        # Add your handlers here...
+        
+        logger.info("Starting bot...")
+        application.run_polling()
+    except Exception as e:
+        logger.critical(f"Failed to start bot: {e}")
+        raise
     
     # Conversation handlers
     registration_handler = ConversationHandler(
