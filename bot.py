@@ -2089,7 +2089,7 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await ensure_user(update, context)
         
-        # بررسی نوع Update
+        # Get the appropriate message object based on update type
         if update.callback_query:
             message = update.callback_query.message
             await update.callback_query.answer()
@@ -2099,7 +2099,7 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("Invalid update type in add_drug_item")
             return ConversationHandler.END
         
-        # ایجاد دکمه برای جستجوی اینلاین
+        # Create inline keyboard for search
         keyboard = [
             [InlineKeyboardButton(
                 "🔍 جستجوی دارو", 
@@ -2117,7 +2117,7 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in add_drug_item: {e}")
         
-        # ارسال پیام خطا به روش ایمن
+        # Safe error message sending
         try:
             if update.callback_query:
                 await update.callback_query.message.reply_text(
@@ -2128,7 +2128,6 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "خطایی رخ داده است. لطفا دوباره تلاش کنید."
                 )
             else:
-                # اگر هیچ کدام در دسترس نبود، سعی کنید مستقیماً به چت کاربر ارسال کنید
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
                     text="خطایی رخ داده است. لطفا دوباره تلاش کنید."
@@ -2137,6 +2136,7 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Failed to send error message: {send_error}")
             
         return ConversationHandler.END
+
 def split_drug_info(full_text):
     """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
     # پیدا کردن اولین عدد در متن
