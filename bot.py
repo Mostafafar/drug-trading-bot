@@ -3272,8 +3272,6 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-
-
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """جستجوی دارو در داروخانه‌های دیگر"""
     try:
@@ -3360,7 +3358,6 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"خطا در handle_search: {e}")
         await update.message.reply_text("خطایی رخ داد.")
         return ConversationHandler.END
-
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش داروهای دو طرف به صورت کیبرد معمولی با صفحه‌بندی"""
     try:
@@ -4786,18 +4783,18 @@ def main():
         application.add_handler(personnel_handler)
         application.add_handler(MessageHandler(filters.Regex('^ساخت کد پرسنل$'), generate_personnel_code))
         
-        # Add conversation handler for drug management
-        drug_handler = ConversationHandler(
-            entry_points=[
-                MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
-                MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs),
-                CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
-                CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
-                CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
-                CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$"),
-                CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$"),
-                CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$"),
-                CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_")
+                # Add conversation handler for drug management
+                drug_handler = ConversationHandler(
+                  entry_points=[
+                    MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
+                    MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs),
+                    CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
+                    CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
+                    CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
+                    CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$"),
+                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$"),
+                    CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$"),
+                    CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_")
             ],
             states={
                 States.SEARCH_DRUG_FOR_ADDING: [
@@ -4826,7 +4823,6 @@ def main():
             fallbacks=[CommandHandler('cancel', cancel)],
             allow_reentry=True
         )
-        
         # Add conversation handler for needs management
         needs_handler = ConversationHandler(
             entry_points=[
@@ -4860,6 +4856,7 @@ def main():
         )
         
         # Add conversation handler for search and trade
+                # Add conversation handler for search and trade
         trade_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex(r'^جستجوی دارو$'), search_drug),
@@ -4885,22 +4882,7 @@ def main():
                 States.CONFIRM_OFFER: [
                     CallbackQueryHandler(confirm_offer, pattern=r'^confirm_offer$'),
                     CallbackQueryHandler(show_drug_buttons, pattern=r'^back_to_selection$')
-                ],
-                States.COMPENSATION_SELECTION: [
-                    CallbackQueryHandler(show_two_column_selection, pattern=r'^add_more$'),
-                    CallbackQueryHandler(handle_compensation_selection, pattern=r'^compensate$'),
-                    CallbackQueryHandler(handle_compensation_selection, pattern=r'^comp_\d+$'),
-                    CallbackQueryHandler(confirm_totals, pattern=r'^finish_selection$')
-                ],
-                States.COMPENSATION_QUANTITY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation_quantity),
-                    CallbackQueryHandler(show_two_column_selection, pattern=r'^back_to_compensation$')
-                ],
-                States.CONFIRM_TOTALS: [
-                    CallbackQueryHandler(show_two_column_selection, pattern=r'^edit_selection$'),
-                    CallbackQueryHandler(confirm_totals, pattern=r'^back_to_totals$'),
-                    CallbackQueryHandler(send_offer, pattern=r'^send_offer$')
-                ]  
+                ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
             allow_reentry=True,
