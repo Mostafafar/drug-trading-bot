@@ -2419,9 +2419,6 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 conn = get_db_connection()
                 with conn.cursor() as cursor:
-                    # Log before insertion
-                    logger.info(f"Attempting to insert drug: {context.user_data['selected_drug']['name']}")
-
                     cursor.execute('''
                     INSERT INTO drug_items (user_id, name, price, date, quantity)
                     VALUES (%s, %s, %s, %s, %s)
@@ -2434,17 +2431,9 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         quantity
                     ))
                     
-                    # Get the inserted ID to confirm insertion
                     drug_id = cursor.fetchone()[0]
-                    logger.info(f"Drug inserted successfully with ID: {drug_id}")
-                    
                     conn.commit()
                     
-                    # Verify insertion
-                    cursor.execute('SELECT * FROM drug_items WHERE id = %s', (drug_id,))
-                    inserted_drug = cursor.fetchone()
-                    logger.info(f"Inserted drug record: {inserted_drug}")
-
                     await update.message.reply_text(
                         f"✅ دارو با موفقیت اضافه شد!\n\n"
                         f"نام: {context.user_data['selected_drug']['name']}\n"
