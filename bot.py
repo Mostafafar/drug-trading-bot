@@ -2149,23 +2149,12 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                 'لطفا از دکمه "اضافه کردن دارو" در منو استفاده کنید')
         )]
         await update.inline_query.answer(results)
-        
-        # Send instruction message to guide user
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="برای جستجوی دارو، لطفاً از منوی اصلی گزینه 'اضافه کردن دارو' را انتخاب کنید.",
-        )
         return
     
     # Normal search when in conversation
     results = []
-    query_clean = query.lower().replace(" ", "")
-    
     for idx, (name, price) in enumerate(drug_list):
-        name_clean = str(name).lower().replace(" ", "")
-        
-        # More flexible search (contains, not exact match)
-        if query_clean in name_clean:
+        if query.lower() in name.lower():
             title_part = name[:30] + "..." if len(name) > 30 else name
             desc_part = f"قیمت: {price}"
             
@@ -2185,21 +2174,8 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                     ])
                 )
             )
-        
-        # Limit results to prevent timeout
-        if len(results) >= 20:
+        if len(results) >= 50:
             break
-    
-    # If no results found
-    if not results:
-        results.append(
-            InlineQueryResultArticle(
-                id='not_found',
-                title='هیچ دارویی یافت نشد',
-                input_message_content=InputTextMessageContent(
-                    f"هیچ دارویی با نام '{query}' یافت نشد.")
-            )
-        )
     
     await update.inline_query.answer(results)
 def split_drug_info(full_text):
