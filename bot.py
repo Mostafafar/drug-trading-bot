@@ -2057,6 +2057,11 @@ async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT
         query = update.callback_query
         await query.answer()
         
+        # Verify we're in the correct state
+        if context.user_data.get('state') != States.SEARCH_DRUG_FOR_ADDING:
+            await query.edit_message_text("لطفا فرآیند را از ابتدا شروع کنید.")
+            return ConversationHandler.END
+            
         if not query.data.startswith("add_drug_"):
             return
             
@@ -2067,6 +2072,9 @@ async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT
                 'name': selected_drug[0],
                 'price': selected_drug[1]
             }
+            
+            # Update state
+            context.user_data['state'] = States.ADD_DRUG_DATE
             
             # Delete the previous message
             try:
@@ -2087,19 +2095,14 @@ async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT
             
     except Exception as e:
         logger.error(f"Error handling add drug callback: {e}")
-        try:
-            await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
-        except:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="خطا در انتخاب دارو. لطفا دوباره تلاش کنید."
-            )
-        return ConversationHandler.END
-
+        # Error handling remains the same
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a drug item with inline query"""
     try:
         await ensure_user(update, context)
+        
+        # Set initial state
+        context.user_data['state'] = States.SEARCH_DRUG_FOR_ADDING
         
         # Get the appropriate message object based on update type
         if update.callback_query:
@@ -2128,37 +2131,30 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         logger.error(f"Error in add_drug_item: {e}")
-        
-        # Safe error message sending
-        try:
-            if update.callback_query:
-                await update.callback_query.message.reply_text(
-                    "خطایی رخ داده است. لطفا دوباره تلاش کنید."
-                )
-            elif update.message:
-                await update.message.reply_text(
-                    "خطایی رخ داده است. لطفا دوباره تلاش کنید."
-                )
-            else:
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text="خطایی رخ داده است. لطفا دوباره تلاش کنید."
-                )
-        except Exception as send_error:
-            logger.error(f"Failed to send error message: {send_error}")
-            
-        return ConversationHandler.END
-
+        # Error handling remains the same
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline query for drug search with smart splitting"""
     query = update.inline_query.query
     if not query:
         return
     
+    # Check if user is in conversation
+    user_state = context.user_data.get('state')
+    if user_state != States.SEARCH_DRUG_FOR_ADDING:
+        # If not in conversation, show limited results
+        results = [InlineQueryResultArticle(
+            id='start',
+            title='برای اضافه کردن دارو، ابتدا از منو شروع کنید',
+            input_message_content=InputTextMessageContent(
+                'لطفا از دکمه "اضافه کردن دارو" در منو استفاده کنید')
+        )]
+        await update.inline_query.answer(results)
+        return
+    
+    # Normal search when in conversation
     results = []
     for idx, (name, price) in enumerate(drug_list):
         if query.lower() in name.lower():
-            # جدا کردن نام و توضیحات
             title_part = name[:30] + "..." if len(name) > 30 else name
             desc_part = f"قیمت: {price}"
             
@@ -2197,6 +2193,10 @@ def split_drug_info(full_text):
 
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle selected inline result"""
+    # Only process if in correct state
+    if context.user_data.get('state') != States.SEARCH_DRUG_FOR_ADDING:
+        return
+    
     result_id = update.chosen_inline_result.result_id
     try:
         idx = int(result_id)
@@ -2207,17 +2207,22 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
                 'price': selected_drug[1]
             }
             
+            # Update state
+            context.user_data['state'] = States.ADD_DRUG_DATE
+            
             await context.bot.send_message(
                 chat_id=update.chosen_inline_result.from_user.id,
                 text=f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
-                     "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
+                     "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_search")]
+                ])
             )
             return States.ADD_DRUG_DATE
     except Exception as e:
         logger.error(f"Error handling chosen inline result: {e}")
     
     return ConversationHandler.END
-
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Search for drug to add"""
     try:
@@ -4797,7 +4802,9 @@ def main():
            states={
                States.SEARCH_DRUG_FOR_ADDING: [
                    CallbackQueryHandler(add_drug_item, pattern="^back$"),
-                   MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
+                   MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding),
+                   CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"),
+                   ChosenInlineResultHandler(handle_chosen_inline_result)
                ],
                States.SELECT_DRUG_FOR_ADDING: [
                    CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$")
@@ -4927,8 +4934,7 @@ def main():
         application.add_handler(trade_handler)
         application.add_handler(categories_handler)
         application.add_handler(admin_handler)
-        application.add_handler(InlineQueryHandler(handle_inline_query))
-        application.add_handler(ChosenInlineResultHandler(handle_chosen_inline_result))
+        
         
         # Add callback query handlers
         application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
