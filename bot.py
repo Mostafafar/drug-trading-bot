@@ -2121,7 +2121,7 @@ def split_drug_info(full_text):
         description = "قیمت نامشخص"
     return title, description
 
-async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline query for drug search with smart splitting"""
     query = update.inline_query.query
