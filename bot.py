@@ -2050,6 +2050,22 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
             conn.close()
 # Drug Management
 async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
+def split_drug_info(full_text):
+    """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
+    # پیدا کردن اولین عدد در متن
+    match = re.search(r'\d', full_text)
+    if match:
+        split_pos = match.start()
+        title = full_text[:split_pos].strip()
+        description = full_text[split_pos:].strip()
+    else:
+        title = full_text
+        description = "قیمت نامشخص"
+    return title, description
+
+async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle add drug from inline query result"""
     try:
         query = update.callback_query
@@ -2093,6 +2109,7 @@ async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT
                 text="خطا در انتخاب دارو. لطفا دوباره تلاش کنید."
             )
         return ConversationHandler.END
+
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a drug item with inline query"""
     try:
@@ -2146,20 +2163,6 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         return ConversationHandler.END
 
-def split_drug_info(full_text):
-    """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
-    # پیدا کردن اولین عدد در متن
-    match = re.search(r'\d', full_text)
-    if match:
-        split_pos = match.start()
-        title = full_text[:split_pos].strip()
-        description = full_text[split_pos:].strip()
-    else:
-        title = full_text
-        description = "قیمت نامشخص"
-    return title, description
-
-
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline query for drug search with smart splitting"""
     query = update.inline_query.query
@@ -2193,6 +2196,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             break
     
     await update.inline_query.answer(results)
+
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle selected inline result"""
     result_id = update.chosen_inline_result.result_id
@@ -2215,7 +2219,6 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
         logger.error(f"Error handling chosen inline result: {e}")
     
     return ConversationHandler.END
-
 
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Search for drug to add"""
@@ -2288,7 +2291,6 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         except:
             pass
         return ConversationHandler.END
-        
 
 async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Select drug from search results to add"""
@@ -2447,6 +2449,10 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in save_drug_item: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
+
+
+
 
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List user's drug items"""
