@@ -2304,7 +2304,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 f"{i}. {item['name']}\n"
                 f"   قیمت: {item['price']}\n"
                 f"   تعداد: {item['quantity']}\n"
-                f"   جمع: {format_price(parse_price(item['price']) * item['quantity']}\n"
+                f"   جمع: {format_price(parse_price(item['price']) * item['quantity'])}\n"
             )
             item_texts.append(item_text)
         
