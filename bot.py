@@ -3550,7 +3550,7 @@ def main():
     
     application = ApplicationBuilder() \
         .token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY") \
-        .post_init(initialize_db) \  # Note: no parentheses here
+        .post_init(initialize_db) \
         .build()
     
     # Conversation handlers
