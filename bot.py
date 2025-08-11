@@ -4781,8 +4781,8 @@ def main():
         application.add_handler(personnel_handler)
         application.add_handler(MessageHandler(filters.Regex('^ساخت کد پرسنل$'), generate_personnel_code))
         
-       # Add conversation handler for drug management
-       drug_handler = ConversationHandler(
+        # Add conversation handler for drug management
+        drug_handler = ConversationHandler(
            entry_points=[
                MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
                MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs),
