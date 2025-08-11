@@ -2066,10 +2066,13 @@ async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT
                 'price': selected_drug[1]
             }
             
-            # حذف پیام قبلی
-            await query.delete_message()
+            # Delete the previous message
+            try:
+                await query.delete_message()
+            except Exception as delete_error:
+                logger.error(f"Error deleting message: {delete_error}")
             
-            # ارسال پیام جدید
+            # Send new message
             await context.bot.send_message(
                 chat_id=query.from_user.id,
                 text=f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
@@ -2082,7 +2085,13 @@ async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT
             
     except Exception as e:
         logger.error(f"Error handling add drug callback: {e}")
-        await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
+        try:
+            await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
+        except:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="خطا در انتخاب دارو. لطفا دوباره تلاش کنید."
+            )
         return ConversationHandler.END
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a drug item with inline query"""
