@@ -4783,7 +4783,7 @@ def main():
         
        # Add conversation handler for drug management
        drug_handler = ConversationHandler(
-         entry_points=[
+           entry_points=[
              MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
              MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs),
              CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
