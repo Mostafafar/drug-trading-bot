@@ -2098,7 +2098,6 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-
 def split_drug_info(full_text):
     """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
     # پیدا کردن اولین عدد در متن
@@ -2113,6 +2112,7 @@ def split_drug_info(full_text):
     return title, description
 
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline query for drug search with smart splitting"""
     query = update.inline_query.query
     if not query:
@@ -2122,13 +2122,14 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     for idx, (name, price) in enumerate(drug_list):
         if query.lower() in name.lower():
             # جدا کردن نام و توضیحات
-            title_part, desc_part = split_drug_info(name)
+            title_part = name[:30] + "..." if len(name) > 30 else name
+            desc_part = f"قیمت: {price}"
             
             results.append(
                 InlineQueryResultArticle(
                     id=str(idx),
                     title=title_part,
-                    description=f"{desc_part} 💰 {price}",
+                    description=desc_part,
                     input_message_content=InputTextMessageContent(
                         f"💊 {name}\n💰 قیمت: {price}"
                     ),
