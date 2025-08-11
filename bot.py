@@ -2841,6 +2841,7 @@ async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "".join(message),
                     reply_markup=InlineKeyboardMarkup(keyboard)
+                )
                 
         except Exception as e:
             logger.error(f"Error listing needs: {e}")
