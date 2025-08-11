@@ -148,7 +148,6 @@ def get_db_connection(max_retries=3, retry_delay=1.0):
     if last_error:
         raise last_error
     raise psycopg2.Error("Unknown database connection error")
-
 async def initialize_db(application: Application):
     """Initialize database tables and default data"""
     conn = None
