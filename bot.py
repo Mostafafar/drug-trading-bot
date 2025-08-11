@@ -3172,6 +3172,7 @@ async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text(
                         msg,
                         reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
                 else:
                     await update.message.reply_text(
                         msg,
