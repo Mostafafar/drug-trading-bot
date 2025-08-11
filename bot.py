@@ -2048,22 +2048,8 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
     finally:
         if conn:
             conn.close()
-# Drug Management
-async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
-def split_drug_info(full_text):
-    """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
-    # پیدا کردن اولین عدد در متن
-    match = re.search(r'\d', full_text)
-    if match:
-        split_pos = match.start()
-        title = full_text[:split_pos].strip()
-        description = full_text[split_pos:].strip()
-    else:
-        title = full_text
-        description = "قیمت نامشخص"
-    return title, description
 
 async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle add drug from inline query result"""
@@ -2196,6 +2182,18 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             break
     
     await update.inline_query.answer(results)
+def split_drug_info(full_text):
+    """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
+    # پیدا کردن اولین عدد در متن
+    match = re.search(r'\d', full_text)
+    if match:
+        split_pos = match.start()
+        title = full_text[:split_pos].strip()
+        description = full_text[split_pos:].strip()
+    else:
+        title = full_text
+        description = "قیمت نامشخص"
+    return title, description
 
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle selected inline result"""
