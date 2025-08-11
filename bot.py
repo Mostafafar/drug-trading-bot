@@ -149,7 +149,7 @@ def get_db_connection(max_retries=3, retry_delay=1.0):
         raise last_error
     raise psycopg2.Error("Unknown database connection error")
 
-async def initialize_db():
+async def initialize_db(application: Application):
     """Initialize database tables and default data"""
     conn = None
     try:
@@ -2035,9 +2035,9 @@ async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         query = update.callback_query
         await query.answer()
         
-        drug_id = query.data.split('_')[2]
-        drug_name = query.data.split('_')[3]
-        drug_price = query.data.split('_')[4]
+        drug_info = query.data.split('_')[2:]
+        drug_name = ' '.join(drug_info[:-1])
+        drug_price = drug_info[-1]
         
         context.user_data['selected_drug'] = {
             'name': drug_name,
@@ -2054,7 +2054,7 @@ async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         
     except Exception as e:
         logger.error(f"Error in select_drug_for_adding: {e}")
-        await update.callback_query.edit_message_text(
+        await query.edit_message_text(
             "خطایی در انتخاب دارو رخ داد. لطفا دوباره تلاش کنید."
         )
         return ConversationHandler.END
@@ -3550,7 +3550,7 @@ def main():
     
     application = ApplicationBuilder() \
         .token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY") \
-        .post_init(initialize_db) \
+        .post_init(initialize_db) \  # Note: no parentheses here
         .build()
     
     # Conversation handlers
