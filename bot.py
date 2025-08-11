@@ -2458,6 +2458,7 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             "".join(message),
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
             
         return States.CONFIRM_TOTALS
     except Exception as e:
