@@ -2089,6 +2089,16 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await ensure_user(update, context)
         
+        # بررسی نوع Update
+        if update.callback_query:
+            message = update.callback_query.message
+            await update.callback_query.answer()
+        elif update.message:
+            message = update.message
+        else:
+            logger.error("Invalid update type in add_drug_item")
+            return ConversationHandler.END
+        
         # ایجاد دکمه برای جستجوی اینلاین
         keyboard = [
             [InlineKeyboardButton(
@@ -2098,16 +2108,35 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
         ]
         
-        await update.message.reply_text(
+        await message.reply_text(
             "برای اضافه کردن دارو، روی دکمه جستجو کلیک کنید:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return States.SEARCH_DRUG_FOR_ADDING
+        
     except Exception as e:
         logger.error(f"Error in add_drug_item: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        
+        # ارسال پیام خطا به روش ایمن
+        try:
+            if update.callback_query:
+                await update.callback_query.message.reply_text(
+                    "خطایی رخ داده است. لطفا دوباره تلاش کنید."
+                )
+            elif update.message:
+                await update.message.reply_text(
+                    "خطایی رخ داده است. لطفا دوباره تلاش کنید."
+                )
+            else:
+                # اگر هیچ کدام در دسترس نبود، سعی کنید مستقیماً به چت کاربر ارسال کنید
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="خطایی رخ داده است. لطفا دوباره تلاش کنید."
+                )
+        except Exception as send_error:
+            logger.error(f"Failed to send error message: {send_error}")
+            
         return ConversationHandler.END
-
 def split_drug_info(full_text):
     """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
     # پیدا کردن اولین عدد در متن
