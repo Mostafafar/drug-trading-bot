@@ -2133,38 +2133,51 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in add_drug_item: {e}")
         # Error handling remains the same
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.inline_query.query.strip().lower()
-    print(f"جستجوی دریافت شده: '{query}'")
-    
-    if not drug_list:
-        await update.inline_query.answer([
-            InlineQueryResultArticle(
-                id="no_data",
-                title="خطا: لیست داروها خالی است",
-                input_message_content=InputTextMessageContent("سیستم دارویی در دسترس نیست")
-            )
-        ])
+    """Handle inline query for drug search with smart splitting"""
+    query = update.inline_query.query
+    if not query:
         return
     
+    # Check if user is in conversation
+    user_state = context.user_data.get('state')
+    if user_state and user_state != States.SEARCH_DRUG_FOR_ADDING:
+        # If not in conversation, show limited results
+        results = [InlineQueryResultArticle(
+            id='start',
+            title='برای اضافه کردن دارو، ابتدا از منو شروع کنید',
+            input_message_content=InputTextMessageContent(
+                'لطفا از دکمه "اضافه کردن دارو" در منو استفاده کنید')
+        )]
+        await update.inline_query.answer(results)
+        return
+    
+    # Normal search when in conversation
     results = []
-    for idx, (name, price) in enumerate(drug_list[:50]):  # محدودیت برای تست
-        if query in name.lower():
+    for idx, (name, price) in enumerate(drug_list):
+        if query.lower() in name.lower():
+            title_part = name[:30] + "..." if len(name) > 30 else name
+            desc_part = f"قیمت: {price}"
+            
             results.append(
                 InlineQueryResultArticle(
                     id=str(idx),
-                    title=f"{name} - {price}",
-                    description=price,
+                    title=title_part,
+                    description=desc_part,
                     input_message_content=InputTextMessageContent(
                         f"💊 {name}\n💰 قیمت: {price}"
                     ),
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("➕ اضافه کردن", callback_data=f"add_drug_{idx}")]
+                        [InlineKeyboardButton(
+                            "➕ اضافه به لیست داروها",
+                            callback_data=f"add_drug_{idx}"
+                        )]
                     ])
                 )
             )
+        if len(results) >= 50:
+            break
     
-    print(f"تعداد نتایج یافت شده: {len(results)}")
-    await update.inline_query.answer(results if results else [])
+    await update.inline_query.answer(results)
 def split_drug_info(full_text):
     """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
     # پیدا کردن اولین عدد در متن
