@@ -1972,7 +1972,7 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         return ConversationHandler.END
 
 
-async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline queries for drug search"""
     try:
