@@ -2133,52 +2133,92 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in add_drug_item: {e}")
         # Error handling remains the same
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.inline_query.query.strip().lower()
+    # لاگ اطلاعات پایه درخواست
+    user = update.inline_query.from_user
+    logger.info(
+        f"دریافت اینلاین کوئری از کاربر [ID:{user.id} | نام:{user.full_name} | @{user.username}]\n"
+        f"متن جستجو: '{update.inline_query.query}'\n"
+        f"زمان: {datetime.now()}"
+    )
     
-    if not query or len(query) < 2:
-        await update.inline_query.answer([
-            InlineQueryResultArticle(
-                id="min_chars",
-                title="حداقل 2 کاراکتر وارد کنید",
-                input_message_content=InputTextMessageContent("لطفا حداقل 2 کاراکتر برای جستجو وارد کنید")
-            )
-        ])
-        return
+    query = update.inline_query.query.strip().lower()
+    logger.debug(f"پس از پردازش متن جستجو: '{query}'")
 
+    # بررسی حداقل طول جستجو
+    if not query or len(query) < 2:
+        logger.warning("جستجوی با طول ناکافی (کمتر از 2 کاراکتر)")
+        return await update.inline_query.answer([])
+    
     results = []
+    match_count = 0
+    total_searched = 0
+    
+    logger.info(f"شروع جستجو در لیست {len(drug_list)} دارو...")
+    
     for idx, (name, price) in enumerate(drug_list):
-        # جستجوی هوشمندانه‌تر
-        if query in name.lower() or any(word in name.lower() for word in query.split()):
-            results.append(
-                InlineQueryResultArticle(
-                    id=str(idx),
-                    title=f"{name[:30]}{'...' if len(name) > 30 else ''} - {price}",
+        total_searched += 1
+        try:
+            # لاگ هر آیتم بررسی شده (در حالت دیباگ)
+            logger.debug(f"بررسی دارو #{idx}: {name} - {price}")
+            
+            if query in name.lower():
+                match_count += 1
+                result_item = InlineQueryResultArticle(
+                    id=f"{idx}_{hash(name)}",  # ID منحصر به فرد
+                    title=f"{name[:25]}{'...' if len(name) > 25 else ''} - {price}",
                     description=f"قیمت: {price}",
                     input_message_content=InputTextMessageContent(
                         f"💊 {name}\n💰 قیمت: {price}"
                     ),
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "➕ اضافه به لیست",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton(
+                            "➕ اضافه کردن",
                             callback_data=f"add_drug_{idx}"
-                        )]
-                    ])
+                        )
+                    ]])
                 )
+                results.append(result_item)
+                
+                # لاگ هر نتیجه یافت شده
+                logger.info(f"نتیجه #{match_count} یافت شد:\n"
+                          f"نام: {name}\n"
+                          f"قیمت: {price}\n"
+                          f"شناسه: {result_item.id}")
+                
+                if len(results) >= 20:
+                    logger.warning("رسیدن به حد اکثر نتایج (20 مورد)")
+                    break
+                    
+        except Exception as e:
+            logger.error(
+                f"خطا در پردازش داروی #{idx}:\n"
+                f"نام: {name}\n"
+                f"قیمت: {price}\n"
+                f"خطا: {str(e)}\n"
+                f"Traceback: {traceback.format_exc()}"
             )
-        
-        if len(results) >= 50:
-            break
-
+    
+    # جمع‌بندی نتایج
+    logger.info(
+        f"جمع‌بندی جستجو:\n"
+        f"تعداد کل داروهای بررسی شده: {total_searched}\n"
+        f"تعداد نتایج یافت شده: {match_count}\n"
+        f"زمان انجام جستجو: {datetime.now()}"
+    )
+    
     if not results:
-        await update.inline_query.answer([
-            InlineQueryResultArticle(
-                id="not_found",
-                title="هیچ دارویی یافت نشد",
-                input_message_content=InputTextMessageContent("هیچ دارویی با این مشخصات یافت نشد")
-            )
-        ])
-    else:
+        logger.warning("هیچ نتیجه‌ای یافت نشد")
+    
+    try:
         await update.inline_query.answer(results)
+        logger.info("ارسال موفقیت‌آمیز نتایج به کاربر")
+    except Exception as e:
+        logger.critical(
+            f"خطا در ارسال نتایج به کاربر:\n"
+            f"تعداد نتایج: {len(results)}\n"
+            f"خطا: {str(e)}\n"
+            f"Traceback: {traceback.format_exc()}"
+        )
 def split_drug_info(full_text):
     """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
     # پیدا کردن اولین عدد در متن
