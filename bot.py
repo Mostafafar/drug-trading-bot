@@ -2140,7 +2140,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # Check if user is in conversation
     user_state = context.user_data.get('state')
-    if user_state and user_state != States.SEARCH_DRUG_FOR_ADDING:
+    if user_state != States.SEARCH_DRUG_FOR_ADDING:
         # If not in conversation, show limited results
         results = [InlineQueryResultArticle(
             id='start',
@@ -2149,12 +2149,23 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                 'لطفا از دکمه "اضافه کردن دارو" در منو استفاده کنید')
         )]
         await update.inline_query.answer(results)
+        
+        # Send instruction message to guide user
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="برای جستجوی دارو، لطفاً از منوی اصلی گزینه 'اضافه کردن دارو' را انتخاب کنید.",
+        )
         return
     
     # Normal search when in conversation
     results = []
+    query_clean = query.lower().replace(" ", "")
+    
     for idx, (name, price) in enumerate(drug_list):
-        if query.lower() in str(name).lower():
+        name_clean = str(name).lower().replace(" ", "")
+        
+        # More flexible search (contains, not exact match)
+        if query_clean in name_clean:
             title_part = name[:30] + "..." if len(name) > 30 else name
             desc_part = f"قیمت: {price}"
             
@@ -2174,8 +2185,21 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                     ])
                 )
             )
-        if len(results) >= 50:
+        
+        # Limit results to prevent timeout
+        if len(results) >= 20:
             break
+    
+    # If no results found
+    if not results:
+        results.append(
+            InlineQueryResultArticle(
+                id='not_found',
+                title='هیچ دارویی یافت نشد',
+                input_message_content=InputTextMessageContent(
+                    f"هیچ دارویی با نام '{query}' یافت نشد.")
+            )
+        )
     
     await update.inline_query.answer(results)
 def split_drug_info(full_text):
