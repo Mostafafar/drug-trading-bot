@@ -2135,6 +2135,8 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query.strip().lower()
     print(f"دریافت جستجو برای: '{query}'")  # لاگ برای دیباگ
+    print(drug_list[:3])  # باید خروجی شبیه این بدهد:
+# [('استامینوفن', '5000 تومان'), ('آموکسی سیلین', '12000 تومان'), ...]
     
     if not query or len(query) < 2:
         return await update.inline_query.answer([])
