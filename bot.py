@@ -2154,7 +2154,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Normal search when in conversation
     results = []
     for idx, (name, price) in enumerate(drug_list):
-        if query.lower() in name.lower():
+        if query.lower() in str(name).lower():
             title_part = name[:30] + "..." if len(name) > 30 else name
             desc_part = f"قیمت: {price}"
             
