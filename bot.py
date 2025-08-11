@@ -2158,6 +2158,7 @@ async def find_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "نتایج جستجو:\nلطفا داروخانه مورد نظر را انتخاب کنید:",
                     reply_markup=InlineKeyboardMarkup(keyboard)
+                )
                 
                 return States.SELECT_PHARMACY
                 
