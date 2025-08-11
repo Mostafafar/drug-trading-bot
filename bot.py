@@ -4803,6 +4803,7 @@ def main():
                States.SEARCH_DRUG_FOR_ADDING: [
                    CallbackQueryHandler(add_drug_item, pattern="^back$"),
                    MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding),
+                   InlineQueryHandler(handle_inline_query),
                    CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"),
                    ChosenInlineResultHandler(handle_chosen_inline_result)
                ],
@@ -4941,7 +4942,7 @@ def main():
         application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_user_"))
         application.add_handler(CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"))
         application.add_handler(CallbackQueryHandler(callback_handler))
-        application.add_handler(InlineQueryHandler(handle_inline_query))
+        
         
         # Add error handler
         application.add_error_handler(error_handler)
