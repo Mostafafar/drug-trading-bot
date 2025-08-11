@@ -2138,20 +2138,6 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not query:
         return
     
-    # Check if user is in conversation
-    user_state = context.user_data.get('state')
-    if user_state != States.SEARCH_DRUG_FOR_ADDING:
-        # If not in conversation, show limited results
-        results = [InlineQueryResultArticle(
-            id='start',
-            title='برای اضافه کردن دارو، ابتدا از منو شروع کنید',
-            input_message_content=InputTextMessageContent(
-                'لطفا از دکمه "اضافه کردن دارو" در منو استفاده کنید')
-        )]
-        await update.inline_query.answer(results)
-        return
-    
-    # Normal search when in conversation
     results = []
     for idx, (name, price) in enumerate(drug_list):
         if query.lower() in name.lower():
@@ -2177,6 +2163,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         if len(results) >= 50:
             break
     
+    logger.debug(f"Inline query results: {results}")
     await update.inline_query.answer(results)
 def split_drug_info(full_text):
     """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
