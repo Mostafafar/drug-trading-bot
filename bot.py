@@ -4781,45 +4781,45 @@ def main():
         application.add_handler(personnel_handler)
         application.add_handler(MessageHandler(filters.Regex('^ساخت کد پرسنل$'), generate_personnel_code))
         
-                # Add conversation handler for drug management
-                drug_handler = ConversationHandler(
-                  entry_points=[
-                    MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
-                    MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs),
-                    CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
-                    CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
-                    CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
-                    CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$"),
-                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$"),
-                    CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$"),
-                    CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_")
-            ],
-            states={
-                States.SEARCH_DRUG_FOR_ADDING: [
-                    CallbackQueryHandler(add_drug_item, pattern="^back$"),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
-                ],
-                States.SELECT_DRUG_FOR_ADDING: [
-                    CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$")
-                ],
-                States.ADD_DRUG_DATE: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
-                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
-                ],
-                States.ADD_DRUG_QUANTITY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
-                    CallbackQueryHandler(select_drug_for_adding, pattern="^back_to_drug_selection$")
-                ],
-                States.EDIT_DRUG: [
-                    CallbackQueryHandler(edit_drugs, pattern="^back_to_list$"),
-                    CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
-                    CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
-                    CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$")
-                ]
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
+       # Add conversation handler for drug management
+       drug_handler = ConversationHandler(
+         entry_points=[
+             MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
+             MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs),
+             CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
+             CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
+             CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
+             CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$"),
+             CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$"),
+             CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$"),
+             CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_")
+         ],
+         states={
+             States.SEARCH_DRUG_FOR_ADDING: [
+                 CallbackQueryHandler(add_drug_item, pattern="^back$"),
+                 MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
+             ],
+             States.SELECT_DRUG_FOR_ADDING: [
+                 CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$")
+             ],
+             States.ADD_DRUG_DATE: [
+                 MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
+                 CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
+             ],
+             States.ADD_DRUG_QUANTITY: [
+                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
+                 CallbackQueryHandler(select_drug_for_adding, pattern="^back_to_drug_selection$")
+             ],
+             States.EDIT_DRUG: [
+                 CallbackQueryHandler(edit_drugs, pattern="^back_to_list$"),
+                 CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
+                 CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
+                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
+                 CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$")
+             ]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        allow_reentry=True
         )
         # Add conversation handler for needs management
         needs_handler = ConversationHandler(
