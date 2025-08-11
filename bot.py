@@ -1986,12 +1986,18 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             if query.lower() in name.lower():
                 results.append(
                     InlineQueryResultArticle(
-                        id=str(hash(name)),
+                        id=f"{name}|{price}",
                         title=name,
                         description=f"قیمت: {price}",
                         input_message_content=InputTextMessageContent(
                             f"داروی انتخاب شده: {name}\nقیمت: {price}"
-                        )
+                        ),
+                        reply_markup=InlineKeyboardMarkup([[
+                            InlineKeyboardButton(
+                                "انتخاب این دارو",
+                                callback_data=f"select_drug_{hash(name)}_{name}_{price}"
+                            )
+                        ]])
                     )
                 )
         
@@ -2021,6 +2027,35 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
         await context.bot.send_message(
             chat_id=update.effective_user.id,
             text="خطایی در پردازش انتخاب دارو رخ داد. لطفا دوباره تلاش کنید."
+        )
+        return ConversationHandler.END
+async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle selection of a drug from search results for adding"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        drug_id = query.data.split('_')[2]
+        drug_name = query.data.split('_')[3]
+        drug_price = query.data.split('_')[4]
+        
+        context.user_data['selected_drug'] = {
+            'name': drug_name,
+            'price': drug_price
+        }
+        
+        await query.edit_message_text(
+            f"داروی انتخاب شده: {drug_name}\nقیمت: {drug_price}\n\n"
+            "لطفا تاریخ انقضا را وارد کنید (مثال: 1403/06/15):",
+            reply_markup=None
+        )
+        
+        return States.ADD_DRUG_DATE
+        
+    except Exception as e:
+        logger.error(f"Error in select_drug_for_adding: {e}")
+        await update.callback_query.edit_message_text(
+            "خطایی در انتخاب دارو رخ داد. لطفا دوباره تلاش کنید."
         )
         return ConversationHandler.END
 
