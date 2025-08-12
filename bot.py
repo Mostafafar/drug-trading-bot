@@ -2169,133 +2169,33 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
 
 
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Search for drug to add with comprehensive error handling and logging"""
+    """Start drug search process using inline query"""
     try:
-        # Get the search term with proper error handling
-        try:
-            if update.callback_query and update.callback_query.message:
-                # Handle case when coming from back button
-                await update.callback_query.answer()
-                search_term = context.user_data.get('search_term', '')
-                message = update.callback_query.message
-            elif update.message:
-                search_term = update.message.text.strip().lower()
-                message = update.message
-                context.user_data['search_term'] = search_term
-            else:
-                logger.error("No message or callback_query in update")
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text="خطایی در دریافت پیام رخ داد. لطفا دوباره تلاش کنید."
-                )
-                return States.SEARCH_DRUG_FOR_ADDING
-        except Exception as e:
-            logger.error(f"Error getting search term: {e}")
-            await update.message.reply_text(
-                "خطایی در دریافت نام دارو رخ داد. لطفا دوباره وارد کنید:",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            return States.SEARCH_DRUG_FOR_ADDING
-
-        # Validate search term
-        if not search_term or len(search_term) < 2:
-            await message.reply_text(
-                "حداقل ۲ حرف برای جستجو وارد کنید:",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            return States.SEARCH_DRUG_FOR_ADDING
-
-        # Search in drug list
-        matched_drugs = []
-        try:
-            for name, price in drug_list:
-                if name and search_term in name.lower():
-                    matched_drugs.append((name, price))
-        except Exception as e:
-            logger.error(f"Error searching drug list: {e}")
-            await message.reply_text(
-                "خطایی در جستجوی داروها رخ داد. لطفا دوباره تلاش کنید.",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            return States.SEARCH_DRUG_FOR_ADDING
-
-        # Handle no results case
-        if not matched_drugs:
-            keyboard = [
-                [InlineKeyboardButton("🔙 بازگشت به جستجو", callback_data="back_to_search")],
-                [InlineKeyboardButton("🏠 منوی اصلی", callback_data="back")]
-            ]
-            
-            await message.reply_text(
-                "هیچ دارویی با این نام یافت نشد.\n\n"
-                "می‌توانید دوباره جستجو کنید یا به منوی اصلی بازگردید.",
+        # Create inline keyboard with search button
+        keyboard = [
+            [InlineKeyboardButton("🔍 جستجوی دارو", switch_inline_query_current_chat="")],
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+        ]
+        
+        if update.callback_query:
+            await update.callback_query.answer()
+            await update.callback_query.edit_message_text(
+                "برای جستجوی دارو روی دکمه زیر کلیک کنید:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            return States.SEARCH_DRUG_FOR_ADDING
-
-        # Store matched drugs in context
-        context.user_data['matched_drugs'] = matched_drugs
+        else:
+            await update.message.reply_text(
+                "برای جستجوی دارو روی دکمه زیر کلیک کنید:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+        return States.SEARCH_DRUG_FOR_ADDING
         
-        # Prepare keyboard with drug options
-        # در تابع search_drug_for_adding، قسمت ایجاد keyboard را تغییر دهید:
-        keyboard = []
-        try:
-           for idx, (name, price) in enumerate(matched_drugs[:10]):  # Limit to 10 results
-               display_text = f"{format_button_text(name, max_length=25)}\n{format_button_text(price, max_length=25)}"
-               keyboard.append([InlineKeyboardButton(display_text, callback_data=f"select_drug_{idx}")])
-        except Exception as e:
-           logger.error(f"Error preparing keyboard: {e}")
-           await message.reply_text(
-              "خطایی در آماده‌سازی لیست داروها رخ داد.",
-              reply_markup=ReplyKeyboardRemove()
-           )
-           return States.SEARCH_DRUG_FOR_ADDING
-
-
-        # Add navigation buttons
-        keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
-        keyboard.append([InlineKeyboardButton("❌ لغو", callback_data="cancel")])
-
-        # Prepare message with search results
-        message_text = "🔍 نتایج جستجو:\n\n"
-        try:
-            for idx, (name, price) in enumerate(matched_drugs[:10]):
-                message_text += f"{idx+1}. {name} - {price}\n"
-            
-            if len(matched_drugs) > 10:
-                message_text += f"\n➕ {len(matched_drugs)-10} نتیجه دیگر...\n"
-            
-            message_text += "\nلطفا از لیست بالا انتخاب کنید:"
-        except Exception as e:
-            logger.error(f"Error preparing message: {e}")
-            message_text = "لطفا داروی مورد نظر را انتخاب کنید:"
-
-        # Send the message with keyboard
-        try:
-            await message.reply_text(
-                text=message_text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return States.SELECT_DRUG_FOR_ADDING
-        except Exception as e:
-            logger.error(f"Error sending message: {e}")
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="خطایی در نمایش نتایج رخ داد. لطفا دوباره تلاش کنید."
-            )
-            return States.SEARCH_DRUG_FOR_ADDING
-
     except Exception as e:
-        logger.error(f"Unexpected error in search_drug_for_adding: {e}")
-        try:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="خطای غیرمنتظره‌ای رخ داد. لطفا دوباره تلاش کنید."
-            )
-        except:
-            pass
+        logger.error(f"Error in search_drug_for_adding: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 
 async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Select drug from search results to add"""
@@ -4816,7 +4716,7 @@ def main():
             states={
                 States.SEARCH_DRUG_FOR_ADDING: [
                     CallbackQueryHandler(add_drug_item, pattern="^back$"),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, search_drug_for_adding)
+                    
                 ],
                 States.SELECT_DRUG_FOR_ADDING: [
                     CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$")
