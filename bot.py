@@ -2241,16 +2241,18 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تاریخ انقضا برای داروی انتخاب شده"""
     try:
         date = update.message.text.strip()
+        logger.debug(f"Received date: {date}")
         
         # اعتبارسنجی فرمت تاریخ (سال/ماه/روز)
-        if not re.match(r'^\d{4}/\d{2}/\d{2}$', date):
+        if not re.match(r'^\d{4}[/-]\d{2}[/-]\d{2}$', date):
             await update.message.reply_text(
-                "⚠️ فرمت تاریخ نامعتبر است!\nلطفا به صورت 1403/05/15 وارد کنید:"
+                "⚠️ فرمت تاریخ نامعتبر است!\nلطفا تاریخ را دقیقاً به این صورت وارد کنید: 1403/05/15 یا 1403-05-15"
             )
             return States.ADD_DRUG_DATE
         
         # ذخیره تاریخ در context
         context.user_data['drug_date'] = date
+        logger.debug(f"Stored drug_date: {context.user_data['drug_date']}")
         
         keyboard = [
             [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_drug_selection")]
@@ -2265,9 +2267,10 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         logger.error(f"Error in add_drug_date: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
-
+        await update.message.reply_text(
+            "خطایی رخ داده است. لطفا دوباره تاریخ را وارد کنید:"
+        )
+        return States.ADD_DRUG_DATE  # به جای END، به حالت قبلی برمی‌گردد
 
 async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده"""
