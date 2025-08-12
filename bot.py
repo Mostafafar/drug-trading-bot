@@ -416,7 +416,7 @@ def validate_date(date_str: str) -> bool:
     """Validate date format (either Persian or Gregorian)"""
     persian_pattern = r'^\d{4}[/-]\d{2}[/-]\d{2}$'
     gregorian_pattern = r'^\d{4}[/-]\d{2}[/-]\d{2}$'
-    return bool(re.match(persian_pattern, date_str) or bool(re.match(gregorian_pattern, date_str))
+    return bool(re.match(persian_pattern, date_str)) or bool(re.match(gregorian_pattern, date_str))
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler"""
