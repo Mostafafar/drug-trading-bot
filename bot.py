@@ -3855,7 +3855,13 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Failed to notify user: {e}")
     except Exception as e:
         logger.error(f"Error in error_handler: {e}")
-
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Allow the user to cancel the current operation"""
+    await update.message.reply_text(
+        "عملیات کنسل شد.",
+        reply_markup=ReplyKeyboardMarkup([['/start']], resize_keyboard=True)
+    )
+    return ConversationHandler.END
 # Main Function
 def main():
     """Start the bot"""
