@@ -2155,19 +2155,160 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             'price': selected_drug[1]
         }
         
+        await ask_for_expiry_date(update, context)
+        return States.ADD_DRUG_DATE
+        
+    except Exception as e:
+        logger.error(f"خطا در پردازش انتخاب دارو: {e}")
+        return ConversationHandler.END
+
+async def ask_for_expiry_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """درخواست تاریخ انقضا از کاربر"""
+    try:
+        selected_drug = context.user_data['selected_drug']
+        
+        # ارسال پیام داروی انتخاب شده
+        await context.bot.send_message(
+            chat_id=update.chosen_inline_result.from_user.id,
+            text=f"✅ دارو انتخاب شده:\n\n"
+                 f"💊 نام: {selected_drug['name']}\n"
+                 f"💰 قیمت: {selected_drug['price']}"
+        )
+        
+        # ارسال پیام درخواست تاریخ انقضا با کیبورد
         keyboard = [
             [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_search")]
         ]
         
         await context.bot.send_message(
             chat_id=update.chosen_inline_result.from_user.id,
-            text=f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
-                 "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 1403/05/15):",
+            text="📅 لطفا تاریخ انقضا را به فرمت زیر وارد کنید:\n"
+                 "مثال: 1405/12/15 یا 2026-03-20",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        return States.ADD_DRUG_DATE
+        
     except Exception as e:
-        logger.error(f"خطا در پردازش انتخاب دارو: {e}")
+        logger.error(f"خطا در درخواست تاریخ انقضا: {e}")
+
+async def ask_for_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """درخواست تعداد از کاربر"""
+    try:
+        drug_date = update.message.text.strip()
+        
+        # اعتبارسنجی تاریخ
+        if not validate_date(drug_date):
+            await update.message.reply_text(
+                "⚠️ فرمت تاریخ نامعتبر است!\n"
+                "لطفا تاریخ را به یکی از فرمت‌های زیر وارد کنید:\n"
+                "1405/12/15 یا 2026-03-20"
+            )
+            return States.ADD_DRUG_DATE
+        
+        context.user_data['drug_date'] = drug_date
+        
+        # ارسال پیام تأیید تاریخ
+        await update.message.reply_text(
+            f"✅ تاریخ انقضا ثبت شد: {drug_date}"
+        )
+        
+        # درخواست تعداد
+        keyboard = [
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_date")]
+        ]
+        
+        await update.message.reply_text(
+            "📦 لطفا تعداد یا مقدار موجود را وارد کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+        return States.ADD_DRUG_QUANTITY
+        
+    except Exception as e:
+        logger.error(f"خطا در درخواست تعداد: {e}")
+        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        return States.ADD_DRUG_DATE
+
+def validate_date(date_str: str) -> bool:
+    """اعتبارسنجی فرمت تاریخ"""
+    try:
+        # بررسی فرمت شمسی (1403/05/15)
+        if re.match(r'^\d{4}[/-]\d{2}[/-]\d{2}$', date_str):
+            return True
+        # بررسی فرمت میلادی (2024-08-05)
+        if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+            return True
+        return False
+    except:
+        return False
+
+async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ذخیره نهایی دارو در دیتابیس"""
+    try:
+        quantity = update.message.text.strip()
+        
+        try:
+            quantity = int(quantity)
+            if quantity <= 0:
+                await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
+                return States.ADD_DRUG_QUANTITY
+        except ValueError:
+            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
+            return States.ADD_DRUG_QUANTITY
+        
+        # جمع‌آوری تمام اطلاعات
+        user = update.effective_user
+        selected_drug = context.user_data.get('selected_drug')
+        drug_date = context.user_data.get('drug_date')
+        
+        if not all([selected_drug, drug_date]):
+            await update.message.reply_text("اطلاعات ناقص است. لطفا از اول شروع کنید.")
+            return ConversationHandler.END
+            
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                INSERT INTO drug_items (user_id, name, price, date, quantity)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
+                ''', (
+                    user.id,
+                    selected_drug['name'],
+                    selected_drug['price'],
+                    drug_date,
+                    quantity
+                ))
+                drug_id = cursor.fetchone()[0]
+                conn.commit()
+                
+                # پیام تأیید نهایی
+                await update.message.reply_text(
+                    f"✅ دارو با موفقیت ثبت شد!\n\n"
+                    f"🆔 کد: {drug_id}\n"
+                    f"💊 نام: {selected_drug['name']}\n"
+                    f"💰 قیمت: {selected_drug['price']}\n"
+                    f"📅 تاریخ انقضا: {drug_date}\n"
+                    f"📦 تعداد: {quantity}\n\n"
+                    "می‌توانید داروهای بیشتری اضافه کنید."
+                )
+                
+                # پاک کردن داده‌های موقت
+                context.user_data.pop('selected_drug', None)
+                context.user_data.pop('drug_date', None)
+                
+        except Exception as e:
+            logger.error(f"خطا در ثبت دارو: {e}")
+            await update.message.reply_text("خطا در ثبت دارو. لطفا دوباره تلاش کنید.")
+        finally:
+            if conn:
+                conn.close()
+                
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"خطا در ذخیره دارو: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع جستجو با اینلاین کوئری"""
