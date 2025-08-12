@@ -6,6 +6,8 @@ import logging
 import random
 import asyncio
 import psycopg2
+import asyncpg
+from asyncpg.exceptions import PostgresError
 import traceback
 import pandas as pd
 from io import BytesIO
@@ -114,39 +116,42 @@ class States(Enum):
     PERSONNEL_VERIFICATION = auto()
     PERSONNEL_LOGIN = auto()
 
-def get_db_connection(max_retries=3, retry_delay=1.0):
-    """Get a database connection with retry logic"""
+async def get_db_connection(max_retries=3, retry_delay=1.0):
+    """Get an async database connection with retry logic"""
     conn = None
     last_error = None
     
     for attempt in range(max_retries):
         try:
-            conn = psycopg2.connect(
-                dbname=DB_CONFIG['dbname'],
+            conn = await asyncpg.connect(
                 user=DB_CONFIG['user'],
                 password=DB_CONFIG['password'],
+                database=DB_CONFIG['dbname'],
                 host=DB_CONFIG['host'],
                 port=DB_CONFIG['port']
             )
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT 1")
-                cursor.execute("SET TIME ZONE 'Asia/Tehran'")
+            
+            # Set timezone
+            await conn.execute("SET TIME ZONE 'Asia/Tehran'")
+            
+            # Test connection
+            await conn.fetch("SELECT 1")
+            
             return conn
-        except psycopg2.Error as e:
+            
+        except PostgresError as e:
             last_error = e
             logger.error(f"DB connection attempt {attempt + 1} failed: {str(e)}")
             if conn:
-                try:
-                    conn.close()
-                except:
-                    pass
+                await conn.close()
+            
             if attempt < max_retries - 1:
-                time.sleep(retry_delay * (attempt + 1))
+                await asyncio.sleep(retry_delay * (attempt + 1))
     
     logger.critical(f"Failed to connect to DB after {max_retries} attempts")
     if last_error:
         raise last_error
-    raise psycopg2.Error("Unknown database connection error")
+    raise PostgresError("Unknown database connection error")
 
 async def initialize_db():
     """Initialize database tables and default data"""
@@ -3863,19 +3868,21 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 # Main Function
-def main():
-    """Start the bot"""
+
+async def main_async():
+    """Async main function"""
     # Initialize database
-    asyncio.run(initialize_db())
+    await initialize_db()
     
     # Load drug data
     load_drug_data()
     
     # Create application
     application = ApplicationBuilder() \
-        .token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY") \
+        .token("YOUR_TELEGRAM_BOT_TOKEN") \
         .post_init(post_init) \
         .build()
+
     
     # Add conversation handler for registration
     registration_conv = ConversationHandler(
@@ -4099,6 +4106,12 @@ async def post_init(application: Application):
     ]
     
     await application.bot.set_my_commands(commands)
+     # Run the bot
+    await application.run_polling()
+
+def main():
+    """Sync entry point"""
+    asyncio.run(main_async())
 
 if __name__ == '__main__':
     main()
