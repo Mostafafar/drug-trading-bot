@@ -2234,7 +2234,7 @@ async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+qasync def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تاریخ انقضا برای داروی انتخاب شده"""
     try:
         # بررسی آیا از طریق inline query آمده‌ایم یا خیر
@@ -2270,6 +2270,31 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in add_drug_date: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """دریافت تعداد برای داروی انتخاب شده"""
+    try:
+        quantity = update.message.text.strip()
+        
+        try:
+            quantity = int(quantity)
+            if quantity <= 0:
+                await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
+                return States.ADD_DRUG_QUANTITY
+        except ValueError:
+            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
+            return States.ADD_DRUG_QUANTITY
+        
+        context.user_data['drug_quantity'] = quantity
+        
+        # ذخیره اطلاعات در دیتابیس
+        return await save_drug_item(update, context)
+        
+    except Exception as e:
+        logger.error(f"Error in add_drug_quantity: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+
+
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if update.callback_query and update.callback_query.data == "back_to_drug_selection":
