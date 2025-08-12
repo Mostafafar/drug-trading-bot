@@ -4716,7 +4716,7 @@ def main():
                 ],
                 States.ADD_DRUG_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
-                    CallbackQueryHandler(select_drug_for_adding, pattern="^back_to_drug_selection$")
+                    CallbackQueryHandler(add_drug_date, pattern="^back_to_date_input$")  
                 ],
                 States.EDIT_DRUG: [
                     CallbackQueryHandler(edit_drugs, pattern="^back_to_list$"),
