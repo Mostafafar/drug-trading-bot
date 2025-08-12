@@ -2145,27 +2145,26 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     await update.inline_query.answer(results)
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle selected inline result"""
-    result_id = update.chosen_inline_result.result_id
+    """Handle selected inline result for drug addition"""
     try:
-        idx = int(result_id)
-        if 0 <= idx < len(drug_list):
-            selected_drug = drug_list[idx]
-            context.user_data['selected_drug'] = {
-                'name': selected_drug[0],
-                'price': selected_drug[1]
-            }
-            
-            await context.bot.send_message(
-                chat_id=update.chosen_inline_result.from_user.id,
-                text=f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
-                     "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
-            )
-            return States.ADD_DRUG_DATE
+        result_id = update.chosen_inline_result.result_id
+        selected_drug = drug_list[int(result_id)]
+        
+        context.user_data['selected_drug'] = {
+            'name': selected_drug[0],
+            'price': selected_drug[1]
+        }
+        
+        await context.bot.send_message(
+            chat_id=update.chosen_inline_result.from_user.id,
+            text=f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
+                 "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 1403/05/15):"
+        )
+        return States.ADD_DRUG_DATE
+        
     except Exception as e:
         logger.error(f"Error handling chosen inline result: {e}")
-    
-    return ConversationHandler.END
+        return ConversationHandler.END
 
 
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2252,15 +2251,22 @@ async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         return ConversationHandler.END
 
 async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Add expiration date for drug"""
+    """دریافت تاریخ انقضا برای داروی انتخاب شده"""
     try:
-        if update.callback_query and update.callback_query.data == "back_to_search":
-            await update.callback_query.answer()
-            return await search_drug_for_adding(update, context)
+        # بررسی آیا از طریق inline query آمده‌ایم یا خیر
+        if update.message and not context.user_data.get('selected_drug'):
+            await update.message.reply_text("خطا در دریافت اطلاعات دارو. لطفا دوباره شروع کنید.")
+            return ConversationHandler.END
+            
+        date = update.message.text.strip()
         
-        date = update.message.text
+        # اعتبارسنجی فرمت تاریخ
         if not re.match(r'^\d{4}/\d{2}/\d{2}$', date):
-            await update.message.reply_text("فرمت تاریخ نامعتبر است. لطفا به صورت 1403/05/15 وارد کنید.")
+            keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_drug_selection")]]
+            await update.message.reply_text(
+                "⚠️ فرمت تاریخ نامعتبر است!\nلطفا به صورت 1403/05/15 وارد کنید:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             return States.ADD_DRUG_DATE
         
         context.user_data['drug_date'] = date
@@ -2270,15 +2276,16 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         
         await update.message.reply_text(
+            "✅ تاریخ ثبت شد!\n\n"
             "لطفا تعداد یا مقدار موجود را وارد کنید:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return States.ADD_DRUG_QUANTITY
+        
     except Exception as e:
         logger.error(f"Error in add_drug_date: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if update.callback_query and update.callback_query.data == "back_to_drug_selection":
@@ -4717,9 +4724,7 @@ def main():
                 States.SEARCH_DRUG_FOR_ADDING: [
                     CallbackQueryHandler(add_drug_item, pattern="^back$"),
                     
-                ],
-                States.SELECT_DRUG_FOR_ADDING: [
-                    CallbackQueryHandler(select_drug_for_adding, pattern="^select_drug_|back_to_drug_selection$")
+  
                 ],
                 States.ADD_DRUG_DATE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
