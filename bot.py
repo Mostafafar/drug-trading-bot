@@ -4706,7 +4706,7 @@ def main():
                     CallbackQueryHandler(add_drug_item, pattern="^back$"),
                     InlineQueryHandler(handle_inline_query),  # Handle inline queries
                     CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"),
-                    ChosenInlineResultHandler(handle_chosen_inline_result),
+                    
                     
   
                 ],
