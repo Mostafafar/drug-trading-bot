@@ -4696,11 +4696,11 @@ def main():
                 ],
                 States.ADD_DRUG_DATE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
-                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
+                    
                 ],
                 States.ADD_DRUG_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
-                    CallbackQueryHandler(add_drug_date, pattern="^back_to_date_input$")  
+                    
                 ],
                 States.EDIT_DRUG: [
                     CallbackQueryHandler(edit_drugs, pattern="^back_to_list$"),
