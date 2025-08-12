@@ -4844,22 +4844,21 @@ def main():
             ],
             states={
                 States.SEARCH_DRUG_FOR_ADDING: [
-                    CallbackQueryHandler(add_drug_item, pattern="^back$"),
-                    InlineQueryHandler(handle_inline_query),  # Handle inline queries
-                    CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"),
-                    
+                    InlineQueryHandler(handle_inline_query),
+                    ChosenInlineResultHandler(handle_chosen_inline_result),
+                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
                     
   
                 ],
                 States.ADD_DRUG_DATE: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, ask_for_quantity),
                     CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
                     
                     
                 ],
                 States.ADD_DRUG_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
-                    CallbackQueryHandler(handle_back, pattern="^back$")
+                    CallbackQueryHandler(ask_for_expiry_date, pattern="^back_to_date$")
                    
                 ],
                 States.EDIT_DRUG: [
