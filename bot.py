@@ -2251,6 +2251,7 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text(
                 "برای جستجوی دارو، روی دکمه زیر کلیک کنید:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
+            )
         
         return States.SEARCH_DRUG_FOR_ADDING
         
