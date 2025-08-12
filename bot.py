@@ -2136,41 +2136,48 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
               else update.message.reply_text)("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle inline query for drug search with state check"""
-    query = update.inline_query.query
-    if not query:
-        return
+    """Handle inline query for drug search"""
+    query = update.inline_query.query.strip()
     
-    # Check if user is in the right state for adding drugs
+    # Check if user is in the right state
     if context.user_data.get('state') != States.SEARCH_DRUG_FOR_ADDING:
+        await update.inline_query.answer(
+            [],
+            switch_pm_text="برای جستجو ابتدا از منوی اصلی شروع کنید",
+            switch_pm_parameter="start"
+        )
         return
     
     results = []
+    
+    # Search in drug list (limited to 50 results)
     for idx, (name, price) in enumerate(drug_list):
         if query.lower() in name.lower():
-            title_part = name[:30] + "..." if len(name) > 30 else name
-            desc_part = f"قیمت: {price}"
+            # Format display text
+            display_name = name[:30] + "..." if len(name) > 30 else name
+            display_price = format_price(parse_price(price))
             
             results.append(
                 InlineQueryResultArticle(
                     id=str(idx),
-                    title=title_part,
-                    description=desc_part,
-                    input_message_content=InputTextMessageContent(
-                        f"💊 {name}\n💰 قیمت: {price}"
+                    title=f"{display_name} - {display_price}",
+                    description=f"قیمت: {display_price}",
+                    input_text_message_content=InputTextMessageContent(
+                        f"💊 {name}\n💰 قیمت: {display_price}"
                     ),
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton(
-                            "➕ اضافه به لیست داروها",
+                            "➕ اضافه کردن",
                             callback_data=f"add_drug_{idx}"
                         )]
                     ])
                 )
             )
-        if len(results) >= 50:
-            break
+            
+            if len(results) >= 50:
+                break
     
-    await update.inline_query.answer(results)
+    await update.inline_query.answer(results, cache_time=10)
 def split_drug_info(full_text):
     """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
     # پیدا کردن اولین عدد در متن
@@ -2200,13 +2207,13 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
                 'price': selected_drug[1]
             }
             
-            # Update state
+            # Move to next state
             context.user_data['state'] = States.ADD_DRUG_DATE
             
             await context.bot.send_message(
                 chat_id=update.chosen_inline_result.from_user.id,
                 text=f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
-                     "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):",
+                     "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 1403/05/15):",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_search")]
                 ])
@@ -2217,75 +2224,40 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
     
     return ConversationHandler.END
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Search for drug to add"""
+    """Start drug search process using inline query"""
     try:
-        # Handle both callback queries and messages
+        await ensure_user(update, context)
+        
+        # Set state for inline query handling
+        context.user_data['state'] = States.SEARCH_DRUG_FOR_ADDING
+        
+        # Create inline keyboard with search button
+        keyboard = [
+            [InlineKeyboardButton(
+                "🔍 جستجوی دارو", 
+                switch_inline_query_current_chat=""
+            )],
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+        ]
+        
+        # Differentiate between callback and message
         if update.callback_query:
-            query = update.callback_query
-            await query.answer()
-            message = query.message
-            search_term = context.user_data.get('search_term', '')
-        elif update.message:
-            message = update.message
-            search_term = update.message.text.strip().lower()
-            context.user_data['search_term'] = search_term
-        else:
-            logger.error("Invalid update type in search_drug_for_adding")
-            return States.SEARCH_DRUG_FOR_ADDING
-
-        if not search_term or len(search_term) < 2:
-            await message.reply_text("حداقل ۲ حرف برای جستجو وارد کنید:")
-            return States.SEARCH_DRUG_FOR_ADDING
-
-        # Search in drug list
-        matched_drugs = []
-        try:
-            for name, price in drug_list:
-                if name and search_term in name.lower():
-                    matched_drugs.append((name, price))
-        except Exception as e:
-            logger.error(f"Error searching drug list: {e}")
-            await message.reply_text("خطایی در جستجوی داروها رخ داد.")
-            return States.SEARCH_DRUG_FOR_ADDING
-
-        if not matched_drugs:
-            keyboard = [
-                [InlineKeyboardButton("🔙 بازگشت به جستجو", callback_data="back_to_search")],
-                [InlineKeyboardButton("🏠 منوی اصلی", callback_data="back")]
-            ]
-            
-            await message.reply_text(
-                "هیچ دارویی با این نام یافت نشد.\n\n"
-                "می‌توانید دوباره جستجو کنید یا به منوی اصلی بازگردید.",
+            await update.callback_query.answer()
+            await update.callback_query.edit_message_text(
+                "برای جستجوی دارو، روی دکمه زیر کلیک کنید:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            return States.SEARCH_DRUG_FOR_ADDING
-
-        context.user_data['matched_drugs'] = matched_drugs
+        else:
+            await update.message.reply_text(
+                "برای جستجوی دارو، روی دکمه زیر کلیک کنید:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
         
-        # Prepare keyboard with drug options
-        keyboard = []
-        for idx, (name, price) in enumerate(matched_drugs[:10]):  # Limit to 10 results
-            display_text = f"{name[:25]}{'...' if len(name) > 25 else ''}\n{price}"
-            keyboard.append([InlineKeyboardButton(display_text, callback_data=f"select_drug_{idx}")])
-
-        keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
+        return States.SEARCH_DRUG_FOR_ADDING
         
-        await message.reply_text(
-            "🔍 نتایج جستجو:\n\nلطفا داروی مورد نظر را انتخاب کنید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return States.SELECT_DRUG_FOR_ADDING
-
     except Exception as e:
         logger.error(f"Error in search_drug_for_adding: {e}")
-        try:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="خطایی در پردازش درخواست شما رخ داد."
-            )
-        except:
-            pass
+        await (update.callback_query.edit_message_text if update.callback_query 
+              else update.message.reply_text)("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
 async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
