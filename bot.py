@@ -2089,7 +2089,7 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         
         await update.message.reply_text(
-            "برای اضافه کردن دارو، روی دکمه جستجو کلیک کنید:",
+            "برای اضافه کردن دارو جدید، روی دکمه جستجو کلیک کنید:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return States.SEARCH_DRUG_FOR_ADDING
@@ -2097,7 +2097,6 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in add_drug_item: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 
 def split_drug_info(full_text):
     """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
@@ -2122,13 +2121,14 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     for idx, (name, price) in enumerate(drug_list):
         if query.lower() in name.lower():
             # جدا کردن نام و توضیحات
-            title_part, desc_part = split_drug_info(name)
+            title_part = name.split()[0]  # اولین کلمه به عنوان عنوان
+            desc_part = ' '.join(name.split()[1:]) if len(name.split()) > 1 else name
             
             results.append(
                 InlineQueryResultArticle(
                     id=str(idx),
                     title=title_part,
-                    description=f"{desc_part} 💰 {price}",
+                    description=f"{desc_part} - قیمت: {price}",
                     input_message_content=InputTextMessageContent(
                         f"💊 {name}\n💰 قیمت: {price}"
                     ),
@@ -2155,17 +2155,20 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             'price': selected_drug[1]
         }
         
+        keyboard = [
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_search")]
+        ]
+        
         await context.bot.send_message(
             chat_id=update.chosen_inline_result.from_user.id,
             text=f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
-                 "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 1403/05/15):"
+                 "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 1403/05/15):",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return States.ADD_DRUG_DATE
     except Exception as e:
         logger.error(f"خطا در پردازش انتخاب دارو: {e}")
         return ConversationHandler.END
-
-
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع جستجو با اینلاین کوئری"""
     keyboard = [
@@ -2239,18 +2242,24 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         date = update.message.text.strip()
         
-        # اعتبارسنجی فرمت تاریخ
+        # اعتبارسنجی فرمت تاریخ (سال/ماه/روز)
         if not re.match(r'^\d{4}/\d{2}/\d{2}$', date):
             await update.message.reply_text(
                 "⚠️ فرمت تاریخ نامعتبر است!\nلطفا به صورت 1403/05/15 وارد کنید:"
             )
             return States.ADD_DRUG_DATE
         
+        # ذخیره تاریخ در context
         context.user_data['drug_date'] = date
+        
+        keyboard = [
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_drug_selection")]
+        ]
         
         await update.message.reply_text(
             "✅ تاریخ ثبت شد!\n\n"
-            "لطفا تعداد یا مقدار موجود را وارد کنید:"
+            "لطفا تعداد یا مقدار موجود را وارد کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return States.ADD_DRUG_QUANTITY
         
@@ -2258,6 +2267,8 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in add_drug_date: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
+
 async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده"""
     try:
@@ -2281,8 +2292,6 @@ async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in add_drug_quantity: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
-
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ذخیره دارو در دیتابیس"""
     try:
@@ -2302,6 +2311,7 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cursor.execute('''
                 INSERT INTO drug_items (user_id, name, price, date, quantity)
                 VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
                 ''', (
                     user.id,
                     selected_drug['name'],
@@ -2309,20 +2319,23 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     drug_date,
                     drug_quantity
                 ))
+                drug_id = cursor.fetchone()[0]
                 conn.commit()
-                
-                await update.message.reply_text(
-                    f"✅ دارو با موفقیت اضافه شد!\n\n"
-                    f"نام: {selected_drug['name']}\n"
-                    f"قیمت: {selected_drug['price']}\n"
-                    f"تاریخ انقضا: {drug_date}\n"
-                    f"تعداد: {drug_quantity}"
-                )
                 
                 # پاک کردن داده‌های موقت
                 context.user_data.pop('selected_drug', None)
                 context.user_data.pop('drug_date', None)
                 context.user_data.pop('drug_quantity', None)
+                
+                await update.message.reply_text(
+                    f"✅ دارو با موفقیت اضافه شد!\n\n"
+                    f"🆔 کد: {drug_id}\n"
+                    f"💊 نام: {selected_drug['name']}\n"
+                    f"💰 قیمت: {selected_drug['price']}\n"
+                    f"📅 تاریخ انقضا: {drug_date}\n"
+                    f"📦 تعداد: {drug_quantity}\n\n"
+                    "می‌توانید داروهای بیشتری اضافه کنید یا به منوی اصلی بازگردید."
+                )
                 
         except Exception as e:
             logger.error(f"Error saving drug: {e}")
@@ -4696,11 +4709,13 @@ def main():
                 ],
                 States.ADD_DRUG_DATE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
+                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
                     
                     
                 ],
                 States.ADD_DRUG_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
+                    CallbackQueryHandler(handle_back, pattern="^back$")
                    
                 ],
                 States.EDIT_DRUG: [
