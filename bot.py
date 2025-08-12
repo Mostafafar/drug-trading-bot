@@ -2162,7 +2162,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                     id=str(idx),
                     title=f"{display_name} - {display_price}",
                     description=f"قیمت: {display_price}",
-                    input_text_message_content=InputTextMessageContent(
+                    input_message_content=InputTextMessageContent(  # اینجا اصلاح شده
                         f"💊 {name}\n💰 قیمت: {display_price}"
                     ),
                     reply_markup=InlineKeyboardMarkup([
