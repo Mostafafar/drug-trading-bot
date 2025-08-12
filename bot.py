@@ -2145,10 +2145,10 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     await update.inline_query.answer(results)
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle selected inline result for drug addition"""
+    """پردازش انتخاب از اینلاین کوئری"""
     try:
-        result_id = update.chosen_inline_result.result_id
-        selected_drug = drug_list[int(result_id)]
+        idx = int(update.chosen_inline_result.result_id)
+        selected_drug = drug_list[idx]
         
         context.user_data['selected_drug'] = {
             'name': selected_drug[0],
@@ -2161,39 +2161,23 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
                  "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 1403/05/15):"
         )
         return States.ADD_DRUG_DATE
-        
     except Exception as e:
-        logger.error(f"Error handling chosen inline result: {e}")
+        logger.error(f"خطا در پردازش انتخاب دارو: {e}")
         return ConversationHandler.END
 
 
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start drug search process using inline query"""
-    try:
-        # Create inline keyboard with search button
-        keyboard = [
-            [InlineKeyboardButton("🔍 جستجوی دارو", switch_inline_query_current_chat="")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
-        ]
-        
-        if update.callback_query:
-            await update.callback_query.answer()
-            await update.callback_query.edit_message_text(
-                "برای جستجوی دارو روی دکمه زیر کلیک کنید:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        else:
-            await update.message.reply_text(
-                "برای جستجوی دارو روی دکمه زیر کلیک کنید:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            
-        return States.SEARCH_DRUG_FOR_ADDING
-        
-    except Exception as e:
-        logger.error(f"Error in search_drug_for_adding: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+    """شروع جستجو با اینلاین کوئری"""
+    keyboard = [
+        [InlineKeyboardButton("🔍 جستجوی دارو", switch_inline_query_current_chat="")],
+        [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+    ]
+    
+    await update.message.reply_text(
+        "برای اضافه کردن دارو جدید، روی دکمه جستجو کلیک کنید:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return States.SEARCH_DRUG_FOR_ADDING
 
 
 async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
