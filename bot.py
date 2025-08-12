@@ -2234,35 +2234,23 @@ async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-qasync def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تاریخ انقضا برای داروی انتخاب شده"""
     try:
-        # بررسی آیا از طریق inline query آمده‌ایم یا خیر
-        if update.message and not context.user_data.get('selected_drug'):
-            await update.message.reply_text("خطا در دریافت اطلاعات دارو. لطفا دوباره شروع کنید.")
-            return ConversationHandler.END
-            
         date = update.message.text.strip()
         
         # اعتبارسنجی فرمت تاریخ
         if not re.match(r'^\d{4}/\d{2}/\d{2}$', date):
-            keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_drug_selection")]]
             await update.message.reply_text(
-                "⚠️ فرمت تاریخ نامعتبر است!\nلطفا به صورت 1403/05/15 وارد کنید:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                "⚠️ فرمت تاریخ نامعتبر است!\nلطفا به صورت 1403/05/15 وارد کنید:"
             )
             return States.ADD_DRUG_DATE
         
         context.user_data['drug_date'] = date
         
-        keyboard = [
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_drug_selection")]
-        ]
-        
         await update.message.reply_text(
             "✅ تاریخ ثبت شد!\n\n"
-            "لطفا تعداد یا مقدار موجود را وارد کنید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "لطفا تعداد یا مقدار موجود را وارد کنید:"
         )
         return States.ADD_DRUG_QUANTITY
         
