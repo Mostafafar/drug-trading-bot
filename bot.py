@@ -4622,7 +4622,7 @@ def main():
             logger.warning("Failed to load drug data - some features may not work")
         
         # Create application
-        persistence = PicklePersistence(filename='bot_data.pickle')
+        persistence = PicklePersistence(filepath='bot_data.pickle')
         
         # Create application with persistence
         application = ApplicationBuilder().token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY").persistence(persistence).build()
