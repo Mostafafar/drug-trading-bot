@@ -4765,7 +4765,7 @@ def main():
             entry_points=[
                 MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
                 InlineQueryHandler(handle_inline_query),  # Inline برای جستجو
-                ChosenInlineResultHandler(handle_chosen_inline_result),
+                
                 MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs),
                 CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
                 CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
