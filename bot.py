@@ -4732,7 +4732,7 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
+            allow_reentry=True,
             per_chat=False,  # جدید: state بر اساس کاربر نه چت
             per_user=True    #
         )
