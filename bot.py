@@ -44,7 +44,7 @@ from telegram.ext import (
     CallbackContext,
     ExtBot,
     InlineQueryHandler,
-    ChosenInlineResultHandler
+    ChosenInlineResultHandler,
     PicklePersistence
 )
 from telegram.constants import ParseMode
