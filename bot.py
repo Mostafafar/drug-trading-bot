@@ -2333,34 +2333,40 @@ async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # اعتبارسنجی تعداد
-        try:
-            quantity = int(update.message.text.strip())
-            if quantity <= 0:
-                await update.message.reply_text("لطفا یک عدد معتبر بزرگتر از صفر وارد کنید:")
-                return States.ADD_DRUG_QUANTITY
-        except ValueError:
-            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید:")
-            return States.ADD_DRUG_QUANTITY
-        
-        # لاگ داده‌های موجود در context
-        drug_name = context.user_data.get('selected_drug_name')
-        drug_price = context.user_data.get('selected_drug_price')
+        quantity = update.message.text.strip()
+        drug_name = context.user_data.get('drug_name')
+        drug_price = context.user_data.get('drug_price')
         expiry_date = context.user_data.get('expiry_date')
+        
+        # لاگ برای دیباگ
         logger.info(f"save_drug_item for user {update.effective_user.id}: drug_name={drug_name}, drug_price={drug_price}, expiry_date={expiry_date}, quantity={quantity}")
         
-        # بررسی کامل بودن داده‌ها
-        if not all([drug_name, drug_price, expiry_date]):
-            missing_fields = [field for field, value in [
-                ('drug_name', drug_name),
-                ('drug_price', drug_price),
-                ('expiry_date', expiry_date)
-            ] if not value]
+        missing_fields = []
+        if not drug_name:
+            missing_fields.append('drug_name')
+        if not drug_price:
+            missing_fields.append('drug_price')
+        if not expiry_date:
+            missing_fields.append('expiry_date')
+        if not quantity:
+            missing_fields.append('quantity')
+            
+        if missing_fields:
             logger.error(f"Missing fields for user {update.effective_user.id}: {missing_fields}")
-            await update.message.reply_text(f"اطلاعات ناقص است (کمبود: {', '.join(missing_fields)}). لطفا دوباره از ابتدا شروع کنید.")
-            return ConversationHandler.END
-        
-        # ذخیره در دیتابیس
+            await update.message.reply_text(
+                f"اطلاعات ناقص است (کمبود: {', '.join(missing_fields)}). لطفا دوباره از ابتدا شروع کنید."
+            )
+            return States.SEARCH_DRUG_FOR_ADDING
+            
+        try:
+            quantity = int(quantity)
+            if quantity <= 0:
+                await update.message.reply_text("لطفا تعداد معتبر وارد کنید.")
+                return States.ADD_DRUG_QUANTITY
+        except ValueError:
+            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
+            return States.ADD_DRUG_QUANTITY
+            
         conn = None
         try:
             conn = get_db_connection()
@@ -2379,25 +2385,26 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 await update.message.reply_text(
                     f"✅ دارو با موفقیت ثبت شد:\n"
-                    f"💊 نام: {drug_name}\n"
-                    f"💰 قیمت: {drug_price}\n"
-                    f"📅 تاریخ انقضا: {expiry_date}\n"
-                    f"📦 تعداد: {quantity}"
+                    f"نام: {drug_name}\n"
+                    f"قیمت: {drug_price}\n"
+                    f"تاریخ انقضا: {expiry_date}\n"
+                    f"تعداد: {quantity}",
+                    reply_markup=ReplyKeyboardRemove()
                 )
                 
-                # پاک کردن context
-                context.user_data.pop('selected_drug_name', None)
-                context.user_data.pop('selected_drug_price', None)
+                # پاک کردن user_data
+                context.user_data.pop('drug_name', None)
+                context.user_data.pop('drug_price', None)
                 context.user_data.pop('expiry_date', None)
                 
-                return await start(update, context)  # بازگشت به منوی اصلی
+                return await start(update, context)
                 
         except Exception as e:
             logger.error(f"Error saving drug item for user {update.effective_user.id}: {e}")
             if conn:
                 conn.rollback()
             await update.message.reply_text("خطا در ثبت دارو. لطفا دوباره تلاش کنید.")
-            return ConversationHandler.END
+            return States.SEARCH_DRUG_FOR_ADDING
         finally:
             if conn:
                 conn.close()
