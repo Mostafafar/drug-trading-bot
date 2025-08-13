@@ -7,7 +7,6 @@ import random
 import asyncio
 import psycopg2
 import traceback
-import uuid  # اضافه کردن برای تولید ID یکتا
 import pandas as pd
 from io import BytesIO
 from pathlib import Path
@@ -430,37 +429,47 @@ async def download_file(file, file_type: str, user_id: int) -> str:
 
 
 
-def load_drug_data():
+def load_drug_data() -> bool:
+    """Load drug data from Excel file (local or GitHub)"""
+    global drug_list
+    
     try:
-        current_dir = Path(__file__).parent
-        file_path = current_dir / "DrugPrices.xlsx"
-        logger.info(f"Checking for file at: {file_path}")
-        if not os.path.exists(file_path):
-            logger.error(f"DrugPrices.xlsx file not found at {file_path}")
-            return []
+        if excel_file.exists():
+            try:
+                df = pd.read_excel(excel_file, sheet_name="Sheet1", engine='openpyxl')
+                df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
+                drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
+                drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
+                logger.info(f"Loaded {len(drug_list)} drugs from local Excel file")
+                return True
+            except Exception as e:
+                logger.error(f"Error reading local Excel file: {e}")
+                
+        github_url = "https://raw.githubusercontent.com/yourusername/yourrepo/main/DrugPrices.xlsx"
+        response = requests.get(github_url)
+        if response.status_code == 200:
+            excel_data = BytesIO(response.content)
+            df = pd.read_excel(excel_data, engine='openpyxl')
+            df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
+            drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
+            drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
+            df.to_excel(excel_file, index=False, engine='openpyxl')
+            logger.info(f"Loaded {len(drug_list)} drugs from GitHub and saved locally")
+            return True
         
-        logger.info("Reading Excel file...")
-        df = pd.read_excel(file_path)
-        logger.info(f"Excel file loaded with {len(df)} rows and columns: {list(df.columns)}")
+        logger.warning("Could not load drug data from either local file or GitHub")
         drug_list = []
-        for index, row in df.iterrows():
-            name = str(row.get('name', '')).strip()
-            price = str(row.get('price', '')).strip()
-            logger.debug(f"Processing row {index}: name={name}, price={price}")
-            if name and price:
-                drug_list.append({'name': name, 'price': price})
-            else:
-                logger.warning(f"Skipping invalid row {index}: name={name}, price={price}")
+        return False
         
-        logger.info(f"Loaded {len(drug_list)} drugs from DrugPrices.xlsx")
-        logger.info(f"Drug list sample: {drug_list[:5]}")
-        if not drug_list:
-            logger.error("No valid drugs loaded from DrugPrices.xlsx")
-            return []
-        return drug_list
     except Exception as e:
         logger.error(f"Error loading drug data: {e}")
-        return []
+        drug_list = []
+        if excel_file.exists():
+            backup_file = current_dir / f"DrugPrices_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            excel_file.rename(backup_file)
+            logger.info(f"Created backup of corrupted file at {backup_file}")
+        return False
+
 
 def parse_price(price_str: str) -> float:
     """Convert price string to float by removing commas and currency symbols"""
