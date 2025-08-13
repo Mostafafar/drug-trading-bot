@@ -2121,12 +2121,17 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         results = []
         for idx, (name, price) in enumerate(drug_list):
             if query.lower() in name.lower():
-                result_id = f"{name}|{price}"
+                # Create a unique ID using index and a hash of the name
+                result_id = f"{idx}_{hash(name) & 0xFFFFFFFF}"
+                
+                # Ensure description is not too long
+                description = f"قیمت: {price}"[:64]  # Limit description length
+                
                 results.append(
                     InlineQueryResultArticle(
                         id=result_id,
-                        title=name,
-                        description=f"قیمت: {price}",
+                        title=name[:64],  # Limit title length
+                        description=description,
                         input_message_content=InputTextMessageContent(
                             f"✅ دارو انتخاب شده: {name}\n💰 قیمت: {price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
                         )
@@ -2139,6 +2144,10 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.inline_query.answer(results, cache_time=0)
     except Exception as e:
         logger.error(f"Error in handle_inline_query for user {update.effective_user.id}: {e}")
+        try:
+            await update.inline_query.answer([], cache_time=0)
+        except Exception as e:
+            logger.error(f"Failed to answer inline query: {e}")
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         logger.info(f"handle_chosen_inline_result called for user {update.effective_user.id}")
