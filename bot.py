@@ -2098,7 +2098,7 @@ def split_drug_info(full_text):
 
 
 
-async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         query = update.inline_query.query.strip()
