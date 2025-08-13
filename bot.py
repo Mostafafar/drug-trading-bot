@@ -15,6 +15,8 @@ from enum import Enum, auto
 from typing import Optional, Awaitable
 from difflib import SequenceMatcher
 import html
+import base64
+import hashlib
 
 import requests
 from telegram import (
@@ -2112,16 +2114,20 @@ def split_drug_info(full_text):
         description = "قیمت نامشخص"
     return title, description
 
+
+
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         query = update.inline_query.query.strip()
         if not query:
+            await update.inline_query.answer([], cache_time=0)
             return
 
         results = []
         for idx, (name, price) in enumerate(drug_list):
             if query.lower() in name.lower():
-                result_id = f"{name}|{price}"
+                # ایجاد result_id منحصربه‌فرد و ASCII با استفاده از index یا hash
+                result_id = f"drug_{idx}_{hashlib.md5(f'{name}|{price}'.encode()).hexdigest()[:8]}"
                 results.append(
                     InlineQueryResultArticle(
                         id=result_id,
@@ -2139,6 +2145,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.inline_query.answer(results, cache_time=0)
     except Exception as e:
         logger.error(f"Error in handle_inline_query for user {update.effective_user.id}: {e}")
+        await update.inline_query.answer([], cache_time=0)
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         logger.info(f"handle_chosen_inline_result called for user {update.effective_user.id}")
@@ -2152,12 +2159,13 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             return ConversationHandler.END
 
         result_id = result.result_id
+        # پیدا کردن دارو از drug_list با استفاده از index در result_id
         try:
-            # فرض می‌کنیم result_id به شکل "drug_name|drug_price" است
-            drug_name, drug_price = result_id.split('|')
+            idx = int(result_id.split('_')[1])  # فرض می‌کنیم result_id به شکل drug_{idx}_{hash}
+            drug_name, drug_price = drug_list[idx]
             drug_name = drug_name.strip()
             drug_price = drug_price.strip()
-        except ValueError:
+        except (ValueError, IndexError):
             logger.error(f"Invalid result_id format: {result_id} for user {update.effective_user.id}")
             await context.bot.send_message(
                 chat_id=update.effective_user.id,
@@ -2165,12 +2173,12 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             )
             return States.SEARCH_DRUG_FOR_ADDING
 
-        # ذخیره داده‌ها در context.user_data با کلیدهای درست
+        # ذخیره داده‌ها در context.user_data
         context.user_data['drug_name'] = drug_name
         context.user_data['drug_price'] = drug_price
         
         # لاگ برای دیباگ
-        logger.info(f"Stored drug_name: {context.user_data['drug_name']} and drug_price: {context.user_data['drug_price']} for user {update.effective_user.id}")
+        logger.info(f"Stored drug_name: {drug_name} and drug_price: {drug_price} for user {update.effective_user.id}")
 
         # ارسال پیام به کاربر
         message = (
@@ -2184,7 +2192,6 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             reply_markup=ReplyKeyboardRemove()
         )
 
-        # انتقال به state بعدی
         return States.ADD_DRUG_DATE
 
     except Exception as e:
@@ -2299,8 +2306,6 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardRemove()
         )
         return ConversationHandler.END
-
-
 async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده"""
     try:
@@ -2410,6 +2415,12 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in save_drug_item for user {update.effective_user.id}: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def handle_edited_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Ignoring edited message from user {update.effective_user.id}")
+    return
+
+# در تابع main() اضافه کن:
+
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List user's drug items"""
     conn = None
@@ -4935,6 +4946,7 @@ def main():
         application.add_handler(CallbackQueryHandler(select_drug, pattern="^select_target_"))
         application.add_handler(CallbackQueryHandler(select_drug, pattern="^select_mine_"))
         application.add_handler(CallbackQueryHandler(callback_handler))
+        application.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
         
         # Add error handler
         application.add_error_handler(error_handler)
