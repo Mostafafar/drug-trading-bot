@@ -429,18 +429,24 @@ async def download_file(file, file_type: str, user_id: int) -> str:
         raise
 
 
+
 def load_drug_data():
-    global drug_list
     try:
-        if not os.path.exists("DrugPrices.xlsx"):
-            logger.error("DrugPrices.xlsx file not found")
-            return False
+        current_dir = Path(__file__).parent
+        file_path = current_dir / "DrugPrices.xlsx"
+        logger.info(f"Checking for file at: {file_path}")
+        if not os.path.exists(file_path):
+            logger.error(f"DrugPrices.xlsx file not found at {file_path}")
+            return []
         
-        df = pd.read_excel("DrugPrices.xlsx")
+        logger.info("Reading Excel file...")
+        df = pd.read_excel(file_path)
+        logger.info(f"Excel file loaded with {len(df)} rows and columns: {list(df.columns)}")
         drug_list = []
         for index, row in df.iterrows():
             name = str(row.get('name', '')).strip()
             price = str(row.get('price', '')).strip()
+            logger.debug(f"Processing row {index}: name={name}, price={price}")
             if name and price:
                 drug_list.append({'name': name, 'price': price})
             else:
@@ -448,10 +454,13 @@ def load_drug_data():
         
         logger.info(f"Loaded {len(drug_list)} drugs from DrugPrices.xlsx")
         logger.info(f"Drug list sample: {drug_list[:5]}")
-        return True
+        if not drug_list:
+            logger.error("No valid drugs loaded from DrugPrices.xlsx")
+            return []
+        return drug_list
     except Exception as e:
         logger.error(f"Error loading drug data: {e}")
-        return False
+        return []
 
 def parse_price(price_str: str) -> float:
     """Convert price string to float by removing commas and currency symbols"""
@@ -2098,19 +2107,24 @@ def split_drug_info(full_text):
 
 
 
-async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def handle_inline_query(update, context):
     query = update.inline_query.query.strip()
+    logger.info(f"Inline query received: {query}")
     if not query:
+        logger.info("Empty query, returning no results")
         await update.inline_query.answer([])
         return
     
     results = []
     try:
+        drug_list = context.bot_data.get('drug_list', [])
+        logger.info(f"Searching in drug_list with {len(drug_list)} items")
         for drug in drug_list:
             if query.lower() in drug['name'].lower():
                 results.append(
                     InlineQueryResultArticle(
-                        id=drug['name'],  # استفاده از نام دارو به عنوان ID
+                        id=str(uuid.uuid4()),
                         title=drug['name'],
                         input_message_content=InputTextMessageContent(drug['name']),
                         description=f"Price: {drug['price']}",
@@ -2120,19 +2134,26 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                     )
                 )
         logger.info(f"Found {len(results)} results for query: {query}")
-        await update.inline_query.answer(results[:50])
+        await update.inline_query.answer(results[:50])  # Telegram limits to 50 results
     except Exception as e:
         logger.error(f"Error in inline query: {e}")
         await update.inline_query.answer([])
-async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
+async def handle_chosen_inline_result(update, context):
     try:
         result = update.chosen_inline_result
         drug_name = result.result_id
+        logger.info(f"Chosen inline result: {drug_name}")
         
-        # پیدا کردن دارو در drug_list
+        drug_list = context.bot_data.get('drug_list', [])
         selected_drug = next((drug for drug in drug_list if drug['name'] == drug_name), None)
         if not selected_drug:
             logger.error(f"Drug not found: {drug_name}")
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                text="دارو یافت نشد. لطفاً دوباره تلاش کنید."
+            )
             return
         
         context.user_data['selected_drug'] = selected_drug
