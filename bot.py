@@ -2113,38 +2113,32 @@ def split_drug_info(full_text):
     return title, description
 
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle inline query for drug search with smart splitting"""
-    query = update.inline_query.query
-    if not query:
-        return
-    
-    results = []
-    for idx, (name, price) in enumerate(drug_list):
-        if query.lower() in name.lower():
-            # جدا کردن نام و توضیحات
-            title_part = name.split()[0]  # اولین کلمه به عنوان عنوان
-            desc_part = ' '.join(name.split()[1:]) if len(name.split()) > 1 else name
-            
-            results.append(
-                InlineQueryResultArticle(
-                    id=str(idx),
-                    title=title_part,
-                    description=f"{desc_part} - قیمت: {price}",
-                    input_message_content=InputTextMessageContent(
-                        f"💊 {name}\n💰 قیمت: {price}"
-                    ),
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "➕ اضافه به لیست داروها",
-                            callback_data=f"add_drug_{idx}"
-                        )]
-                    ])
+    try:
+        query = update.inline_query.query.strip()
+        if not query:
+            return
+
+        results = []
+        for idx, (name, price) in enumerate(drug_list):
+            if query.lower() in name.lower():
+                result_id = f"{name}|{price}"
+                results.append(
+                    InlineQueryResultArticle(
+                        id=result_id,
+                        title=name,
+                        description=f"قیمت: {price}",
+                        input_message_content=InputTextMessageContent(
+                            f"✅ دارو انتخاب شده: {name}\n💰 قیمت: {price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
+                        )
+                    )
                 )
-            )
-        if len(results) >= 50:
-            break
-    
-    await update.inline_query.answer(results)
+                if len(results) >= 50:  # Telegram limit
+                    break
+
+        logger.info(f"Inline query by user {update.effective_user.id}: query='{query}', results={len(results)}")
+        await update.inline_query.answer(results, cache_time=0)
+    except Exception as e:
+        logger.error(f"Error in handle_inline_query for user {update.effective_user.id}: {e}")
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result = update.chosen_inline_result
@@ -4757,7 +4751,7 @@ def main():
             entry_points=[
                 MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
                 InlineQueryHandler(handle_inline_query),  # Inline برای جستجو
-                ChosenInlineResultHandler(handle_chosen_inline_result),
+                
                 MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs),
                 CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
                 CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
