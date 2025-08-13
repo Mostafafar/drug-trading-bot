@@ -2127,7 +2127,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             results.append(
                 InlineQueryResultArticle(
-                    id=str(idx),
+                    id=f"{name}|{price}",
                     title=title_part,
                     description=f"{desc_part} - قیمت: {price}",
                     input_message_content=InputTextMessageContent(
@@ -2149,6 +2149,7 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
     try:
         result_id = update.chosen_inline_result.result_id
         try:
+            # جدا کردن نام و قیمت دارو از result_id
             drug_name, drug_price = result_id.split('|')
         except ValueError:
             logger.error(f"Invalid result_id format: {result_id}")
@@ -2158,9 +2159,16 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             )
             return ConversationHandler.END
         
-        # ذخیره داده‌ها با لاگ
-        context.user_data['selected_drug_name'] = drug_name.strip()
-        context.user_data['selected_drug_price'] = drug_price.strip()
+        # ذخیره داده‌ها در context
+        context.user_data.update({
+            'selected_drug_name': drug_name.strip(),
+            'selected_drug_price': drug_price.strip(),
+            'selected_drug': {
+                'name': drug_name.strip(),
+                'price': drug_price.strip()
+            }
+        })
+        
         logger.info(f"User {update.chosen_inline_result.from_user.id} selected drug: {drug_name} with price: {drug_price}")
         
         await context.bot.send_message(
@@ -2169,10 +2177,10 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
         )
         return States.ADD_DRUG_DATE
     except Exception as e:
-        logger.error(f"Error in handle_chosen_inline_result for user {update.chosen_inline_result.from_user.id}: {e}")
+        logger.error(f"Error in handle_chosen_inline_result: {e}")
         await context.bot.send_message(
             chat_id=update.chosen_inline_result.from_user.id,
-            text="خطایی در انتخاب دارو رخ داد. لطفا دوباره تلاش کنید."
+            text="خطایی در پردازش انتخاب دارو رخ داد. لطفا دوباره تلاش کنید."
         )
         return ConversationHandler.END
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
