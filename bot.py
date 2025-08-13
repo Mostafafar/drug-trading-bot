@@ -2113,7 +2113,6 @@ def split_drug_info(full_text):
     return title, description
 
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle inline query for drug search with smart splitting"""
     query = update.inline_query.query
     if not query:
         return
@@ -2125,9 +2124,12 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             title_part = name.split()[0]  # اولین کلمه به عنوان عنوان
             desc_part = ' '.join(name.split()[1:]) if len(name.split()) > 1 else name
             
+            # ایجاد result_id معتبر (بدون کاراکترهای ممنوعه)
+            result_id = f"{hash(name)}-{hash(price)}"[:64]  # استفاده از hash و محدود کردن طول
+            
             results.append(
                 InlineQueryResultArticle(
-                    id=f"{name}|{price}",
+                    id=result_id,  # استفاده از result_id معتبر
                     title=title_part,
                     description=f"{desc_part} - قیمت: {price}",
                     input_message_content=InputTextMessageContent(
@@ -2148,18 +2150,24 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result_id = update.chosen_inline_result.result_id
-        try:
-            # جدا کردن نام و قیمت دارو از result_id
-            drug_name, drug_price = result_id.split('|')
-        except ValueError:
-            logger.error(f"Invalid result_id format: {result_id}")
+        # پیدا کردن داروی متناظر با result_id
+        matched_drug = None
+        for idx, (name, price) in enumerate(drug_list):
+            if result_id == f"{hash(name)}-{hash(price)}"[:64]:
+                matched_drug = (name, price)
+                break
+        
+        if not matched_drug:
+            logger.error(f"Drug not found for result_id: {result_id}")
             await context.bot.send_message(
                 chat_id=update.chosen_inline_result.from_user.id,
-                text="خطا در انتخاب دارو. لطفا دوباره تلاش کنید."
+                text="خطا در یافتن داروی انتخاب شده. لطفا دوباره تلاش کنید."
             )
             return ConversationHandler.END
         
-        # ذخیره داده‌ها در context
+        drug_name, drug_price = matched_drug
+        
+        # ذخیره داده‌ها
         context.user_data.update({
             'selected_drug_name': drug_name.strip(),
             'selected_drug_price': drug_price.strip(),
@@ -2168,8 +2176,6 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
                 'price': drug_price.strip()
             }
         })
-        
-        logger.info(f"User {update.chosen_inline_result.from_user.id} selected drug: {drug_name} with price: {drug_price}")
         
         await context.bot.send_message(
             chat_id=update.chosen_inline_result.from_user.id,
