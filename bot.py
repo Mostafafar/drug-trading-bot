@@ -2141,6 +2141,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"Error in handle_inline_query for user {update.effective_user.id}: {e}")
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
+        logger.info(f"handle_chosen_inline_result called for user {update.effective_user.id}")
         result = update.chosen_inline_result
         if not result:
             logger.error("No chosen inline result provided")
@@ -2164,11 +2165,11 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             )
             return States.SEARCH_DRUG_FOR_ADDING
 
-        # ذخیره داده‌ها در context.user_data با کلیدهای ثابت
+        # ذخیره داده‌ها در context.user_data با کلیدهای درست
         context.user_data['drug_name'] = drug_name
         context.user_data['drug_price'] = drug_price
         
-        # اضافه کردن لاگ برای دیباگ
+        # لاگ برای دیباگ
         logger.info(f"Stored drug_name: {context.user_data['drug_name']} and drug_price: {context.user_data['drug_price']} for user {update.effective_user.id}")
 
         # ارسال پیام به کاربر
@@ -2264,43 +2265,41 @@ async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
 
 
 # ... (بقیه importها و کدهای قبلی بدون تغییر)
-
 async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        if update.message and update.message.text:
-            logger.info(f"User {update.effective_user.id} entered expiry date: {update.message.text}")
-            expiry_date = update.message.text.strip()
-            
-            if not re.match(r'^\d{4}/\d{2}/\d{2}$', expiry_date):
-                await update.message.reply_text("فرمت تاریخ نامعتبر است. لطفا تاریخ را به فرمت 2026/01/23 وارد کنید:")
-                return States.ADD_DRUG_DATE
-            
-            context.user_data['expiry_date'] = expiry_date
-            logger.info(f"Stored expiry_date: {expiry_date} for user {update.effective_user.id}")
-            await update.message.reply_text("📦 لطفا تعداد موجودی را وارد کنید:")
-            return States.ADD_DRUG_QUANTITY
-        elif update.callback_query:
-            query = update.callback_query
-            await query.answer()
-            if query.data == "back_to_search":
-                return await search_drug_for_adding(update, context)
-            else:
-                await query.edit_message_text("لطفا تاریخ انقضا را به صورت متنی وارد کنید (مثال: 2026/01/23):")
-                return States.ADD_DRUG_DATE
-        else:
-            logger.warning(f"Unexpected update type for user {update.effective_user.id}: {update}")
-            await context.bot.send_message(
-                chat_id=update.effective_user.id,
-                text="لطفا تاریخ انقضا را به فرمت 2026/01/23 وارد کنید:"
+        logger.info(f"add_drug_date called for user {update.effective_user.id}")
+        
+        # چک کردن وجود drug_name و drug_price
+        drug_name = context.user_data.get('drug_name')
+        drug_price = context.user_data.get('drug_price')
+        logger.info(f"add_drug_date for user {update.effective_user.id}: drug_name={drug_name}, drug_price={drug_price}")
+        
+        if not drug_name or not drug_price:
+            logger.warning(f"No drug_name or drug_price found for user {update.effective_user.id}")
+            await update.message.reply_text(
+                "دارو انتخاب نشده است. لطفا دوباره جستجو کنید.",
+                reply_markup=ReplyKeyboardRemove()
             )
-            return States.ADD_DRUG_DATE
+            return States.SEARCH_DRUG_FOR_ADDING
+            
+        expiry_date = update.message.text.strip()
+        context.user_data['expiry_date'] = expiry_date
+        logger.info(f"Stored expiry_date: {expiry_date} for user {update.effective_user.id}")
+        
+        await update.message.reply_text(
+            "لطفا تعداد موجودی دارو را وارد کنید:",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return States.ADD_DRUG_QUANTITY
+        
     except Exception as e:
         logger.error(f"Error in add_drug_date for user {update.effective_user.id}: {e}")
-        await context.bot.send_message(
-            chat_id=update.effective_user.id,
-            text="خطایی رخ داده است. لطفا دوباره تاریخ انقضا را وارد کنید:"
+        await update.message.reply_text(
+            "خطایی رخ داده است. لطفا دوباره تلاش کنید.",
+            reply_markup=ReplyKeyboardRemove()
         )
-        return States.ADD_DRUG_DATE
+        return ConversationHandler.END
+
 
 async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده"""
@@ -2335,6 +2334,9 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # لاگ برای دیباگ
         logger.info(f"save_drug_item for user {update.effective_user.id}: drug_name={drug_name}, drug_price={drug_price}, expiry_date={expiry_date}, quantity={quantity}")
         
+        # چک کردن کلیدهای قدیمی برای دیباگ
+        logger.debug(f"Old keys check: selected_drug_name={context.user_data.get('selected_drug_name')}, selected_drug_price={context.user_data.get('selected_drug_price')}")
+        
         missing_fields = []
         if not drug_name:
             missing_fields.append('drug_name')
@@ -2348,7 +2350,8 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if missing_fields:
             logger.error(f"Missing fields for user {update.effective_user.id}: {missing_fields}")
             await update.message.reply_text(
-                f"اطلاعات ناقص است (کمبود: {', '.join(missing_fields)}). لطفا دوباره از ابتدا شروع کنید."
+                f"اطلاعات ناقص است (کمبود: {', '.join(missing_fields)}). لطفا دوباره از ابتدا شروع کنید.",
+                reply_markup=ReplyKeyboardRemove()
             )
             return States.SEARCH_DRUG_FOR_ADDING
             
