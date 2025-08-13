@@ -44,7 +44,8 @@ from telegram.ext import (
     CallbackContext,
     ExtBot,
     InlineQueryHandler,
-    ChosenInlineResultHandler
+    ChosenInlineResultHandler,
+    PicklePersistence
 )
 from telegram.constants import ParseMode
 from psycopg2 import sql, extras
@@ -4621,7 +4622,10 @@ def main():
             logger.warning("Failed to load drug data - some features may not work")
         
         # Create application
-        application = ApplicationBuilder().token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY").build()
+        persistence = PicklePersistence(filepath='bot_data.pickle')
+        
+        # Create application with persistence
+        application = ApplicationBuilder().token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY").persistence(persistence).build()
         
         # Add conversation handler for admin verification process
         admin_verify_handler = ConversationHandler(
