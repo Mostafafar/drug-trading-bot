@@ -2149,36 +2149,34 @@ async def handle_inline_query(update, context):
         await update.inline_query.answer([])
 
 
-async def handle_chosen_inline_result(update, context):
+async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        result = update.chosen_inline_result
-        drug_name = result.result_id
-        logger.info(f"Chosen inline result: {drug_name}")
-        
-        drug_list = context.bot_data.get('drug_list', [])
-        selected_drug = next((drug for drug in drug_list if drug['name'] == drug_name), None)
-        if not selected_drug:
-            logger.error(f"Drug not found: {drug_name}")
+        result_id = update.chosen_inline_result.result_id
+        try:
+            drug_name, drug_price = result_id.split('|')
+        except ValueError:
+            logger.error(f"Invalid result_id format: {result_id}")
             await context.bot.send_message(
-                chat_id=update.effective_user.id,
-                text="دارو یافت نشد. لطفاً دوباره تلاش کنید."
+                chat_id=update.chosen_inline_result.from_user.id,
+                text="خطا در انتخاب دارو. لطفا دوباره تلاش کنید."
             )
-            return
+            return ConversationHandler.END
         
-        context.user_data['selected_drug'] = selected_drug
+        # ذخیره داده‌ها با لاگ
+        context.user_data['selected_drug_name'] = drug_name.strip()
+        context.user_data['selected_drug_price'] = drug_price.strip()
+        logger.info(f"User {update.chosen_inline_result.from_user.id} selected drug: {drug_name} with price: {drug_price}")
+        
         await context.bot.send_message(
-            chat_id=update.effective_user.id,
-            text=f"داروی انتخاب شده: {drug_name}\nلطفا تاریخ انقضا را وارد کنید (مثال: 1404/12):",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_search")
-            ]])
+            chat_id=update.chosen_inline_result.from_user.id,
+            text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
         )
         return States.ADD_DRUG_DATE
     except Exception as e:
-        logger.error(f"Error in handle_chosen_inline_result: {e}")
+        logger.error(f"Error in handle_chosen_inline_result for user {update.chosen_inline_result.from_user.id}: {e}")
         await context.bot.send_message(
-            chat_id=update.effective_user.id,
-            text="خطایی رخ داد. لطفا دوباره تلاش کنید."
+            chat_id=update.chosen_inline_result.from_user.id,
+            text="خطایی در انتخاب دارو رخ داد. لطفا دوباره تلاش کنید."
         )
         return ConversationHandler.END
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2286,7 +2284,6 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text="خطایی رخ داده است. لطفا دوباره تاریخ انقضا را وارد کنید:"
         )
         return States.ADD_DRUG_DATE
-
 async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده"""
     try:
@@ -2312,7 +2309,7 @@ async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        user_id = update.effective_user.id
+        # اعتبارسنجی تعداد
         try:
             quantity = int(update.message.text.strip())
             if quantity <= 0:
@@ -2322,11 +2319,11 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("لطفا یک عدد صحیح وارد کنید:")
             return States.ADD_DRUG_QUANTITY
         
-        # لاگ داده‌های موجود
+        # لاگ داده‌های موجود در context
         drug_name = context.user_data.get('selected_drug_name')
         drug_price = context.user_data.get('selected_drug_price')
         expiry_date = context.user_data.get('expiry_date')
-        logger.info(f"save_drug_item for user {user_id}: drug_name={drug_name}, drug_price={drug_price}, expiry_date={expiry_date}, quantity={quantity}")
+        logger.info(f"save_drug_item for user {update.effective_user.id}: drug_name={drug_name}, drug_price={drug_price}, expiry_date={expiry_date}, quantity={quantity}")
         
         # بررسی کامل بودن داده‌ها
         if not all([drug_name, drug_price, expiry_date]):
@@ -2335,16 +2332,9 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ('drug_price', drug_price),
                 ('expiry_date', expiry_date)
             ] if not value]
-            logger.error(f"Missing fields for user {user_id}: {missing_fields}")
-            await update.message.reply_text(
-                f"اطلاعات ناقص است (کمبود: {', '.join(missing_fields)}). لطفا دوباره از ابتدا شروع کنید.\n"
-                f"برای اضافه کردن دارو، از منوی اصلی گزینه 'اضافه کردن دارو' را انتخاب کنید."
-            )
-            # پاک کردن context برای جلوگیری از state ناسازگار
-            context.user_data.pop('selected_drug_name', None)
-            context.user_data.pop('selected_drug_price', None)
-            context.user_data.pop('expiry_date', None)
-            return await start(update, context)  # بازگشت به منوی اصلی
+            logger.error(f"Missing fields for user {update.effective_user.id}: {missing_fields}")
+            await update.message.reply_text(f"اطلاعات ناقص است (کمبود: {', '.join(missing_fields)}). لطفا دوباره از ابتدا شروع کنید.")
+            return ConversationHandler.END
         
         # ذخیره در دیتابیس
         conn = None
@@ -2355,7 +2345,7 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 INSERT INTO drug_items (user_id, name, price, date, quantity)
                 VALUES (%s, %s, %s, %s, %s)
                 ''', (
-                    user_id,
+                    update.effective_user.id,
                     drug_name,
                     drug_price,
                     expiry_date,
@@ -2376,10 +2366,10 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data.pop('selected_drug_price', None)
                 context.user_data.pop('expiry_date', None)
                 
-                return await start(update, context)
+                return await start(update, context)  # بازگشت به منوی اصلی
                 
         except Exception as e:
-            logger.error(f"Error saving drug item for user {user_id}: {e}")
+            logger.error(f"Error saving drug item for user {update.effective_user.id}: {e}")
             if conn:
                 conn.rollback()
             await update.message.reply_text("خطا در ثبت دارو. لطفا دوباره تلاش کنید.")
@@ -2389,9 +2379,9 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 conn.close()
                 
     except Exception as e:
-        logger.error(f"Error in save_drug_item for user {user_id}: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره از ابتدا شروع کنید.")
-        return await start(update, context)
+        logger.error(f"Error in save_drug_item for user {update.effective_user.id}: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List user's drug items"""
     conn = None
