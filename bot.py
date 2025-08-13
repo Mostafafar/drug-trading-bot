@@ -2035,53 +2035,67 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
             conn.close()
 # Drug Management
 async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle add drug from inline query result"""
+    """Handle callback for adding a drug from inline query results"""
     try:
         query = update.callback_query
         await query.answer()
-        
-        idx = int(query.data.split("_")[2])
-        if 0 <= idx < len(drug_list):
-            selected_drug = drug_list[idx]
-            context.user_data['selected_drug'] = {
-                'name': selected_drug[0],
-                'price': selected_drug[1]
-            }
-            
-            await query.edit_message_text(
-                f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
-                "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
-            )
-            return States.ADD_DRUG_DATE
-            
-    except Exception as e:
-        logger.error(f"Error handling add drug callback: {e}")
-        await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
 
-async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start process to add a drug item with inline query"""
-    try:
-        await ensure_user(update, context)
+        if not query.data.startswith("add_drug_"):
+            logger.error(f"Invalid callback data: {query.data}")
+            await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
+            return States.SEARCH_DRUG_FOR_ADDING
+
+        drug_name = query.data.replace("add_drug_", "")
+        if not drug_name:
+            logger.error("No drug name provided in callback")
+            await query.edit_message_text("نام دارو یافت نشد.")
+            return States.SEARCH_DRUG_FOR_ADDING
+
+        # Store selected drug name
+        context.user_data['selected_drug'] = {'name': drug_name}
         
-        # ایجاد دکمه برای جستجوی اینلاین
-        keyboard = [
-            [InlineKeyboardButton(
-                "🔍 جستجوی دارو", 
-                switch_inline_query_current_chat=""
-            )],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
-        ]
-        
-        await update.message.reply_text(
-            "برای اضافه کردن دارو جدید، روی دکمه جستجو کلیک کنید:",
+        # Request expiration date
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_search")]]
+        await query.edit_message_text(
+            f"داروی انتخاب شده: {drug_name}\nلطفا تاریخ انقضا را وارد کنید (مثال: 1403/12/30):",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        return States.SEARCH_DRUG_FOR_ADDING
+        return States.ADD_DRUG_DATE
+
     except Exception as e:
-        logger.error(f"Error in add_drug_item: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        logger.error(f"Error in handle_add_drug_callback: {str(e)}", exc_info=True)
+        try:
+            await query.edit_message_text("خطایی در پردازش درخواست رخ داد. لطفا دوباره تلاش کنید.")
+        except Exception as e2:
+            logger.error(f"Failed to send error message: {e2}")
+        return States.SEARCH_DRUG_FOR_ADDING
+
+async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start the process of adding a new drug item"""
+    try:
+        # Check if user is verified
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute('SELECT is_verified, is_personnel FROM users WHERE id = %s', 
+                          (update.effective_user.id,))
+            user_data = cursor.fetchone()
+            if not user_data or (not user_data[0] and not user_data[1]):
+                await update.message.reply_text("❌ شما مجاز به افزودن دارو نیستید.")
+                return ConversationHandler.END
+
+        await update.message.reply_text(
+            "لطفا نام داروی مورد نظر را وارد کنید (یا از @ شروع کنید برای جستجوی سریع):",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return States.SEARCH_DRUG_FOR_ADDING
+
+    except Exception as e:
+        logger.error(f"Error in add_drug_item: {str(e)}", exc_info=True)
+        await update.message.reply_text("خطایی در شروع فرآیند افزودن دارو رخ داد.")
         return ConversationHandler.END
+    finally:
+        if conn:
+            conn.close()
 
 def split_drug_info(full_text):
     """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
@@ -2100,59 +2114,40 @@ def split_drug_info(full_text):
 
 
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle inline queries for drug search"""
     try:
-        query = update.inline_query.query.strip()
-        user_id = update.inline_query.from_user.id
-        logger.info(f"Inline query from user {user_id}: {query}")
-        
+        query = update.inline_query.query
         if not query:
-            logger.info(f"Empty query from user {user_id}")
-            await update.inline_query.answer([])
             return
-        
-        if not drug_list:
-            logger.warning(f"Drug list is empty for user {user_id}")
-            await update.inline_query.answer([])
-            return
-        
-        logger.info(f"Drug list sample: {drug_list[:5]}")
-        
+
+        # Load drug data from Excel or database
         results = []
-        for index, drug in enumerate(drug_list):
-            if not isinstance(drug, dict) or 'name' not in drug or 'price' not in drug:
-                logger.error(f"Invalid drug entry at index {index}: {drug}")
-                continue
-            if query.lower() in drug['name'].lower():
-                # Create a unique ID for each result
-                result_id = str(uuid.uuid4())
-                
-                # Prepare the message content
-                message_text = f"💊 {drug['name']}\n💰 قیمت: {drug['price']}"
-                
+        if not drug_list:
+            logger.warning("Drug list is empty")
+            return
+
+        # Search for matching drugs
+        for drug in drug_list:
+            if similarity(query, drug['name']) > 0.5:  # Threshold for fuzzy matching
                 results.append(
                     InlineQueryResultArticle(
-                        id=result_id,
+                        id=str(uuid.uuid4()),
                         title=drug['name'],
-                        input_message_content=InputTextMessageContent(
-                            message_text,
-                            parse_mode=ParseMode.MARKDOWN
-                        ),
                         description=f"قیمت: {drug['price']}",
-                        # Store drug info in a way we can retrieve it later
+                        input_message_content=InputTextMessageContent(
+                            f"داروی انتخاب شده: {drug['name']}\nقیمت: {drug['price']}"
+                        ),
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton(
-                                "انتخاب این دارو",
-                                callback_data=f"add_drug_{index}"
-                            )]
+                            [InlineKeyboardButton("اضافه کردن", callback_data=f"add_drug_{drug['name']}")]
                         ])
                     )
                 )
+
+        # Limit to 50 results to avoid Telegram API limits
+        await update.inline_query.answer(results[:50], cache_time=1)
         
-        logger.info(f"Found {len(results)} results for query '{query}' by user {user_id}")
-        await update.inline_query.answer(results[:50])
     except Exception as e:
-        logger.error(f"Error in handle_inline_query for user {user_id}: {e}")
-        await update.inline_query.answer([])
+        logger.error(f"Error in handle_inline_query: {str(e)}", exc_info=True)
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user_id = update.chosen_inline_result.from_user.id
@@ -2331,87 +2326,67 @@ async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Save new drug item to database"""
     try:
-        user_id = update.effective_user.id
-        try:
-            quantity = int(update.message.text.strip())
-            if quantity <= 0:
-                await update.message.reply_text("لطفا یک عدد معتبر بزرگتر از صفر وارد کنید:")
-                return States.ADD_DRUG_QUANTITY
-        except ValueError:
-            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید:")
+        quantity = update.message.text.strip()
+        if not quantity.isdigit() or int(quantity) <= 0:
+            await update.message.reply_text("لطفا یک عدد مثبت برای تعداد وارد کنید.")
             return States.ADD_DRUG_QUANTITY
-        
-        # لاگ داده‌های موجود
-        drug_name = context.user_data.get('selected_drug_name')
-        drug_price = context.user_data.get('selected_drug_price')
-        expiry_date = context.user_data.get('expiry_date')
-        logger.info(f"save_drug_item for user {user_id}: drug_name={drug_name}, drug_price={drug_price}, expiry_date={expiry_date}, quantity={quantity}")
-        
-        # بررسی کامل بودن داده‌ها
-        if not all([drug_name, drug_price, expiry_date]):
-            missing_fields = [field for field, value in [
-                ('drug_name', drug_name),
-                ('drug_price', drug_price),
-                ('expiry_date', expiry_date)
-            ] if not value]
-            logger.error(f"Missing fields for user {user_id}: {missing_fields}")
-            await update.message.reply_text(
-                f"اطلاعات ناقص است (کمبود: {', '.join(missing_fields)}). لطفا دوباره از ابتدا شروع کنید.\n"
-                f"برای اضافه کردن دارو، از منوی اصلی گزینه 'اضافه کردن دارو' را انتخاب کنید."
-            )
-            # پاک کردن context برای جلوگیری از state ناسازگار
-            context.user_data.pop('selected_drug_name', None)
-            context.user_data.pop('selected_drug_price', None)
-            context.user_data.pop('expiry_date', None)
-            return await start(update, context)  # بازگشت به منوی اصلی
-        
-        # ذخیره در دیتابیس
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                cursor.execute('''
-                INSERT INTO drug_items (user_id, name, price, date, quantity)
-                VALUES (%s, %s, %s, %s, %s)
-                ''', (
-                    user_id,
-                    drug_name,
-                    drug_price,
-                    expiry_date,
-                    quantity
-                ))
-                conn.commit()
-                
-                await update.message.reply_text(
-                    f"✅ دارو با موفقیت ثبت شد:\n"
-                    f"💊 نام: {drug_name}\n"
-                    f"💰 قیمت: {drug_price}\n"
-                    f"📅 تاریخ انقضا: {expiry_date}\n"
-                    f"📦 تعداد: {quantity}"
-                )
-                
-                # پاک کردن context
-                context.user_data.pop('selected_drug_name', None)
-                context.user_data.pop('selected_drug_price', None)
-                context.user_data.pop('expiry_date', None)
-                
-                return await start(update, context)
-                
-        except Exception as e:
-            logger.error(f"Error saving drug item for user {user_id}: {e}")
-            if conn:
-                conn.rollback()
-            await update.message.reply_text("خطا در ثبت دارو. لطفا دوباره تلاش کنید.")
+
+        drug_data = context.user_data.get('selected_drug')
+        if not drug_data:
+            await update.message.reply_text("اطلاعات دارو یافت نشد.")
             return ConversationHandler.END
-        finally:
-            if conn:
-                conn.close()
-                
+
+        date = context.user_data.get('drug_date')
+        if not date or not re.match(r'^\d{4}/\d{2}/\d{2}$', date):
+            await update.message.reply_text("فرمت تاریخ انقضا نامعتبر است.")
+            return States.ADD_DRUG_DATE
+
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # Check for existing drug
+            cursor.execute('''
+                SELECT id FROM drug_items 
+                WHERE user_id = %s AND name = %s AND date = %s
+            ''', (update.effective_user.id, drug_data['name'], date))
+            existing_drug = cursor.fetchone()
+
+            if existing_drug:
+                # Update quantity
+                cursor.execute('''
+                    UPDATE drug_items 
+                    SET quantity = quantity + %s
+                    WHERE id = %s
+                ''', (int(quantity), existing_drug[0]))
+            else:
+                # Insert new drug
+                price = drug_data.get('price', '0')
+                cursor.execute('''
+                    INSERT INTO drug_items (user_id, name, price, date, quantity)
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (update.effective_user.id, drug_data['name'], price, date, int(quantity)))
+
+            conn.commit()
+
+        await update.message.reply_text(
+            f"✅ داروی {drug_data['name']} با موفقیت اضافه شد!\n"
+            f"📅 تاریخ انقضا: {date}\n"
+            f"📦 تعداد: {quantity}",
+            reply_markup=ReplyKeyboardMarkup(
+                [['اضافه کردن داروی دیگر', 'بازگشت به منوی اصلی']],
+                resize_keyboard=True
+            )
+        )
+        return ConversationHandler.END
+
     except Exception as e:
-        logger.error(f"Error in save_drug_item for user {user_id}: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره از ابتدا شروع کنید.")
-        return await start(update, context)
+        logger.error(f"Error in save_drug_item: {str(e)}", exc_info=True)
+        await update.message.reply_text("خطا در ذخیره دارو. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+    finally:
+        if conn:
+            conn.close()
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List user's drug items"""
     conn = None
