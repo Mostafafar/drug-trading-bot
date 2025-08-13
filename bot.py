@@ -428,25 +428,45 @@ async def download_file(file, file_type: str, user_id: int) -> str:
         raise
 
 
-def load_drug_data():
+def load_drug_data() -> bool:
+    """Load drug data from Excel file (local or GitHub)"""
     global drug_list
+    
     try:
-        if not os.path.exists("DrugPrices.xlsx"):
-            logger.error("DrugPrices.xlsx file not found")
-            return False
+        if excel_file.exists():
+            try:
+                df = pd.read_excel(excel_file, sheet_name="Sheet1", engine='openpyxl')
+                df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
+                drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
+                drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
+                logger.info(f"Loaded {len(drug_list)} drugs from local Excel file")
+                return True
+            except Exception as e:
+                logger.error(f"Error reading local Excel file: {e}")
+                
+        github_url = "https://raw.githubusercontent.com/yourusername/yourrepo/main/DrugPrices.xlsx"
+        response = requests.get(github_url)
+        if response.status_code == 200:
+            excel_data = BytesIO(response.content)
+            df = pd.read_excel(excel_data, engine='openpyxl')
+            df = df.drop(columns=[col for col in df.columns if 'Unnamed' in col])
+            drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
+            drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
+            df.to_excel(excel_file, index=False, engine='openpyxl')
+            logger.info(f"Loaded {len(drug_list)} drugs from GitHub and saved locally")
+            return True
         
-        df = pd.read_excel("DrugPrices.xlsx")
+        logger.warning("Could not load drug data from either local file or GitHub")
         drug_list = []
-        for _, row in df.iterrows():
-            name = str(row.get('name', '')).strip()
-            price = str(row.get('price', '')).strip()
-            if name and price:
-                drug_list.append({'name': name, 'price': price})
+        return False
         
-        logger.info(f"Loaded {len(drug_list)} drugs from DrugPrices.xlsx")
-        return True
     except Exception as e:
         logger.error(f"Error loading drug data: {e}")
+        drug_list = []
+        if excel_file.exists():
+            backup_file = current_dir / f"DrugPrices_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            excel_file.rename(backup_file)
+            logger.info(f"Created backup of corrupted file at {backup_file}")
         return False
 def parse_price(price_str: str) -> float:
     """Convert price string to float by removing commas and currency symbols"""
