@@ -2147,32 +2147,56 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.inline_query.answer(results)
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        result_id = update.chosen_inline_result.result_id
-        try:
-            drug_name, drug_price = result_id.split('|')
-        except ValueError:
-            logger.error(f"Invalid result_id format: {result_id}")
+        result = update.chosen_inline_result
+        if not result:
+            logger.error("No chosen inline result provided")
             await context.bot.send_message(
-                chat_id=update.chosen_inline_result.from_user.id,
+                chat_id=update.effective_user.id,
                 text="خطا در انتخاب دارو. لطفا دوباره تلاش کنید."
             )
             return ConversationHandler.END
+
+        result_id = result.result_id
+        try:
+            # فرض می‌کنیم result_id به شکل "drug_name|drug_price" است
+            drug_name, drug_price = result_id.split('|')
+            drug_name = drug_name.strip()
+            drug_price = drug_price.strip()
+        except ValueError:
+            logger.error(f"Invalid result_id format: {result_id} for user {update.effective_user.id}")
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                text="خطا در فرمت انتخاب دارو. لطفا دوباره جستجو کنید."
+            )
+            return States.SEARCH_DRUG_FOR_ADDING
+
+        # ذخیره داده‌ها در context.user_data با کلیدهای ثابت
+        context.user_data['drug_name'] = drug_name
+        context.user_data['drug_price'] = drug_price
         
-        # ذخیره داده‌ها با لاگ
-        context.user_data['selected_drug_name'] = drug_name.strip()
-        context.user_data['selected_drug_price'] = drug_price.strip()
-        logger.info(f"User {update.chosen_inline_result.from_user.id} selected drug: {drug_name} with price: {drug_price}")
-        
-        await context.bot.send_message(
-            chat_id=update.chosen_inline_result.from_user.id,
-            text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
+        # اضافه کردن لاگ برای دیباگ
+        logger.info(f"Stored drug_name: {context.user_data['drug_name']} and drug_price: {context.user_data['drug_price']} for user {update.effective_user.id}")
+
+        # ارسال پیام به کاربر
+        message = (
+            f"✅ دارو انتخاب شده: {drug_name}\n"
+            f"💰 قیمت: {drug_price}\n\n"
+            f"📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
         )
-        return States.ADD_DRUG_DATE
-    except Exception as e:
-        logger.error(f"Error in handle_chosen_inline_result for user {update.chosen_inline_result.from_user.id}: {e}")
         await context.bot.send_message(
-            chat_id=update.chosen_inline_result.from_user.id,
-            text="خطایی در انتخاب دارو رخ داد. لطفا دوباره تلاش کنید."
+            chat_id=update.effective_user.id,
+            text=message,
+            reply_markup=ReplyKeyboardRemove()
+        )
+
+        # انتقال به state بعدی
+        return States.ADD_DRUG_DATE
+
+    except Exception as e:
+        logger.error(f"Error in handle_chosen_inline_result for user {update.effective_user.id}: {e}")
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            text="خطایی در پردازش انتخاب دارو رخ داد. لطفا دوباره تلاش کنید."
         )
         return ConversationHandler.END
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
