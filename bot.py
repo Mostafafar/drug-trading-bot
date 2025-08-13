@@ -2099,6 +2099,8 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.info(f"Inline query from user {user_id}: {query}")
         
         if not query:
+            logger.info(f"Empty query from user {user_id}")
+            await update.inline_query.answer([])
             return
         
         if not drug_list:
@@ -2106,8 +2108,14 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.inline_query.answer([])
             return
         
+        # لاگ نمونه‌ای از drug_list برای دیباگ
+        logger.info(f"Drug list sample: {drug_list[:5]}")
+        
         results = []
         for drug in drug_list:
+            if not isinstance(drug, dict) or 'name' not in drug or 'price' not in drug:
+                logger.error(f"Invalid drug entry: {drug}")
+                continue
             if query.lower() in drug['name'].lower():
                 results.append(
                     InlineQueryResultArticle(
@@ -2121,7 +2129,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                 )
         
         logger.info(f"Found {len(results)} results for query '{query}' by user {user_id}")
-        await update.inline_query.answer(results[:50])  # محدود به 50 نتیجه
+        await update.inline_query.answer(results[:50])
     except Exception as e:
         logger.error(f"Error in handle_inline_query for user {user_id}: {e}")
         await update.inline_query.answer([])
@@ -2143,7 +2151,7 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             )
             return ConversationHandler.END
         
-        # ذخیره داده‌ها با بررسی
+        # ذخیره داده‌ها
         context.user_data['selected_drug_name'] = drug_name
         context.user_data['selected_drug_price'] = drug_price
         logger.info(f"Stored for user {user_id}: drug_name={drug_name}, drug_price={drug_price}")
