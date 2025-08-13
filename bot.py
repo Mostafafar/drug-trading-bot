@@ -4581,7 +4581,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in error handler: {e}")
 
         
-
 def main():
     """Start the bot"""
     try:
@@ -4693,6 +4692,8 @@ def main():
         drug_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
+                InlineQueryHandler(handle_inline_query),  # Inline برای جستجو
+                ChosenInlineResultHandler(handle_chosen_inline_result),
                 MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs),
                 CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
                 CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
@@ -4712,7 +4713,8 @@ def main():
                 ],
                 States.ADD_DRUG_DATE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
-                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
+        
+                    CallbackQueryHandler(add_drug_date, pattern="^back_to_search$")
                     
                     
                 ],
@@ -4724,13 +4726,15 @@ def main():
                 States.EDIT_DRUG: [
                     CallbackQueryHandler(edit_drugs, pattern="^back_to_list$"),
                     CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
-                    CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
+                    CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)  $"),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
                     CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$")
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
-            allow_reentry=True
+            allow_reentry=True,
+            per_chat=False,  # جدید: state بر اساس کاربر نه چت
+            per_user=True    #
         )
         
         # Add conversation handler for needs management
