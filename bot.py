@@ -7,6 +7,7 @@ import random
 import asyncio
 import psycopg2
 import traceback
+import uuid  # اضافه کردن برای تولید ID یکتا
 import pandas as pd
 from io import BytesIO
 from pathlib import Path
@@ -437,11 +438,13 @@ def load_drug_data():
         
         df = pd.read_excel("DrugPrices.xlsx")
         drug_list = []
-        for _, row in df.iterrows():
+        for index, row in df.iterrows():
             name = str(row.get('name', '')).strip()
             price = str(row.get('price', '')).strip()
             if name and price:
                 drug_list.append({'name': name, 'price': price})
+            else:
+                logger.warning(f"Skipping invalid row {index}: name={name}, price={price}")
         
         logger.info(f"Loaded {len(drug_list)} drugs from DrugPrices.xlsx")
         logger.info(f"Drug list sample: {drug_list[:5]}")
@@ -449,6 +452,7 @@ def load_drug_data():
     except Exception as e:
         logger.error(f"Error loading drug data: {e}")
         return False
+
 def parse_price(price_str: str) -> float:
     """Convert price string to float by removing commas and currency symbols"""
     if not price_str:
@@ -2092,6 +2096,8 @@ def split_drug_info(full_text):
         description = "قیمت نامشخص"
     return title, description
 
+
+
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         query = update.inline_query.query.strip()
@@ -2108,23 +2114,26 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.inline_query.answer([])
             return
         
-        # لاگ نمونه‌ای از drug_list برای دیباگ
         logger.info(f"Drug list sample: {drug_list[:5]}")
         
         results = []
-        for drug in drug_list:
+        for index, drug in enumerate(drug_list):
             if not isinstance(drug, dict) or 'name' not in drug or 'price' not in drug:
-                logger.error(f"Invalid drug entry: {drug}")
+                logger.error(f"Invalid drug entry at index {index}: {drug}")
                 continue
             if query.lower() in drug['name'].lower():
+                # استفاده از اندیس یا UUID برای id
+                result_id = str(index)  # یا str(uuid.uuid4()) برای ID یکتا
                 results.append(
                     InlineQueryResultArticle(
-                        id=f"{drug['name']}|{drug['price']}",
+                        id=result_id,
                         title=drug['name'],
                         input_message_content=InputTextMessageContent(
                             f"💊 {drug['name']}\n💰 قیمت: {drug['price']}"
                         ),
-                        description=f"قیمت: {drug['price']}"
+                        description=f"قیمت: {drug['price']}",
+                        # ذخیره نام و قیمت در thumb_url یا reply_markup برای دسترسی در handle_chosen_inline_result
+                        thumb_url=f"{drug['name']}|{drug['price']}"
                     )
                 )
         
@@ -2139,15 +2148,19 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
         result_id = update.chosen_inline_result.result_id
         logger.info(f"User {user_id} chose inline result: {result_id}")
         
+        # پیدا کردن دارو بر اساس اندیس
         try:
-            drug_name, drug_price = result_id.split('|')
-            drug_name = drug_name.strip()
-            drug_price = drug_price.strip()
-        except ValueError as e:
-            logger.error(f"Invalid result_id format for user {user_id}: {result_id}, error: {e}")
+            index = int(result_id)  # اگر از اندیس استفاده کردیم
+            if index < 0 or index >= len(drug_list):
+                raise ValueError(f"Invalid index: {index}")
+            drug = drug_list[index]
+            drug_name = drug['name'].strip()
+            drug_price = drug['price'].strip()
+        except (ValueError, IndexError) as e:
+            logger.error(f"Invalid result_id for user {user_id}: {result_id}, error: {e}")
             await context.bot.send_message(
                 chat_id=user_id,
-                text="خطا در انتخاب دارو: فرمت داده نادرست است. لطفا دوباره جستجو کنید."
+                text="خطا در انتخاب دارو: داده نامعتبر است. لطفا دوباره جستجو کنید."
             )
             return ConversationHandler.END
         
