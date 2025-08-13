@@ -2237,40 +2237,47 @@ async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
+
 async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """دریافت تاریخ انقضا برای داروی انتخاب شده"""
+    """Handle expiry date input for adding a drug"""
     try:
-        date = update.message.text.strip()
-        logger.debug(f"Received date: {date}")
-        
-        # اعتبارسنجی فرمت تاریخ (سال/ماه/روز)
-        if not re.match(r'^\d{4}[/-]\d{2}[/-]\d{2}$', date):
-            await update.message.reply_text(
-                "⚠️ فرمت تاریخ نامعتبر است!\nلطفا تاریخ را دقیقاً به این صورت وارد کنید: 1403/05/15 یا 1403-05-15"
+        # بررسی اینکه آیا ورودی message است یا callback query
+        if update.message and update.message.text:
+            logger.info(f"User {update.effective_user.id} entered expiry date: {update.message.text}")
+            expiry_date = update.message.text.strip()
+            
+            # اعتبارسنجی فرمت تاریخ
+            if not re.match(r'^\d{4}/\d{2}/\d{2}$', expiry_date):
+                await update.message.reply_text("فرمت تاریخ نامعتبر است. لطفا تاریخ را به فرمت 2026/01/23 وارد کنید:")
+                return States.ADD_DRUG_DATE
+            
+            context.user_data['expiry_date'] = expiry_date
+            await update.message.reply_text("📦 لطفا تعداد موجودی را وارد کنید:")
+            return States.ADD_DRUG_QUANTITY
+        elif update.callback_query:
+            # مدیریت callback query (مثلاً دکمه بازگشت)
+            query = update.callback_query
+            await query.answer()
+            if query.data == "back_to_search":
+                return await search_drug_for_adding(update, context)
+            else:
+                await query.edit_message_text("لطفا تاریخ انقضا را به صورت متنی وارد کنید (مثال: 2026/01/23):")
+                return States.ADD_DRUG_DATE
+        else:
+            # ورودی غیرمنتظره
+            logger.warning(f"Unexpected update type for user {update.effective_user.id}: {update}")
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                text="لطفا تاریخ انقضا را به فرمت 2026/01/23 وارد کنید:"
             )
             return States.ADD_DRUG_DATE
-        
-        # ذخیره تاریخ در context
-        context.user_data['drug_date'] = date
-        logger.debug(f"Stored drug_date: {context.user_data['drug_date']}")
-        
-        keyboard = [
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_drug_selection")]
-        ]
-        
-        await update.message.reply_text(
-            "✅ تاریخ ثبت شد!\n\n"
-            "لطفا تعداد یا مقدار موجود را وارد کنید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return States.ADD_DRUG_QUANTITY
-        
     except Exception as e:
-        logger.error(f"Error in add_drug_date: {e}")
-        await update.message.reply_text(
-            "خطایی رخ داده است. لطفا دوباره تاریخ را وارد کنید:"
+        logger.error(f"Error in add_drug_date for user {update.effective_user.id}: {e}")
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            text="خطایی رخ داده است. لطفا دوباره تاریخ انقضا را وارد کنید:"
         )
-        return States.ADD_DRUG_DATE  # به جای END، به حالت قبلی برمی‌گردد
+        return States.ADD_DRUG_DATE
 
 async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده"""
@@ -4714,7 +4721,8 @@ def main():
                 ],
                 States.ADD_DRUG_DATE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
-                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
+        
+                    CallbackQueryHandler(add_drug_date, pattern="^back_to_search$")
                     
                     
                 ],
