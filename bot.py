@@ -2099,6 +2099,7 @@ def split_drug_info(full_text):
 
 
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         query = update.inline_query.query.strip()
         user_id = update.inline_query.from_user.id
@@ -2122,18 +2123,28 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                 logger.error(f"Invalid drug entry at index {index}: {drug}")
                 continue
             if query.lower() in drug['name'].lower():
-                # استفاده از اندیس یا UUID برای id
-                result_id = str(index)  # یا str(uuid.uuid4()) برای ID یکتا
+                # Create a unique ID for each result
+                result_id = str(uuid.uuid4())
+                
+                # Prepare the message content
+                message_text = f"💊 {drug['name']}\n💰 قیمت: {drug['price']}"
+                
                 results.append(
                     InlineQueryResultArticle(
                         id=result_id,
                         title=drug['name'],
                         input_message_content=InputTextMessageContent(
-                            f"💊 {drug['name']}\n💰 قیمت: {drug['price']}"
+                            message_text,
+                            parse_mode=ParseMode.MARKDOWN
                         ),
                         description=f"قیمت: {drug['price']}",
-                        # ذخیره نام و قیمت در thumb_url یا reply_markup برای دسترسی در handle_chosen_inline_result
-                        thumb_url=f"{drug['name']}|{drug['price']}"
+                        # Store drug info in a way we can retrieve it later
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(
+                                "انتخاب این دارو",
+                                callback_data=f"add_drug_{index}"
+                            )]
+                        ])
                     )
                 )
         
@@ -2148,41 +2159,41 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
         result_id = update.chosen_inline_result.result_id
         logger.info(f"User {user_id} chose inline result: {result_id}")
         
-        # پیدا کردن دارو بر اساس اندیس
+        # Find the drug in the drug list
         try:
-            index = int(result_id)  # اگر از اندیس استفاده کردیم
-            if index < 0 or index >= len(drug_list):
-                raise ValueError(f"Invalid index: {index}")
-            drug = drug_list[index]
-            drug_name = drug['name'].strip()
-            drug_price = drug['price'].strip()
-        except (ValueError, IndexError) as e:
-            logger.error(f"Invalid result_id for user {user_id}: {result_id}, error: {e}")
-            await context.bot.send_message(
-                chat_id=user_id,
-                text="خطا در انتخاب دارو: داده نامعتبر است. لطفا دوباره جستجو کنید."
-            )
-            return ConversationHandler.END
+            # We stored the drug index in the callback data of the inline result
+            # So we need to find which result was selected
+            for index, drug in enumerate(drug_list):
+                if not isinstance(drug, dict):
+                    continue
+                
+                # Create a temporary ID to match with the result_id
+                temp_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{drug['name']}_{index}"))
+                if temp_id == result_id:
+                    drug_name = drug['name'].strip()
+                    drug_price = drug['price'].strip()
+                    
+                    # Store in context
+                    context.user_data['selected_drug_name'] = drug_name
+                    context.user_data['selected_drug_price'] = drug_price
+                    logger.info(f"Stored for user {user_id}: drug_name={drug_name}, drug_price={drug_price}")
+                    
+                    # Send confirmation message
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
+                    )
+                    return States.ADD_DRUG_DATE
+                    
+        except Exception as e:
+            logger.error(f"Error finding selected drug for user {user_id}: {e}")
         
-        # ذخیره داده‌ها
-        context.user_data['selected_drug_name'] = drug_name
-        context.user_data['selected_drug_price'] = drug_price
-        logger.info(f"Stored for user {user_id}: drug_name={drug_name}, drug_price={drug_price}")
-        
-        # تأیید ذخیره‌سازی
-        if not (context.user_data.get('selected_drug_name') and context.user_data.get('selected_drug_price')):
-            logger.error(f"Failed to store drug data for user {user_id}")
-            await context.bot.send_message(
-                chat_id=user_id,
-                text="خطا در ثبت اطلاعات دارو. لطفا دوباره تلاش کنید."
-            )
-            return ConversationHandler.END
-        
+        # If we get here, we couldn't find the drug
         await context.bot.send_message(
             chat_id=user_id,
-            text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
+            text="خطا در انتخاب دارو. لطفا دوباره جستجو کنید."
         )
-        return States.ADD_DRUG_DATE
+        return ConversationHandler.END
     except Exception as e:
         logger.error(f"Error in handle_chosen_inline_result for user {user_id}: {e}")
         await context.bot.send_message(
