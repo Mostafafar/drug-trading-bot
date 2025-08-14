@@ -4853,7 +4853,7 @@ def main():
          },
          fallbacks=[CommandHandler('cancel', cancel)],
          allow_reentry=True,
-         per_message=True  # To address the PTBUserWarning
+         # To address the PTBUserWarning
         )
         
         # Add conversation handler for medical categories
