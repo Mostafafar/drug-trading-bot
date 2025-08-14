@@ -4822,10 +4822,10 @@ def main():
                     CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_\d+$')
             ],
                 States.SELECT_DRUGS: [
-                    MessageHandler(filters.Regex(r'^select_target_\d+$'), select_drug),
-                    MessageHandler(filters.Regex(r'^select_mine_\d+$'), select_drug),
-                    MessageHandler(filters.Regex(r'^submit_offer$'), submit_offer),
-                    MessageHandler(filters.Regex(r'^back$'), handle_back)
+                   CallbackQueryHandler(select_drug, pattern=r'^select_target_\d+$'),
+                   CallbackQueryHandler(select_drug, pattern=r'^select_mine_\d+$'),
+                   CallbackQueryHandler(submit_offer, pattern=r'^submit_offer$'),
+                   CallbackQueryHandler(handle_back, pattern=r'^back$')
            ],
                 States.SELECT_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, enter_quantity),
@@ -4913,6 +4913,7 @@ def main():
         application.add_handler(CallbackQueryHandler(select_drug, pattern="^select_target_"))
         application.add_handler(CallbackQueryHandler(select_drug, pattern="^select_mine_"))
         application.add_handler(CallbackQueryHandler(callback_handler))
+        
         
         # Add error handler
         application.add_error_handler(error_handler)
