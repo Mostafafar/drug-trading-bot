@@ -2319,21 +2319,18 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("لطفا یک عدد صحیح وارد کنید:")
             return States.ADD_DRUG_QUANTITY
         
-        # لاگ داده‌های موجود در context
+        # بررسی کامل بودن داده‌ها
         drug_name = context.user_data.get('selected_drug_name')
         drug_price = context.user_data.get('selected_drug_price')
         expiry_date = context.user_data.get('expiry_date')
-        logger.info(f"save_drug_item for user {update.effective_user.id}: drug_name={drug_name}, drug_price={drug_price}, expiry_date={expiry_date}, quantity={quantity}")
         
-        # بررسی کامل بودن داده‌ها
         if not all([drug_name, drug_price, expiry_date]):
-            missing_fields = [field for field, value in [
-                ('drug_name', drug_name),
-                ('drug_price', drug_price),
-                ('expiry_date', expiry_date)
-            ] if not value]
-            logger.error(f"Missing fields for user {update.effective_user.id}: {missing_fields}")
-            await update.message.reply_text(f"اطلاعات ناقص است (کمبود: {', '.join(missing_fields)}). لطفا دوباره از ابتدا شروع کنید.")
+            await update.message.reply_text(
+                "اطلاعات دارو ناقص است. لطفا دوباره از ابتدا شروع کنید:\n"
+                "1. روی دکمه 'اضافه کردن دارو' کلیک کنید\n"
+                "2. دارو را از لیست انتخاب کنید\n"
+                "3. تاریخ انقضا و تعداد را وارد کنید"
+            )
             return ConversationHandler.END
         
         # ذخیره در دیتابیس
@@ -2382,6 +2379,7 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in save_drug_item for user {update.effective_user.id}: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List user's drug items"""
     conn = None
