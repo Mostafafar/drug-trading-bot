@@ -2149,7 +2149,21 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
     try:
         result_id = update.chosen_inline_result.result_id
         try:
+            # Split the result_id which should be in format "name|price"
             drug_name, drug_price = result_id.split('|')
+            
+            # Store all required data in context
+            context.user_data['selected_drug'] = {
+                'name': drug_name.strip(),
+                'price': drug_price.strip()
+            }
+            logger.info(f"User {update.chosen_inline_result.from_user.id} selected drug: {drug_name} with price: {drug_price}")
+            
+            await context.bot.send_message(
+                chat_id=update.chosen_inline_result.from_user.id,
+                text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
+            )
+            return States.ADD_DRUG_DATE
         except ValueError:
             logger.error(f"Invalid result_id format: {result_id}")
             await context.bot.send_message(
@@ -2157,17 +2171,6 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
                 text="خطا در انتخاب دارو. لطفا دوباره تلاش کنید."
             )
             return ConversationHandler.END
-        
-        # ذخیره داده‌ها با لاگ
-        context.user_data['selected_drug_name'] = drug_name.strip()
-        context.user_data['selected_drug_price'] = drug_price.strip()
-        logger.info(f"User {update.chosen_inline_result.from_user.id} selected drug: {drug_name} with price: {drug_price}")
-        
-        await context.bot.send_message(
-            chat_id=update.chosen_inline_result.from_user.id,
-            text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
-        )
-        return States.ADD_DRUG_DATE
     except Exception as e:
         logger.error(f"Error in handle_chosen_inline_result for user {update.chosen_inline_result.from_user.id}: {e}")
         await context.bot.send_message(
@@ -2250,25 +2253,29 @@ async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
 async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if update.message and update.message.text:
-            logger.info(f"User {update.effective_user.id} entered expiry date: {update.message.text}")
             expiry_date = update.message.text.strip()
+            logger.info(f"User {update.effective_user.id} entered expiry date: {expiry_date}")
             
+            # Validate date format (simple validation)
             if not re.match(r'^\d{4}/\d{2}/\d{2}$', expiry_date):
                 await update.message.reply_text("فرمت تاریخ نامعتبر است. لطفا تاریخ را به فرمت 2026/01/23 وارد کنید:")
                 return States.ADD_DRUG_DATE
             
             context.user_data['expiry_date'] = expiry_date
             logger.info(f"Stored expiry_date: {expiry_date} for user {update.effective_user.id}")
+            
             await update.message.reply_text("📦 لطفا تعداد موجودی را وارد کنید:")
             return States.ADD_DRUG_QUANTITY
+            
         elif update.callback_query:
             query = update.callback_query
             await query.answer()
             if query.data == "back_to_search":
                 return await search_drug_for_adding(update, context)
-            else:
-                await query.edit_message_text("لطفا تاریخ انقضا را به صورت متنی وارد کنید (مثال: 2026/01/23):")
-                return States.ADD_DRUG_DATE
+            
+            await query.edit_message_text("لطفا تاریخ انقضا را به صورت متنی وارد کنید (مثال: 2026/01/23):")
+            return States.ADD_DRUG_DATE
+            
         else:
             logger.warning(f"Unexpected update type for user {update.effective_user.id}: {update}")
             await context.bot.send_message(
@@ -2276,6 +2283,7 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text="لطفا تاریخ انقضا را به فرمت 2026/01/23 وارد کنید:"
             )
             return States.ADD_DRUG_DATE
+            
     except Exception as e:
         logger.error(f"Error in add_drug_date for user {update.effective_user.id}: {e}")
         await context.bot.send_message(
@@ -2309,22 +2317,13 @@ async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # اعتبارسنجی تعداد
-        try:
-            quantity = int(update.message.text.strip())
-            if quantity <= 0:
-                await update.message.reply_text("لطفا یک عدد معتبر بزرگتر از صفر وارد کنید:")
-                return States.ADD_DRUG_QUANTITY
-        except ValueError:
-            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید:")
-            return States.ADD_DRUG_QUANTITY
-        
-        # بررسی کامل بودن داده‌ها
-        drug_name = context.user_data.get('selected_drug_name')
-        drug_price = context.user_data.get('selected_drug_price')
+        # Get all required data from context
+        selected_drug = context.user_data.get('selected_drug', {})
         expiry_date = context.user_data.get('expiry_date')
-        
-        if not all([drug_name, drug_price, expiry_date]):
+        quantity = update.message.text.strip()
+
+        # Validate all required fields
+        if not selected_drug or not expiry_date:
             await update.message.reply_text(
                 "اطلاعات دارو ناقص است. لطفا دوباره از ابتدا شروع کنید:\n"
                 "1. روی دکمه 'اضافه کردن دارو' کلیک کنید\n"
@@ -2332,8 +2331,18 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "3. تاریخ انقضا و تعداد را وارد کنید"
             )
             return ConversationHandler.END
-        
-        # ذخیره در دیتابیس
+
+        # Validate quantity
+        try:
+            quantity = int(quantity)
+            if quantity <= 0:
+                await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید:")
+                return States.ADD_DRUG_QUANTITY
+        except ValueError:
+            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید:")
+            return States.ADD_DRUG_QUANTITY
+
+        # Save to database
         conn = None
         try:
             conn = get_db_connection()
@@ -2343,8 +2352,8 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 VALUES (%s, %s, %s, %s, %s)
                 ''', (
                     update.effective_user.id,
-                    drug_name,
-                    drug_price,
+                    selected_drug['name'],
+                    selected_drug['price'],
                     expiry_date,
                     quantity
                 ))
@@ -2352,18 +2361,17 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 await update.message.reply_text(
                     f"✅ دارو با موفقیت ثبت شد:\n"
-                    f"💊 نام: {drug_name}\n"
-                    f"💰 قیمت: {drug_price}\n"
+                    f"💊 نام: {selected_drug['name']}\n"
+                    f"💰 قیمت: {selected_drug['price']}\n"
                     f"📅 تاریخ انقضا: {expiry_date}\n"
                     f"📦 تعداد: {quantity}"
                 )
                 
-                # پاک کردن context
-                context.user_data.pop('selected_drug_name', None)
-                context.user_data.pop('selected_drug_price', None)
+                # Clear context
+                context.user_data.pop('selected_drug', None)
                 context.user_data.pop('expiry_date', None)
                 
-                return await start(update, context)  # بازگشت به منوی اصلی
+                return await start(update, context)  # Return to main menu
                 
         except Exception as e:
             logger.error(f"Error saving drug item for user {update.effective_user.id}: {e}")
