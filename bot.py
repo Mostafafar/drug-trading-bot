@@ -3185,42 +3185,43 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle drug search query and show pharmacies"""
+    """Handle drug search and show matching pharmacies"""
     try:
         query = update.message.text.strip()
-        context.user_data['search_query'] = query
+        user_id = update.effective_user.id
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
                 cursor.execute('''
-                SELECT DISTINCT p.user_id, p.name
-                FROM pharmacies p
-                JOIN drug_items di ON p.user_id = di.user_id
-                WHERE di.name ILIKE %s AND di.quantity > 0 AND p.verified = TRUE
-                ORDER BY p.name
-                ''', (f'%{query}%',))
+                    SELECT p.user_id, p.name
+                    FROM pharmacies p
+                    JOIN drug_items di ON p.user_id = di.user_id
+                    WHERE di.name ILIKE %s AND di.quantity > 0 AND p.verified = TRUE
+                    GROUP BY p.user_id, p.name
+                    ''', (f'%{query}%',))
                 pharmacies = cursor.fetchall()
-                
+
                 if not pharmacies:
-                    await update.message.reply_text(
-                        "هیچ داروخانه‌ای با این دارو یافت نشد. لطفا دوباره جستجو کنید.",
-                        reply_markup=ReplyKeyboardRemove()
-                    )
+                    await update.message.reply_text("هیچ داروخانه‌ای با این دارو پیدا نشد.")
                     return States.SEARCH_DRUG
-                
-                keyboard = [[InlineKeyboardButton(pharmacy['name'], callback_data=f"pharmacy_{pharmacy['user_id']}")]
-                            for pharmacy in pharmacies]
-                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
-                
+
+                message = "داروخانه‌های دارای این دارو:\n\n"
+                keyboard = []
+                for pharmacy in pharmacies:
+                    button_text = format_button_text(pharmacy['name'], max_line_length=20)
+                    keyboard.append([InlineKeyboardButton(text=button_text, callback_data=f"pharmacy_{pharmacy['user_id']}")])
+                keyboard.append([InlineKeyboardButton(text="🔙 بازگشت", callback_data="back")])
+
                 await update.message.reply_text(
-                    f"داروخانه‌های دارای '{query}':",
+                    message,
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 return States.SELECT_PHARMACY
         except Exception as e:
             logger.error(f"Error in handle_search: {e}")
             await update.message.reply_text("خطا در جستجو. لطفا دوباره تلاش کنید.")
+            return States.SEARCH_DRUG
         finally:
             if conn:
                 conn.close()
