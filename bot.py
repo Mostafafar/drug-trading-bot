@@ -4971,14 +4971,18 @@ def main():
         trade_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex(r'^جستجوی دارو$'), search_drug),
-                CallbackQueryHandler(handle_match_notification, pattern=r'^view_match_')
+                CallbackQueryHandler(handle_match_notification, pattern=r'^view_match_'),
+                ChosenInlineResultHandler(handle_chosen_inline_result),
+                CallbackQueryHandler(handle_add_drug_callback, pattern=r'^add_drug_')
+        
             ],
             states={
                 States.SEARCH_DRUG: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
             ],
                 States.SELECT_PHARMACY: [
-                    CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_\d+$')
+                    CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_\d+$'),
+                    CallbackQueryHandler(handle_back, pattern=r'^back$')
             ],
                 States.SELECT_DRUGS: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_drug_selection),
@@ -4989,7 +4993,7 @@ def main():
                 States.SELECT_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, enter_quantity),
                     CallbackQueryHandler(show_drug_buttons, pattern=r'^back_to_selection$')
-           ],
+          ],
                 States.CONFIRM_OFFER: [
                     CallbackQueryHandler(confirm_offer, pattern=r'^confirm_offer$'),
                     CallbackQueryHandler(show_drug_buttons, pattern=r'^back_to_selection$')
@@ -5012,7 +5016,8 @@ def main():
          },
          fallbacks=[CommandHandler('cancel', cancel)],
          allow_reentry=True,
-         # To address the PTBUserWarning
+         per_chat=False,
+         per_user=True
         )
         
         # Add conversation handler for medical categories
