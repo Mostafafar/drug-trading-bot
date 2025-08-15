@@ -3501,70 +3501,128 @@ async def handle_drug_selection(update: Update, context: ContextTypes.DEFAULT_TY
             return States.SELECT_DRUGS
 # This should be at the top level, not inside any try/except block
 async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش داروها به صورت دکمه‌های قابل انتخاب"""
-    target_drugs = context.user_data.get('target_drugs', [])
-    my_drugs = context.user_data.get('my_drugs', [])
-    selected_items = context.user_data.get('selected_items', {'target': [], 'mine': []})
-    
-    # ایجاد دکمه‌های داروهای داروخانه مقابل
-    # در تابع show_drug_buttons:
-    target_buttons = []
-    for drug in target_drugs:
-        display_text = f"{format_button_text(drug['name'])}\nقیمت: {format_button_text(drug['price'])}"
-        is_selected = any(item['id'] == drug['id'] for item in selected_items['target'])
-        target_buttons.append([InlineKeyboardButton(
-        f"{'✅ ' if is_selected else '◻️ '}{display_text}",
-        callback_data=f"select_target_{drug['id']}"
-        )])
+    """نمایش داروها به صورت دکمه‌های قابل انتخاب با صفحه‌بندی و مدیریت وضعیت"""
+    try:
+        # دریافت داده‌های مورد نیاز از context
+        target_drugs = context.user_data.get('target_drugs', [])
+        my_drugs = context.user_data.get('my_drugs', [])
+        selected_items = context.user_data.get('selected_items', {'target': [], 'mine': []})
+        
+        # تنظیم صفحه‌بندی
+        current_page = context.user_data.get('current_page', 0)
+        items_per_page = 5
+        total_pages = max(
+            (len(target_drugs) + len(my_drugs)) // items_per_page + 
+            (1 if (len(target_drugs) + len(my_drugs)) % items_per_page != 0 else 0),
+            1
+        )
 
-    my_buttons = []
-    for drug in my_drugs:
-        display_text = f"{format_button_text(drug['name'])}\nقیمت: {format_button_text(drug['price'])}"
-        is_selected = any(item['id'] == drug['id'] for item in selected_items['mine'])
-        my_buttons.append([InlineKeyboardButton(
-        f"{'✅ ' if is_selected else '◻️ '}{display_text}",
-        callback_data=f"select_mine_{drug['id']}"
-        )])
-    # ایجاد صفحه بندی اگر داروها زیاد باشند
-    keyboard = [
-        [InlineKeyboardButton("--- داروهای مقابل ---", callback_data="none")],
-        *target_buttons[:5],  # حداکثر 5 دارو در هر صفحه
-        [InlineKeyboardButton("--- داروهای من ---", callback_data="none")],
-        *my_buttons[:5],
-        [
+        # ساخت دکمه‌های داروهای داروخانه مقابل (صفحه جاری)
+        target_buttons = []
+        target_start = current_page * items_per_page
+        target_end = min(target_start + items_per_page, len(target_drugs))
+        
+        for drug in target_drugs[target_start:target_end]:
+            is_selected = any(item['id'] == drug['id'] for item in selected_items['target'])
+            display_text = f"{drug['name'][:20]}{'...' if len(drug['name']) > 20 else ''}\nقیمت: {drug['price']}"
+            target_buttons.append([InlineKeyboardButton(
+                f"{'✅ ' if is_selected else '◻️ '}{display_text}",
+                callback_data=f"select_target_{drug['id']}"
+            )])
+
+        # ساخت دکمه‌های داروهای کاربر (صفحه جاری)
+        my_buttons = []
+        my_start = max(0, current_page * items_per_page - len(target_drugs))
+        my_end = min(my_start + items_per_page, len(my_drugs))
+        
+        for drug in my_drugs[my_start:my_end]:
+            is_selected = any(item['id'] == drug['id'] for item in selected_items['mine'])
+            display_text = f"{drug['name'][:20]}{'...' if len(drug['name']) > 20 else ''}\nقیمت: {drug['price']}"
+            my_buttons.append([InlineKeyboardButton(
+                f"{'✅ ' if is_selected else '◻️ '}{display_text}",
+                callback_data=f"select_mine_{drug['id']}"
+            )])
+
+        # ساخت کیبرد نهایی
+        keyboard = []
+        
+        if target_drugs:
+            keyboard.append([InlineKeyboardButton("--- داروهای مقابل ---", callback_data="none")])
+            keyboard.extend(target_buttons)
+        
+        if my_drugs:
+            keyboard.append([InlineKeyboardButton("--- داروهای من ---", callback_data="none")])
+            keyboard.extend(my_buttons)
+
+        # دکمه‌های صفحه‌بندی
+        pagination_buttons = []
+        if current_page > 0:
+            pagination_buttons.append(InlineKeyboardButton("⬅️ صفحه قبل", callback_data="prev_page"))
+        if current_page < total_pages - 1:
+            pagination_buttons.append(InlineKeyboardButton("➡️ صفحه بعد", callback_data="next_page"))
+        
+        if pagination_buttons:
+            keyboard.append(pagination_buttons)
+
+        # دکمه‌های اقدام
+        action_buttons = [
             InlineKeyboardButton("📤 ارسال پیشنهاد", callback_data="submit_offer"),
             InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_pharmacies")
         ]
-    ]
-    
-    # نمایش داروهای انتخاب شده
-    message = "📋 داروها را انتخاب کنید:\n\n"
-    if selected_items['target']:
-        message += "از داروخانه مقابل:\n"
-        for item in selected_items['target']:
-            message += f"✅ {item['name']} (تعداد: {item['quantity']})\n"
-    
-    if selected_items['mine']:
-        message += "\nاز داروهای شما:\n"
-        for item in selected_items['mine']:
-            message += f"✅ {item['name']} (تعداد: {item['quantity']})\n"
-    
-    if not selected_items['target'] and not selected_items['mine']:
-        message += "هنوز دارویی انتخاب نکرده‌اید."
-    
-    try:
+        keyboard.append(action_buttons)
+
+        # ساخت پیام خلاصه انتخاب‌ها
+        message = "📋 داروهای انتخاب شده:\n\n"
+        
+        if selected_items['target']:
+            message += "از داروخانه مقابل:\n"
+            for item in selected_items['target']:
+                message += f"✅ {item['name']} (تعداد: {item['quantity']})\n"
+        
+        if selected_items['mine']:
+            message += "\nاز داروهای شما:\n"
+            for item in selected_items['mine']:
+                message += f"✅ {item['name']} (تعداد: {item['quantity']})\n"
+        
+        if not selected_items['target'] and not selected_items['mine']:
+            message += "هنوز دارویی انتخاب نکرده‌اید.\n\n"
+        
+        message += f"\nصفحه {current_page + 1} از {total_pages}"
+
+        # ارسال یا ویرایش پیام
         if update.callback_query:
-            await update.callback_query.edit_message_text(
-                message,
-                reply_markup=InlineKeyboardMarkup(keyboard))
+            try:
+                await update.callback_query.edit_message_text(
+                    message,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+            except Exception as e:
+                if "Message is not modified" not in str(e):
+                    raise
         else:
             await update.message.reply_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard))
+        
+        # ذخیره صفحه جاری در context
+        context.user_data['current_page'] = current_page
+        
     except Exception as e:
-        logger.error(f"خطا در نمایش دکمه‌ها: {str(e)}")
-
-
+        logger.error(f"خطا در نمایش دکمه‌ها: {str(e)}", exc_info=True)
+        error_msg = "خطا در نمایش لیست داروها. لطفا دوباره تلاش کنید."
+        if update.callback_query:
+            await update.callback_query.edit_message_text(error_msg)
+        else:
+            await update.message.reply_text(error_msg)
+async def handle_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "next_page":
+        context.user_data['current_page'] += 1
+    elif query.data == "prev_page":
+        context.user_data['current_page'] -= 1
+    
+    return await show_drug_buttons(update, context)
 async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug selection for offer"""
     try:
@@ -3736,46 +3794,57 @@ async def select_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYP
         return States.ENTER_QUANTITY
 
 async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle quantity input for selected drug"""
+    """ذخیره تعداد انتخاب شده برای دارو"""
     try:
         quantity = int(update.message.text)
         current_drug = context.user_data.get('current_drug')
         
         if not current_drug:
-            await update.message.reply_text("اطلاعات دارو یافت نشد. لطفا دوباره تلاش کنید.")
+            await update.message.reply_text("اطلاعات دارو یافت نشد. لطفا از ابتدا شروع کنید.")
             return ConversationHandler.END
             
         if quantity <= 0:
-            await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
+            await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید:")
             return States.SELECT_QUANTITY
             
-        if quantity > current_drug['max_quantity']:
-            await update.message.reply_text(f"موجودی کافی نیست. حداکثر تعداد قابل انتخاب: {current_drug['max_quantity']}")
+        if quantity > current_drug['quantity']:
+            await update.message.reply_text(
+                f"موجودی کافی نیست. حداکثر تعداد قابل انتخاب: {current_drug['quantity']}\n"
+                "لطفا تعداد کمتری وارد کنید:"
+            )
             return States.SELECT_QUANTITY
         
-        # Save the selected quantity
-        drug_type = current_drug['type']
-        selected_items = context.user_data['selected_items'][drug_type]
+        # ذخیره اطلاعات در لیست انتخاب‌ها
+        selected_items = context.user_data.get('selected_items', {'target': [], 'mine': []})
         
-        # Remove if already exists
-        selected_items = [item for item in selected_items if item['id'] != current_drug['id']]
+        # حذف اگر قبلا انتخاب شده
+        selected_items[current_drug['type']] = [
+            item for item in selected_items[current_drug['type']] 
+            if item['id'] != current_drug['id']
+        ]
         
-        # Add new selection
-        selected_items.append({
+        # اضافه کردن انتخاب جدید
+        selected_items[current_drug['type']].append({
             'id': current_drug['id'],
             'name': current_drug['name'],
             'price': current_drug['price'],
-            'quantity': quantity
+            'quantity': quantity,
+            'pharmacy_id': current_drug.get('pharmacy_id'),
+            'pharmacy_name': current_drug.get('pharmacy_name')
         })
         
-        context.user_data['selected_items'][drug_type] = selected_items
+        context.user_data['selected_items'] = selected_items
         
-        # Return to drug selection
+        # نمایش مجدد لیست داروها
         return await show_drug_buttons(update, context)
         
     except ValueError:
-        await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
+        await update.message.reply_text("لطفا یک عدد صحیح وارد کنید:")
         return States.SELECT_QUANTITY
+    except Exception as e:
+        logger.error(f"Error in enter_quantity: {str(e)}")
+        await update.message.reply_text("خطایی در ذخیره تعداد رخ داد. لطفا دوباره تلاش کنید.")
+        return States.SELECT_DRUGS
 
 async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle offer submission"""
@@ -4995,6 +5064,7 @@ def main():
         application.add_handler(CallbackQueryHandler(select_drug, pattern=r'^select_(target|mine)_[0-9]+$'))
         application.add_handler(CallbackQueryHandler(submit_offer, pattern=r'^submit_offer$'))
         application.add_handler(CallbackQueryHandler(handle_back_to_pharmacies, pattern=r'^back_to_pharmacies$'))
+        application.add_handler(CallbackQueryHandler(handle_pagination, pattern="^(next_page|prev_page)$"))
         
         
         # Add error handler
