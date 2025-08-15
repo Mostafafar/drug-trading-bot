@@ -3418,6 +3418,35 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in select_pharmacy: {str(e)}")
         await query.edit_message_text("خطایی در پردازش رخ داد.")
         return ConversationHandler.END
+async def handle_back_to_pharmacies(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بازگشت به لیست داروخانه‌ها"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        # بازیابی لیست داروخانه‌ها از context
+        pharmacies = context.user_data.get('pharmacies', {})
+        
+        # ساخت کیبرد
+        keyboard = []
+        for pharma_id, pharma_data in pharmacies.items():
+            keyboard.append([InlineKeyboardButton(
+                f"🏥 {pharma_data['name']}",
+                callback_data=f"pharmacy_{pharma_id}"
+            )])
+        
+        keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
+        
+        await query.edit_message_text(
+            "لطفا داروخانه مورد نظر را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return States.SELECT_PHARMACY
+        
+    except Exception as e:
+        logger.error(f"Error in handle_back_to_pharmacies: {e}")
+        await update.callback_query.edit_message_text("خطا در بازگشت به لیست داروخانه‌ها")
+        return ConversationHandler.END
 async def handle_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت انتخاب دارو و صفحه‌بندی"""
     user_input = update.message.text
@@ -4874,10 +4903,10 @@ def main():
                     CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_\d+$')
             ],
                 States.SELECT_DRUGS: [
-                   CallbackQueryHandler(select_drug, pattern=r'^select_target_\d+$'),
-                   CallbackQueryHandler(select_drug, pattern=r'^select_mine_\d+$'),
-                   CallbackQueryHandler(submit_offer, pattern=r'^submit_offer$'),
-                   CallbackQueryHandler(handle_back, pattern=r'^back$')
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_drug_selection),
+                    CallbackQueryHandler(select_drug, pattern=r'^select_(target|mine)_\d+$'),
+                    CallbackQueryHandler(submit_offer, pattern=r'^submit_offer$'),
+                    CallbackQueryHandler(handle_back, pattern=r'^back$')
            ],
                 States.SELECT_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, enter_quantity),
@@ -4962,9 +4991,10 @@ def main():
         # In your main() function where you set up handlers:
         application.add_handler(CallbackQueryHandler(submit_offer, pattern="^submit_offer$"))
         # Add this to your main() function where you set up handlers:
-        application.add_handler(CallbackQueryHandler(select_drug, pattern="^select_target_"))
-        application.add_handler(CallbackQueryHandler(select_drug, pattern="^select_mine_"))
-        application.add_handler(CallbackQueryHandler(callback_handler))
+        application.add_handler(CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_[0-9]+$'))
+        application.add_handler(CallbackQueryHandler(select_drug, pattern=r'^select_(target|mine)_[0-9]+$'))
+        application.add_handler(CallbackQueryHandler(submit_offer, pattern=r'^submit_offer$'))
+        application.add_handler(CallbackQueryHandler(handle_back_to_pharmacies, pattern=r'^back_to_pharmacies$'))
         
         
         # Add error handler
