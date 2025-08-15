@@ -3751,6 +3751,61 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in confirm_offer: {e}")
         await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Confirm the totals of requested and compensation drugs before sending the offer"""
+    try:
+        query = update.callback_query
+        await query.answer()
+
+        offer_items = context.user_data.get('offer_items', [])
+        comp_items = context.user_data.get('comp_items', [])
+
+        if not offer_items:
+            await query.edit_message_text("هیچ دارویی برای ارسال انتخاب نشده است.")
+            return States.SELECT_DRUGS
+
+        offer_total = sum(parse_price(item['price']) * item['quantity'] for item in offer_items)
+        comp_total = sum(parse_price(item['price']) * item['quantity'] for item in comp_items)
+
+        if offer_total > comp_total:
+            await query.edit_message_text(
+                "⚠️ اختلاف قیمت مثبت است. لطفا داروهای جبرانی بیشتری انتخاب کنید."
+            )
+            return await show_two_column_selection(update, context)
+
+        message = "📋 تأیید نهایی مبالغ:\n\n"
+        message += "📌 داروهای درخواستی:\n"
+        for item in offer_items:
+            message += f"- {item['drug_name']} ({item['quantity']} عدد) - {item['price']}\n"
+        message += f"\n💰 جمع کل درخواستی: {format_price(offer_total)}\n"
+
+        message += "\n📌 داروهای جبرانی شما:\n"
+        if comp_items:
+            for item in comp_items:
+                message += f"- {item['name']} ({item['quantity']} عدد) - {item['price']}\n"
+            message += f"\n💰 جمع کل جبرانی: {format_price(comp_total)}\n"
+        else:
+            message += "هیچ داروی جبرانی انتخاب نشده است.\n"
+
+        message += f"\n📊 اختلاف قیمت: {format_price(offer_total - comp_total)}\n"
+        message += "\nآیا از مبالغ تأیید شده مطمئن هستید؟"
+
+        keyboard = [
+            [InlineKeyboardButton("✅ ارسال پیشنهاد", callback_data="send_offer")],
+            [InlineKeyboardButton("✏️ ویرایش", callback_data="edit_selection")],
+            [InlineKeyboardButton("🔙 بازگشت به انتخاب دارو", callback_data="back_to_selection")],
+        ]
+
+        await query.edit_message_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return States.CONFIRM_TOTALS
+
+    except Exception as e:
+        logger.error(f"Error in confirm_totals: {e}")
+        await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
 
 async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send the finalized offer to the pharmacy"""
