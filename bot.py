@@ -3766,33 +3766,7 @@ async def show_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def select_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """دریافت تعداد برای داروی انتخاب شده"""
-    query = update.callback_query
-    await query.answer()
 
-    if query.data == "back_to_list":
-        return await select_pharmacy(update, context)
-        
-    parts = query.data.split('_')
-    drug_id = int(parts[2])
-    is_target = parts[1] == 'target'
-    
-    # پیدا کردن داروی انتخاب شده
-    drug_list = context.user_data['target_drugs'] if is_target else context.user_data['my_drugs']
-    selected_drug = next((drug for drug in drug_list if drug['id'] == drug_id), None)
-    
-    if selected_drug:
-        context.user_data['current_selection'] = {
-            'drug': selected_drug,
-            'is_target': is_target
-        }
-        
-        await query.edit_message_text(
-            f"لطفا تعداد مورد نظر برای {selected_drug['name']} را وارد کنید (موجودی: {selected_drug['quantity']}):",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_selection")]])
-        )
-        return States.ENTER_QUANTITY
 
 async def select_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده"""
