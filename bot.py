@@ -3798,12 +3798,18 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ذخیره تعداد انتخاب شده برای دارو"""
     try:
         quantity = int(update.message.text)
-        current_drug = context.user_data.get('current_drug')
         
-        if not current_drug:
+        # Fix: Retrieve from the correct key ('current_selection')
+        current_selection = context.user_data.get('current_selection')
+        
+        if not current_selection:
             await update.message.reply_text("اطلاعات دارو یافت نشد. لطفا از ابتدا شروع کنید.")
             return ConversationHandler.END
-            
+        
+        # Extract drug and type from the correct structure
+        current_drug = current_selection['drug']
+        is_target = current_selection['is_target']
+        
         if quantity <= 0:
             await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید:")
             return States.SELECT_QUANTITY
@@ -3818,14 +3824,17 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ذخیره اطلاعات در لیست انتخاب‌ها
         selected_items = context.user_data.get('selected_items', {'target': [], 'mine': []})
         
+        # Fix: Use 'target' or 'mine' based on is_target (instead of current_drug['type'])
+        category = 'target' if is_target else 'mine'
+        
         # حذف اگر قبلا انتخاب شده
-        selected_items[current_drug['type']] = [
-            item for item in selected_items[current_drug['type']] 
+        selected_items[category] = [
+            item for item in selected_items[category] 
             if item['id'] != current_drug['id']
         ]
         
         # اضافه کردن انتخاب جدید
-        selected_items[current_drug['type']].append({
+        selected_items[category].append({
             'id': current_drug['id'],
             'name': current_drug['name'],
             'price': current_drug['price'],
@@ -3835,6 +3844,17 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         })
         
         context.user_data['selected_items'] = selected_items
+        
+        # نمایش مجدد لیست داروها
+        return await show_drug_buttons(update, context)
+        
+    except ValueError:
+        await update.message.reply_text("لطفا یک عدد صحیح وارد کنید:")
+        return States.SELECT_QUANTITY
+    except Exception as e:
+        logger.error(f"Error in enter_quantity: {str(e)}")
+        await update.message.reply_text("خطایی در ذخیره تعداد رخ داد. لطفا دوباره تلاش کنید.")
+        return States.SELECT_DRUGS
         
         # نمایش مجدد لیست داروها
         return await show_drug_buttons(update, context)
