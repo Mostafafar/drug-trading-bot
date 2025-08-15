@@ -3170,7 +3170,6 @@ async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.error(f"Error in handle_need_deletion: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-# Drug Trading Functions
 async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start drug search process"""
     try:
@@ -3183,10 +3182,18 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in search_drug: {e}")
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug search query and show pharmacies"""
     try:
         query = update.message.text.strip()
+        if not query:
+            await update.message.reply_text(
+                "لطفا نام دارو را وارد کنید.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return States.SEARCH_DRUG
+
         context.user_data['search_query'] = query
         conn = None
         try:
@@ -3208,21 +3215,19 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return States.SEARCH_DRUG
                 
-                # Create inline keyboard buttons properly
                 keyboard = []
                 for pharmacy in pharmacies:
-                    # Ensure each button has text and callback_data
-                    button = InlineKeyboardButton(
-                        text=pharmacy['name'],  # Make sure text is provided
-                        callback_data=f"pharmacy_{pharmacy['user_id']}"
-                    )
-                    keyboard.append([button])
+                    button_text = format_button_text(pharmacy['name'], max_line_length=30)
+                    if button_text:  # Ensure button text is not empty
+                        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"pharmacy_{pharmacy['user_id']}")])
+                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
                 
-                # Add back button
-                keyboard.append([InlineKeyboardButton(
-                    text="🔙 بازگشت",  # Make sure text is provided
-                    callback_data="back"
-                )])
+                if not keyboard[:-1]:  # Check if only "back" button exists
+                    await update.message.reply_text(
+                        "هیچ داروخانه‌ای یافت نشد. لطفا دوباره جستجو کنید.",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                    return States.SEARCH_DRUG
                 
                 await update.message.reply_text(
                     f"داروخانه‌های دارای '{query}':",
@@ -3239,6 +3244,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in handle_search: {e}")
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Initialize drug selection process"""
