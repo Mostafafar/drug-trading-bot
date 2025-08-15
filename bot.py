@@ -3170,6 +3170,7 @@ async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.error(f"Error in handle_need_deletion: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start drug search process"""
     try:
@@ -3208,15 +3209,8 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return States.SEARCH_DRUG
                 
-                # Create keyboard with pharmacy buttons
-                keyboard = []
-                for pharmacy in pharmacies:
-                    keyboard.append([InlineKeyboardButton(
-                        pharmacy['name'],
-                        callback_data=f"pharmacy_{pharmacy['user_id']}"
-                    )])
-                
-                # Add back button
+                keyboard = [[InlineKeyboardButton(pharmacy['name'], callback_data=f"pharmacy_{pharmacy['user_id']}")]
+                            for pharmacy in pharmacies]
                 keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
                 
                 await update.message.reply_text(
@@ -3285,7 +3279,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                     FROM drug_items di
                     WHERE di.user_id = %s AND di.quantity > 0 AND di.name ILIKE %s
                     ''', (pharmacy_id, f'%{search_query}%'))
-                    total_drugs = cursor.fetchone()[0]
+                    total_drugs = cursor.fetchmany(1)[0][0]
                 else:
                     cursor.execute('''
                     SELECT di.id, di.name, di.price, di.quantity
@@ -3300,18 +3294,16 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                     FROM drug_items di
                     WHERE di.user_id = %s AND di.quantity > 0
                     ''', (user_id,))
-                    total_drugs = cursor.fetchone()[0]
+                    total_drugs = cursor.fetchmany(1)[0][0]
                 
                 message = f"🏥 داروخانه: {drugs[0]['pharmacy_name'] if drugs and current_list == 'target' else 'داروهای شما'}\n\n"
                 message += "📌 انتخاب داروها:\n" if current_list == 'target' else "💊 انتخاب داروهای جبرانی:\n"
                 
-                # Create keyboard with drug buttons
                 keyboard = []
                 for drug in drugs:
-                    button_text = f"{'📌' if current_list == 'target' else '💊'} {format_button_text(drug['name'])} - {drug['price']}"
+                    button_text = f"📌 {format_button_text(drug['name'], max_line_length=20)} - {drug['price']}" if current_list == 'target' else f"💊 {format_button_text(drug['name'], max_line_length=20)} - {drug['price']}"
                     keyboard.append([button_text])
                 
-                # Add pagination buttons if needed
                 nav_row = []
                 if total_drugs > (page + 1) * drugs_per_page:
                     nav_row.append("➡️ صفحه بعد")
@@ -3320,7 +3312,6 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 if nav_row:
                     keyboard.append(nav_row)
                 
-                # Add action buttons
                 keyboard.append(["🔄 نمایش " + ("داروهای من" if current_list == 'target' else "داروهای داروخانه")])
                 keyboard.append(["✅ اتمام انتخاب", "🔙 بازگشت به داروخانه‌ها"])
                 
@@ -3350,6 +3341,30 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         logger.error(f"Error in show_two_column_selection: {e}")
         return ConversationHandler.END
 
+async def handle_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle pagination for drug selection"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        current_list = context.user_data.get('current_list', 'target')
+        if query.data == "next_page":
+            if current_list == 'target':
+                context.user_data['page_target'] = context.user_data.get('page_target', 0) + 1
+            else:
+                context.user_data['page_mine'] = context.user_data.get('page_mine', 0) + 1
+        elif query.data == "prev_page":
+            if current_list == 'target':
+                context.user_data['page_target'] = max(0, context.user_data.get('page_target', 0) - 1)
+            else:
+                context.user_data['page_mine'] = max(0, context.user_data.get('page_mine', 0) - 1)
+        
+        return await show_two_column_selection(update, context)
+    except Exception as e:
+        logger.error(f"Error in handle_pagination: {e}")
+        await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+
 async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug selection from ReplyKeyboard"""
     try:
@@ -3359,7 +3374,6 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pharmacy_id = context.user_data.get('selected_pharmacy_id')
         search_query = context.user_data.get('search_query', '')
         
-        # Handle pagination and navigation
         if selection == "➡️ صفحه بعد":
             if current_list == 'target':
                 context.user_data['page_target'] = context.user_data.get('page_target', 0) + 1
@@ -3387,7 +3401,6 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop('page_mine', None)
             return await handle_search(update, context)
         
-        # Handle drug selection
         conn = None
         try:
             conn = get_db_connection()
@@ -3408,11 +3421,9 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 drugs = cursor.fetchall()
                 selected_drug = None
-                
-                # Find the selected drug by matching the button text
                 for drug in drugs:
-                    expected_text = f"{'📌' if current_list == 'target' else '💊'} {format_button_text(drug['name'])} - {drug['price']}"
-                    if expected_text == selection:
+                    button_text = f"{'📌' if current_list == 'target' else '💊'} {format_button_text(drug['name'], max_line_length=20)} - {drug['price']}"
+                    if button_text == selection:
                         selected_drug = drug
                         break
                 
@@ -3420,7 +3431,6 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("دارو یافت نشد. لطفا دوباره انتخاب کنید.")
                     return States.SELECT_DRUGS
                 
-                # Store selection in context
                 context.user_data['current_selection'] = {
                     'id': selected_drug['id'],
                     'name': selected_drug['name'],
@@ -3429,6 +3439,7 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     'pharmacy_name': selected_drug.get('pharmacy_name', 'خودتان'),
                     'type': current_list
                 }
+                logger.info(f"Stored current_selection for user {user_id}: {context.user_data['current_selection']}")
                 
                 await update.message.reply_text(
                     f"💊 داروی انتخاب‌شده: {selected_drug['name']}\n"
@@ -3470,10 +3481,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
             return States.SELECT_QUANTITY
         
-        # Add to appropriate list based on selection type
         if current_selection['type'] == 'target':
-            if 'offer_items' not in context.user_data:
-                context.user_data['offer_items'] = []
             context.user_data['offer_items'].append({
                 'drug_id': current_selection['id'],
                 'drug_name': current_selection['name'],
@@ -3482,8 +3490,6 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 'pharmacy_id': context.user_data['selected_pharmacy_id']
             })
         else:
-            if 'comp_items' not in context.user_data:
-                context.user_data['comp_items'] = []
             context.user_data['comp_items'].append({
                 'id': current_selection['id'],
                 'name': current_selection['name'],
@@ -3491,7 +3497,6 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 'quantity': quantity
             })
         
-        # Clear current selection and return to drug list
         context.user_data.pop('current_selection', None)
         await update.message.reply_text(
             f"تعداد {quantity} برای {current_selection['name']} ثبت شد.",
@@ -3502,6 +3507,10 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in enter_quantity: {e}")
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
+
+            
+        
 async def handle_compensation_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle selection of compensation drugs"""
     try:
