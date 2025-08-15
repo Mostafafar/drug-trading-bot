@@ -3252,74 +3252,93 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show drugs in a paginated ReplyKeyboardMarkup"""
+    """نمایش داروهای داروخانه هدف و داروهای خود کاربر به‌صورت دو ستون"""
     try:
+        query = update.callback_query
+        await query.answer()
         pharmacy_id = context.user_data.get('selected_pharmacy_id')
         user_id = update.effective_user.id
-        search_query = context.user_data.get('search_query', '')
-        current_list = context.user_data.get('current_list', 'target')
-        page = context.user_data.get('page_target' if current_list == 'target' else 'page_mine', 0)
         drugs_per_page = 6
-        
+        page_target = context.user_data.get('page_target', 0)
+        page_mine = context.user_data.get('page_mine', 0)
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                if current_list == 'target':
-                    cursor.execute('''
-                    SELECT di.id, di.name, di.price, di.quantity, p.name as pharmacy_name
-                    FROM drug_items di
-                    JOIN pharmacies p ON di.user_id = p.user_id
-                    WHERE di.user_id = %s AND di.quantity > 0 AND di.name ILIKE %s
-                    ORDER BY di.name
+                # داروهای داروخانه هدف
+                cursor.execute('''
+                    SELECT id, name, price, quantity
+                    FROM drug_items
+                    WHERE user_id = %s AND quantity > 0
+                    ORDER BY name
                     LIMIT %s OFFSET %s
-                    ''', (pharmacy_id, f'%{search_query}%', drugs_per_page, page * drugs_per_page))
-                    drugs = cursor.fetchall()
-                    cursor.execute('''
-                    SELECT COUNT(*) 
-                    FROM drug_items di
-                    WHERE di.user_id = %s AND di.quantity > 0 AND di.name ILIKE %s
-                    ''', (pharmacy_id, f'%{search_query}%'))
-                    total_drugs = cursor.fetchmany(1)[0][0]
-                else:
-                    cursor.execute('''
-                    SELECT di.id, di.name, di.price, di.quantity
-                    FROM drug_items di
-                    WHERE di.user_id = %s AND di.quantity > 0
-                    ORDER BY di.name
+                ''', (pharmacy_id, drugs_per_page, page_target * drugs_per_page))
+                target_drugs = cursor.fetchall()
+                
+                # داروهای کاربر
+                cursor.execute('''
+                    SELECT id, name, price, quantity
+                    FROM drug_items
+                    WHERE user_id = %s AND quantity > 0
+                    ORDER BY name
                     LIMIT %s OFFSET %s
-                    ''', (user_id, drugs_per_page, page * drugs_per_page))
-                    drugs = cursor.fetchall()
-                    cursor.execute('''
-                    SELECT COUNT(*) 
-                    FROM drug_items di
-                    WHERE di.user_id = %s AND di.quantity > 0
-                    ''', (user_id,))
-                    total_drugs = cursor.fetchmany(1)[0][0]
+                ''', (user_id, drugs_per_page, page_mine * drugs_per_page))
+                my_drugs = cursor.fetchall()
                 
-                message = f"🏥 داروخانه: {drugs[0]['pharmacy_name'] if drugs and current_list == 'target' else 'داروهای شما'}\n\n"
-                message += "📌 انتخاب داروها:\n" if current_list == 'target' else "💊 انتخاب داروهای جبرانی:\n"
-                
+                message = "💊 انتخاب داروها:\n\n📌 داروهای داروخانه:\n"
+                if not target_drugs:
+                    message += "هیچ دارویی در این داروخانه موجود نیست.\n"
                 keyboard = []
-                for drug in drugs:
-                    button_text = f"📌 {format_button_text(drug['name'], max_line_length=20)} - {drug['price']}" if current_list == 'target' else f"💊 {format_button_text(drug['name'], max_line_length=20)} - {drug['price']}"
-                    keyboard.append([button_text])
+                for drug in target_drugs:
+                    button_text = f"{format_button_text(drug['name'], 20)} - {drug['price']}"
+                    keyboard.append([InlineKeyboardButton(text=button_text, callback_data=f"select_target_{drug['id']}")])
                 
-                nav_row = []
-                if total_drugs > (page + 1) * drugs_per_page:
-                    nav_row.append("➡️ صفحه بعد")
-                if page > 0:
-                    nav_row.append("⬅️ صفحه قبل")
-                if nav_row:
-                    keyboard.append(nav_row)
+                # دکمه‌های صفحه‌بندی برای داروخانه هدف
+                if target_drugs:
+                    nav_row = []
+                    if len(target_drugs) == drugs_per_page:
+                        nav_row.append(InlineKeyboardButton("➡️ بعد", callback_data="next_page_target"))
+                    if page_target > 0:
+                        nav_row.append(InlineKeyboardButton("⬅️ قبل", callback_data="prev_page_target"))
+                    if nav_row:
+                        keyboard.append(nav_row)
                 
-                keyboard.append(["🔄 نمایش " + ("داروهای من" if current_list == 'target' else "داروهای داروخانه")])
-                keyboard.append(["✅ اتمام انتخاب", "🔙 بازگشت به داروخانه‌ها"])
+                message += "\n📌 داروهای شما:\n"
+                if not my_drugs:
+                    message += "هیچ دارویی در لیست شما نیست.\n"
+                for drug in my_drugs:
+                    button_text = f"{format_button_text(drug['name'], 20)} - {drug['price']}"
+                    keyboard.append([InlineKeyboardButton(text=button_text, callback_data=f"select_mine_{drug['id']}")])
                 
-                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+                # دکمه‌های صفحه‌بندی برای داروهای کاربر
+                if my_drugs:
+                    nav_row = []
+                    if len(my_drugs) == drugs_per_page:
+                        nav_row.append(InlineKeyboardButton("➡️ بعد", callback_data="next_page_mine"))
+                    if page_mine > 0:
+                        nav_row.append(InlineKeyboardButton("⬅️ قبل", callback_data="prev_page_mine"))
+                    if nav_row:
+                        keyboard.append(nav_row)
                 
-                if update.callback_query:
-                    await update.callback_query.edit_message_text(
+                keyboard.append([InlineKeyboardButton("✅ ثبت پیشنهاد", callback_data="submit_offer")])
+                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_pharmacies")])
+                
+                await query.edit_message_text(
+                    message,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                return States.SELECT_DRUGS
+        except Exception as e:
+            logger.error(f"Error in show_two_column_selection: {e}")
+            await query.edit_message_text("خطا در نمایش داروها.")
+            return States.SELECT_DRUGS
+        finally:
+            if conn:
+                conn.close()
+    except Exception as e:
+        logger.error(f"Error in show_two_column_selection: {e}")
+        await query.edit_message_text("خطایی رخ داد.")
+        return ConversationHandler.END
                         message,
                         reply_markup=reply_markup
                     )
