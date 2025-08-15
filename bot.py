@@ -112,6 +112,9 @@ class States(Enum):
     SETUP_CATEGORIES = auto()
     PERSONNEL_VERIFICATION = auto()
     PERSONNEL_LOGIN = auto()
+    COMPENSATION_SELECTION = auto()  # Add this line
+    COMPENSATION_QUANTITY = auto()   # Add this line
+    CONFIRM_TOTALS = auto()          # Add this line
 
 def get_db_connection(max_retries=3, retry_delay=1.0):
     """Get a database connection with retry logic"""
