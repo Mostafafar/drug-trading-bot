@@ -3339,27 +3339,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         logger.error(f"Error in show_two_column_selection: {e}")
         await query.edit_message_text("خطایی رخ داد.")
         return ConversationHandler.END
-                        message,
-                        reply_markup=reply_markup
-                    )
-                else:
-                    await update.message.reply_text(
-                        message,
-                        reply_markup=reply_markup
-                    )
-                return States.SELECT_DRUGS
-        except Exception as e:
-            logger.error(f"Error in show_two_column_selection: {e}")
-            if update.callback_query:
-                await update.callback_query.edit_message_text("خطا در نمایش داروها.")
-            else:
-                await update.message.reply_text("خطا در نمایش داروها.")
-        finally:
-            if conn:
-                conn.close()
-    except Exception as e:
-        logger.error(f"Error in show_two_column_selection: {e}")
-        return ConversationHandler.END
+                        
 
 async def handle_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle pagination for drug selection"""
