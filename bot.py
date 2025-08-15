@@ -3506,6 +3506,120 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in enter_quantity: {e}")
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def handle_compensation_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle compensation drug selection"""
+    try:
+        query = update.callback_query
+        await query.answer()
+
+        user_id = update.effective_user.id
+        drugs_per_page = 6
+        page = context.user_data.get('page_mine', 0)
+        context.user_data['current_list'] = 'mine'
+
+        if query.data.startswith("comp_"):
+            drug_id = int(query.data.split('_')[1])
+            conn = None
+            try:
+                conn = get_db_connection()
+                with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                    cursor.execute('''
+                    SELECT id, name, price, quantity
+                    FROM drug_items
+                    WHERE id = %s AND user_id = %s AND quantity > 0
+                    ''', (drug_id, user_id))
+                    drug = cursor.fetchone()
+                    
+                    if not drug:
+                        await query.edit_message_text("دارو یافت نشد یا موجودی کافی ندارد.")
+                        return States.SELECT_DRUGS
+                    
+                    context.user_data['current_selection'] = {
+                        'id': drug['id'],
+                        'name': drug['name'],
+                        'price': drug['price'],
+                        'quantity': drug['quantity'],
+                        'type': 'mine'
+                    }
+                    
+                    await query.edit_message_text(
+                        f"💊 داروی انتخاب‌شده: {drug['name']}\n"
+                        f"💰 قیمت: {drug['price']}\n"
+                        f"📦 موجودی: {drug['quantity']}\n\n"
+                        f"لطفا تعداد مورد نظر را وارد کنید (حداکثر {drug['quantity']}):",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                    return States.COMPENSATION_QUANTITY
+                    
+            except Exception as e:
+                logger.error(f"Error selecting compensation drug: {e}")
+                await query.edit_message_text("خطا در انتخاب داروی جبرانی.")
+                return States.SELECT_DRUGS
+            finally:
+                if conn:
+                    conn.close()
+
+        elif query.data == "compensate":
+            conn = None
+            try:
+                conn = get_db_connection()
+                with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                    cursor.execute('''
+                    SELECT id, name, price, quantity
+                    FROM drug_items
+                    WHERE user_id = %s AND quantity > 0
+                    ORDER BY name
+                    LIMIT %s OFFSET %s
+                    ''', (user_id, drugs_per_page, page * drugs_per_page))
+                    drugs = cursor.fetchall()
+                    
+                    cursor.execute('''
+                    SELECT COUNT(*) 
+                    FROM drug_items
+                    WHERE user_id = %s AND quantity > 0
+                    ''', (user_id,))
+                    total_drugs = cursor.fetchmany(1)[0][0]
+                    
+                    if not drugs:
+                        await query.edit_message_text(
+                            "هیچ داروی جبرانی در دسترس نیست. لطفا ابتدا دارو اضافه کنید."
+                        )
+                        return States.SELECT_DRUGS
+                    
+                    message = "💊 انتخاب داروهای جبرانی:\n\n"
+                    keyboard = []
+                    for drug in drugs:
+                        button_text = f"💊 {format_button_text(drug['name'], max_line_length=20)} - {drug['price']}"
+                        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"comp_{drug['id']}")])
+                    
+                    nav_row = []
+                    if total_drugs > (page + 1) * drugs_per_page:
+                        nav_row.append(InlineKeyboardButton("➡️ صفحه بعد", callback_data="next_page"))
+                    if page > 0:
+                        nav_row.append(InlineKeyboardButton("⬅️ صفحه قبل", callback_data="prev_page"))
+                    if nav_row:
+                        keyboard.append(nav_row)
+                    
+                    keyboard.append([InlineKeyboardButton("✅ اتمام انتخاب", callback_data="comp_finish")])
+                    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_totals")])
+                    
+                    await query.edit_message_text(
+                        message,
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                    return States.COMPENSATION_SELECTION
+            except Exception as e:
+                logger.error(f"Error showing compensation drugs: {e}")
+                await query.edit_message_text("خطا در نمایش داروهای جبرانی.")
+                return States.SELECT_DRUGS
+            finally:
+                if conn:
+                    conn.close()
+    except Exception as e:
+        logger.error(f"Error in handle_compensation_selection: {e}")
+        await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+
 
 async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show selected drugs and compensation items with price difference"""
@@ -4112,7 +4226,7 @@ def main():
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^add_more$'),
                     CallbackQueryHandler(handle_compensation_selection, pattern=r'^compensate$'),
                     CallbackQueryHandler(handle_compensation_selection, pattern=r'^comp_\d+$'),
-                    CallbackQueryHandler(confirm_totals, pattern=r'^finish_selection$')
+                    CallbackQueryHandler(confirm_totals, pattern=r'^comp_finish$')
           ],
                 States.COMPENSATION_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation_quantity),
@@ -4126,6 +4240,8 @@ def main():
          },
          fallbacks=[CommandHandler('cancel', cancel)],
          allow_reentry=True,
+         per_chat=False,
+         per_user=True
          # To address the PTBUserWarning
         )
         
