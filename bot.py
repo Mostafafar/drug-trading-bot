@@ -3595,6 +3595,7 @@ async def show_drug_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.callback_query.edit_message_text(
                     message,
                     reply_markup=InlineKeyboardMarkup(keyboard)
+                )
             except Exception as e:
                 if "Message is not modified" not in str(e):
                     raise
