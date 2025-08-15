@@ -3507,7 +3507,145 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in enter_quantity: {e}")
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def handle_compensation_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle selection of compensation drugs"""
+    try:
+        query = update.callback_query
+        await query.answer()
 
+        if query.data == "compensate":
+            # Switch to showing user's drugs for compensation selection
+            context.user_data['current_list'] = 'mine'
+            return await show_two_column_selection(update, context)
+        
+        elif query.data.startswith("comp_"):
+            # Handle selection of a specific drug for compensation
+            drug_id = int(query.data.split("_")[1])
+            
+            conn = None
+            try:
+                conn = get_db_connection()
+                with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                    cursor.execute('''
+                    SELECT id, name, price, quantity
+                    FROM drug_items
+                    WHERE id = %s AND user_id = %s AND quantity > 0
+                    ''', (drug_id, update.effective_user.id))
+                    drug = cursor.fetchone()
+                    
+                    if not drug:
+                        await query.edit_message_text("دارو یافت نشد.")
+                        return States.COMPENSATION_SELECTION
+                    
+                    context.user_data['current_comp_drug'] = dict(drug)
+                    await query.edit_message_text(
+                        f"💊 داروی انتخاب شده: {drug['name']}\n"
+                        f"💰 قیمت: {drug['price']}\n"
+                        f"📦 موجودی: {drug['quantity']}\n\n"
+                        "لطفا تعداد مورد نظر را وارد کنید:"
+                    )
+                    return States.COMPENSATION_QUANTITY
+                    
+            except Exception as e:
+                logger.error(f"Error in compensation selection: {e}")
+                await query.edit_message_text("خطا در انتخاب داروی جبرانی.")
+            finally:
+                if conn:
+                    conn.close()
+        
+    except Exception as e:
+        logger.error(f"Error in handle_compensation_selection: {e}")
+        await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+    return States.COMPENSATION_SELECTION
+async def save_compensation_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Save quantity for compensation drug"""
+    try:
+        quantity = update.message.text.strip()
+        current_drug = context.user_data.get('current_comp_drug')
+        
+        if not current_drug:
+            await update.message.reply_text("انتخاب دارو از دست رفته. لطفا دوباره شروع کنید.")
+            return States.COMPENSATION_SELECTION
+            
+        try:
+            quantity = int(quantity)
+            if quantity <= 0 or quantity > current_drug['quantity']:
+                await update.message.reply_text(
+                    f"لطفا عددی بین 1 و {current_drug['quantity']} وارد کنید."
+                )
+                return States.COMPENSATION_QUANTITY
+        except ValueError:
+            await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
+            return States.COMPENSATION_QUANTITY
+        
+        # Add to compensation items
+        if 'comp_items' not in context.user_data:
+            context.user_data['comp_items'] = []
+            
+        context.user_data['comp_items'].append({
+            'id': current_drug['id'],
+            'name': current_drug['name'],
+            'price': current_drug['price'],
+            'quantity': quantity
+        })
+        
+        await update.message.reply_text(
+            f"تعداد {quantity} برای {current_drug['name']} به عنوان جبران ثبت شد."
+        )
+        return await submit_offer(update, context)
+        
+    except Exception as e:
+        logger.error(f"Error in save_compensation_quantity: {e}")
+        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+    return States.COMPENSATION_SELECTION
+async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show final totals before sending offer"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        offer_items = context.user_data.get('offer_items', [])
+        comp_items = context.user_data.get('comp_items', [])
+        
+        if not offer_items:
+            await query.edit_message_text("هیچ دارویی برای ارسال وجود ندارد.")
+            return States.SELECT_DRUGS
+            
+        offer_total = sum(parse_price(item['price']) * item['quantity'] for item in offer_items)
+        comp_total = sum(parse_price(item['price']) * item['quantity'] for item in comp_items)
+        
+        keyboard = [
+            [InlineKeyboardButton("✅ ارسال پیشنهاد", callback_data="send_offer")],
+            [InlineKeyboardButton("✏️ ویرایش", callback_data="edit_selection")],
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_selection")]
+        ]
+        
+        message = "📋 تأیید نهایی پیشنهاد:\n\n"
+        message += "📌 داروهای درخواستی:\n"
+        for item in offer_items:
+            message += f"- {item['drug_name']} ({item['quantity']} عدد) - {item['price']}\n"
+        message += f"\n💰 جمع کل درخواستی: {format_price(offer_total)}\n"
+        
+        message += "\n📌 داروهای جبرانی شما:\n"
+        if comp_items:
+            for item in comp_items:
+                message += f"- {item['name']} ({item['quantity']} عدد) - {item['price']}\n"
+            message += f"\n💰 جمع کل جبرانی: {format_price(comp_total)}\n"
+        else:
+            message += "هیچ داروی جبرانی انتخاب نشده است.\n"
+        
+        message += f"\n📊 اختلاف قیمت: {format_price(offer_total - comp_total)}\n"
+        message += "\nآیا از ارسال این پیشنهاد مطمئن هستید؟"
+        
+        await query.edit_message_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return States.CONFIRM_TOTALS
+    except Exception as e:
+        logger.error(f"Error in confirm_totals: {e}")
+        await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+    return States.COMPENSATION_SELECTION
 async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show selected drugs and compensation items with price difference"""
     try:
