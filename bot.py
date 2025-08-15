@@ -3598,7 +3598,58 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await handle_back(update, context)
         
         elif query.data == "back_to_selection":
-            return await show_drug_buttons(update, context)
+            # Return to the drug selection screen
+            target_drugs = context.user_data.get('target_drugs', [])
+            my_drugs = context.user_data.get('my_drugs', [])
+            selected_items = context.user_data.get('selected_items', {'target': [], 'mine': []})
+            
+            # Create buttons for target drugs
+            target_buttons = []
+            for drug in target_drugs:
+                is_selected = any(item['id'] == drug['id'] for item in selected_items['target'])
+                target_buttons.append([InlineKeyboardButton(
+                    f"{'✅ ' if is_selected else '◻️ '}{drug['name']} - {drug['price']}",
+                    callback_data=f"select_target_{drug['id']}"
+                )])
+            
+            # Create buttons for my drugs
+            my_buttons = []
+            for drug in my_drugs:
+                is_selected = any(item['id'] == drug['id'] for item in selected_items['mine'])
+                my_buttons.append([InlineKeyboardButton(
+                    f"{'✅ ' if is_selected else '◻️ '}{drug['name']} - {drug['price']}",
+                    callback_data=f"select_mine_{drug['id']}"
+                )])
+            
+            # Create navigation buttons
+            nav_buttons = [
+                [InlineKeyboardButton("📤 ارسال پیشنهاد", callback_data="submit_offer")],
+                [InlineKeyboardButton("🔙 بازگشت به نتایج", callback_data="back_to_pharmacies")]
+            ]
+            
+            # Combine all buttons
+            keyboard = target_buttons + my_buttons + nav_buttons
+            
+            # Show selected items in message
+            message = "📋 داروهای انتخاب شده:\n\n"
+            
+            if selected_items['target']:
+                message += "از داروخانه مقابل:\n"
+                for item in selected_items['target']:
+                    message += f"- {item['name']} (تعداد: {item['quantity']})\n"
+            
+            if selected_items['mine']:
+                message += "\nاز داروهای شما:\n"
+                for item in selected_items['mine']:
+                    message += f"- {item['name']} (تعداد: {item['quantity']})\n"
+            
+            if not selected_items['target'] and not selected_items['mine']:
+                message += "هنوز دارویی انتخاب نکرده‌اید."
+            
+            await query.edit_message_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            return States.SELECT_DRUGS
             
     except Exception as e:
         logger.error(f"Error in select_drug: {e}")
