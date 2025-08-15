@@ -3649,6 +3649,7 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             return States.SELECT_DRUGS
             
     except Exception as e:
