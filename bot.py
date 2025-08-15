@@ -3794,47 +3794,107 @@ async def select_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return States.ENTER_QUANTITY
 
+async def select_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """دریافت تعداد برای داروی انتخاب شده"""
+    try:
+        query = update.callback_query
+        await query.answer()
+
+        if query.data == "back_to_list":
+            logger.info("Returning to pharmacy selection from select_drug_quantity")
+            return await select_pharmacy(update, context)
+        
+        parts = query.data.split('_')
+        if len(parts) != 3 or parts[0] not in ['select', 'target', 'mine']:
+            logger.error(f"Invalid callback data: {query.data}")
+            await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
+            return States.SELECT_DRUGS
+        
+        drug_id = int(parts[2])
+        is_target = parts[1] == 'target'
+        
+        # Retrieve drug list
+        drug_list = context.user_data.get('target_drugs' if is_target else 'my_drugs', [])
+        if not drug_list:
+            logger.error(f"No {'target' if is_target else 'my'} drugs found in context")
+            await query.edit_message_text("لیست داروها یافت نشد. لطفا دوباره جستجو کنید.")
+            return States.SEARCH_DRUG
+        
+        # Find selected drug
+        selected_drug = next((drug for drug in drug_list if drug['id'] == drug_id), None)
+        if not selected_drug:
+            logger.error(f"Drug with ID {drug_id} not found in {'target' if is_target else 'my'} drugs")
+            await query.edit_message_text("دارو یافت نشد. لطفا دوباره انتخاب کنید.")
+            return States.SELECT_DRUGS
+        
+        # Store selection in context
+        context.user_data['current_selection'] = {
+            'drug': selected_drug,
+            'is_target': is_target
+        }
+        logger.info(f"Set current_selection: {context.user_data['current_selection']}")
+        
+        # Prepare keyboard with back button
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_selection")]]
+        
+        await query.edit_message_text(
+            f"لطفا تعداد مورد نظر برای {selected_drug['name']} را وارد کنید (موجودی: {selected_drug['quantity']}):",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return States.SELECT_QUANTITY
+    except Exception as e:
+        logger.error(f"Error in select_drug_quantity: {str(e)}", exc_info=True)
+        await query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return States.SELECT_DRUGS
+
 async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ذخیره تعداد انتخاب شده برای دارو"""
     try:
         quantity = int(update.message.text)
         
-        # Fix: Retrieve from the correct key ('current_selection')
+        # Retrieve current selection
         current_selection = context.user_data.get('current_selection')
+        logger.info(f"Current selection in enter_quantity: {current_selection}")
         
         if not current_selection:
+            logger.error("No current_selection found in context")
             await update.message.reply_text("اطلاعات دارو یافت نشد. لطفا از ابتدا شروع کنید.")
             return ConversationHandler.END
         
-        # Extract drug and type from the correct structure
         current_drug = current_selection['drug']
         is_target = current_selection['is_target']
         
         if quantity <= 0:
+            logger.warning(f"Invalid quantity entered: {quantity}")
             await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید:")
             return States.SELECT_QUANTITY
             
         if quantity > current_drug['quantity']:
+            logger.warning(f"Quantity {quantity} exceeds available {current_drug['quantity']}")
             await update.message.reply_text(
                 f"موجودی کافی نیست. حداکثر تعداد قابل انتخاب: {current_drug['quantity']}\n"
                 "لطفا تعداد کمتری وارد کنید:"
             )
             return States.SELECT_QUANTITY
+            
+        if quantity > 20:  # Enforce maximum limit as per prompt
+            logger.warning(f"Quantity {quantity} exceeds maximum limit of 20")
+            await update.message.reply_text("حداکثر تعداد مجاز 20 است:")
+            return States.SELECT_QUANTITY
         
-        # ذخیره اطلاعات در لیست انتخاب‌ها
-        selected_items = context.user_data.get('selected_items', {'target': [], 'mine': []})
+        # Initialize selected_items if not present
+        if 'selected_items' not in context.user_data:
+            context.user_data['selected_items'] = {'target': [], 'mine': []}
         
-        # Fix: Use 'target' or 'mine' based on is_target (instead of current_drug['type'])
+        # Remove previous selection of the same drug
         category = 'target' if is_target else 'mine'
-        
-        # حذف اگر قبلا انتخاب شده
-        selected_items[category] = [
-            item for item in selected_items[category] 
+        context.user_data['selected_items'][category] = [
+            item for item in context.user_data['selected_items'][category]
             if item['id'] != current_drug['id']
         ]
         
-        # اضافه کردن انتخاب جدید
-        selected_items[category].append({
+        # Add new selection
+        context.user_data['selected_items'][category].append({
             'id': current_drug['id'],
             'name': current_drug['name'],
             'price': current_drug['price'],
@@ -3843,27 +3903,20 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'pharmacy_name': current_drug.get('pharmacy_name')
         })
         
-        context.user_data['selected_items'] = selected_items
+        logger.info(f"Added to selected_items[{category}]: {context.user_data['selected_items'][category][-1]}")
         
-        # نمایش مجدد لیست داروها
+        # Clear current_selection to prevent stale data
+        del context.user_data['current_selection']
+        
+        # Return to drug selection
         return await show_drug_buttons(update, context)
         
     except ValueError:
+        logger.warning(f"Invalid quantity input: {update.message.text}")
         await update.message.reply_text("لطفا یک عدد صحیح وارد کنید:")
         return States.SELECT_QUANTITY
     except Exception as e:
-        logger.error(f"Error in enter_quantity: {str(e)}")
-        await update.message.reply_text("خطایی در ذخیره تعداد رخ داد. لطفا دوباره تلاش کنید.")
-        return States.SELECT_DRUGS
-        
-        # نمایش مجدد لیست داروها
-        return await show_drug_buttons(update, context)
-        
-    except ValueError:
-        await update.message.reply_text("لطفا یک عدد صحیح وارد کنید:")
-        return States.SELECT_QUANTITY
-    except Exception as e:
-        logger.error(f"Error in enter_quantity: {str(e)}")
+        logger.error(f"Error in enter_quantity: {str(e)}", exc_info=True)
         await update.message.reply_text("خطایی در ذخیره تعداد رخ داد. لطفا دوباره تلاش کنید.")
         return States.SELECT_DRUGS
 
@@ -3975,72 +4028,7 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-async def select_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Select quantity for drug offer"""
-    try:
-        if update.callback_query and update.callback_query.data == "back_to_items":
-            await update.callback_query.answer()
-            pharmacy = context.user_data.get('selected_pharmacy', {})
-            
-            # Rebuild items keyboard
-            keyboard = []
-            for item in pharmacy.get('items', []):
-                keyboard.append([InlineKeyboardButton(
-                    f"{item['name']} - {item['price']} (موجودی: {item['quantity']})",
-                    callback_data=f"offer_{item['id']}"
-                )])
-            
-            keyboard.append([InlineKeyboardButton("🔙 بازگشت به نتایج", callback_data="back_to_pharmacies")])
-            
-            await update.callback_query.edit_message_text(
-                f"🏥 داروخانه: {pharmacy.get('name', '')}\n\n"
-                "لطفا داروی مورد نظر را انتخاب کنید:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            return States.SELECT_ITEMS
-            
-        try:
-            quantity = int(update.message.text)
-            selected_item = context.user_data.get('selected_item')
-            
-            if not selected_item:
-                await update.message.reply_text("اطلاعات دارو یافت نشد.")
-                return States.SEARCH_DRUG
-                
-            if quantity <= 0:
-                await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
-                return States.SELECT_QUANTITY
-                
-            if quantity > selected_item['quantity']:
-                await update.message.reply_text(
-                    f"موجودی کافی نیست. حداکثر تعداد قابل انتخاب: {selected_item['quantity']}"
-                )
-                return States.SELECT_QUANTITY
-                
-            context.user_data['selected_quantity'] = quantity
-            
-            keyboard = [
-                [InlineKeyboardButton("✅ تایید", callback_data="confirm_offer")],
-                [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_items")]
-            ]
-            
-            await update.message.reply_text(
-                f"💊 دارو: {selected_item['name']}\n"
-                f"💰 قیمت واحد: {selected_item['price']}\n"
-                f"📦 تعداد: {quantity}\n"
-                f"💵 مبلغ کل: {parse_price(selected_item['price']) * quantity}\n\n"
-                "آیا از انتخاب خود مطمئن هستید؟",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            return States.CONFIRM_OFFER
-                
-        except ValueError:
-            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
-            return States.SELECT_QUANTITY
-    except Exception as e:
-        logger.error(f"Error in select_quantity: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+
 async def select_exchange_items(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle selection of items for exchange"""
     try:
