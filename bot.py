@@ -3619,6 +3619,48 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
         logger.error(f"Error in handle_compensation_selection: {e}")
         await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def save_compensation_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Save the quantity for a selected compensation drug"""
+    try:
+        quantity = update.message.text.strip()
+        try:
+            quantity = int(quantity)
+            if quantity <= 0:
+                await update.message.reply_text("لطفا تعداد معتبر (بزرگتر از صفر) وارد کنید.")
+                return States.COMPENSATION_QUANTITY
+        except ValueError:
+            await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
+            return States.COMPENSATION_QUANTITY
+
+        current_selection = context.user_data.get('current_selection')
+        if not current_selection:
+            await update.message.reply_text("هیچ دارویی انتخاب نشده است.")
+            return States.COMPENSATION_SELECTION
+
+        if quantity > current_selection['quantity']:
+            await update.message.reply_text(
+                f"تعداد درخواستی ({quantity}) بیشتر از موجودی ({current_selection['quantity']}) است."
+            )
+            return States.COMPENSATION_QUANTITY
+
+        comp_items = context.user_data.get('comp_items', [])
+        comp_items.append({
+            'id': current_selection['id'],
+            'name': current_selection['name'],
+            'price': current_selection['price'],
+            'quantity': quantity
+        })
+        context.user_data['comp_items'] = comp_items
+
+        await update.message.reply_text(
+            f"✅ {quantity} عدد از {current_selection['name']} به عنوان داروی جبرانی اضافه شد."
+        )
+        return await confirm_totals(update, context)
+
+    except Exception as e:
+        logger.error(f"Error in save_compensation_quantity: {e}")
+        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
 
 
 async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
