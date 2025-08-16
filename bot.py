@@ -3232,18 +3232,34 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = []
                 
                 for item in results:
+                    # Add defensive checks for dictionary access
+                    pharmacy_name = item.get('pharmacy_name', 'نامشخص')
+                    drug_name = item.get('drug_name', 'نامشخص')
+                    price = item.get('price', 'قیمت نامشخص')
+                    
                     btn_text = (
-                        f"{item['pharmacy_name']}\n"
-                        f"دارو: {format_button_text(item['drug_name'], 15)}\n"
-                        f"قیمت: {item['price']}"
+                        f"{pharmacy_name}\n"
+                        f"دارو: {format_button_text(drug_name, 15)}\n"
+                        f"قیمت: {price}"
                     )
                     
+                    pharmacy_id = item.get('pharmacy_id')
+                    if pharmacy_id is None:
+                        continue  # Skip if no pharmacy_id
+                        
                     keyboard.append([
                         InlineKeyboardButton(
                             btn_text,
-                            callback_data=f"pharmacy_{item['pharmacy_id']}"
+                            callback_data=f"pharmacy_{pharmacy_id}"
                         )
                     ])
+
+                if not keyboard:
+                    await update.message.reply_text(
+                        "⚠️ مشکلی در نمایش نتایج جستجو رخ داد.",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                    return States.SEARCH_DRUG
 
                 keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
 
