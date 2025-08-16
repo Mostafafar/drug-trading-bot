@@ -3185,7 +3185,7 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """جستجوی دارو و نمایش داروخانه‌های دارای آن"""
+    """Search for drugs and display pharmacies that have them"""
     try:
         drug_name = update.message.text.strip()
         user_id = update.effective_user.id
@@ -3194,7 +3194,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                # First verify the tables and columns exist
+                # Verify tables exist
                 cursor.execute("""
                     SELECT EXISTS (
                         SELECT 1 FROM information_schema.tables 
@@ -3203,33 +3203,39 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     EXISTS (
                         SELECT 1 FROM information_schema.tables 
                         WHERE table_name = 'drug_items' AND table_schema = 'public'
-                    ) AS drug_items_exists
+                    ) AS drug_items_exists,
+                    EXISTS (
+                        SELECT 1 FROM information_schema.tables 
+                        WHERE table_name = 'users' AND table_schema = 'public'
+                    ) AS users_exists
                 """)
                 tables_exist = cursor.fetchone()
                 
-                if not tables_exist['pharmacies_exists'] or not tables_exist['drug_items_exists']:
+                if not (tables_exist['pharmacies_exists'] and tables_exist['drug_items_exists'] and tables_exist['users_exists']):
                     await update.message.reply_text(
                         "⚠️ سیستم در حال حاضر در دسترس نیست. لطفاً بعداً تلاش کنید.",
                         reply_markup=ReplyKeyboardRemove()
                     )
                     return ConversationHandler.END
 
-                # جستجوی پیشرفته با استفاده از pg_trgm
+                # Search for drugs, including those added by personnel
                 cursor.execute('''
                 SELECT 
-                    p.user_id as pharmacy_id,
-                    p.name as pharmacy_name,
+                    COALESCE(p.user_id, creator_p.user_id) as pharmacy_id,
+                    COALESCE(p.name, creator_p.name) as pharmacy_name,
                     di.name as drug_name,
                     di.price,
                     di.quantity
-                FROM pharmacies p
-                JOIN drug_items di ON p.user_id = di.user_id
+                FROM drug_items di
+                LEFT JOIN pharmacies p ON di.user_id = p.user_id
+                LEFT JOIN users u ON di.user_id = u.id
+                LEFT JOIN pharmacies creator_p ON u.creator_id = creator_p.user_id
                 WHERE 
                     di.name ILIKE %s AND 
                     di.quantity > 0 AND
-                    p.verified = TRUE AND
-                    p.user_id != %s
-                ORDER BY p.name, di.name
+                    (p.verified = TRUE OR creator_p.verified = TRUE) AND
+                    COALESCE(p.user_id, creator_p.user_id) != %s
+                ORDER BY COALESCE(p.name, creator_p.name), di.name
                 LIMIT 10
                 ''', (f'%{drug_name}%', user_id))
                 
@@ -3238,7 +3244,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if not results:
                     await update.message.reply_text(
                         "⚠️ هیچ داروخانه‌ای با این دارو پیدا نشد.\n\n"
-                        "میتوانید:\n"
+                        "می‌توانید:\n"
                         "- نام دارو را دقیق‌تر وارد کنید\n"
                         "- نیاز خود را ثبت کنید\n"
                         "- بعداً مجدداً جستجو کنید",
@@ -3246,7 +3252,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return States.SEARCH_DRUG
 
-                # ساخت پیام و دکمه‌ها
+                # Build message and buttons
                 message = "🏥 داروخانه‌های دارای این دارو:\n\n"
                 keyboard = []
                 
