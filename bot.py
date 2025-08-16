@@ -3185,51 +3185,93 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle drug search and show matching pharmacies"""
+    """جستجوی دارو و نمایش داروخانه‌های دارای آن"""
     try:
-        query = update.message.text.strip()
+        drug_name = update.message.text.strip()
         user_id = update.effective_user.id
+        
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                # جستجوی پیشرفته با استفاده از pg_trgm
                 cursor.execute('''
-                    SELECT p.user_id, p.name
-                    FROM pharmacies p
-                    JOIN drug_items di ON p.user_id = di.user_id
-                    WHERE di.name ILIKE %s AND di.quantity > 0 AND p.verified = TRUE
-                    GROUP BY p.user_id, p.name
-                    ''', (f'%{query}%',))
-                pharmacies = cursor.fetchall()
+                SELECT 
+                    p.user_id as pharmacy_id,
+                    p.name as pharmacy_name,
+                    di.name as drug_name,
+                    di.price,
+                    di.quantity,
+                    similarity(di.name, %s) as similarity
+                FROM pharmacies p
+                JOIN drug_items di ON p.user_id = di.user_id
+                WHERE 
+                    di.name % %s AND 
+                    di.quantity > 0 AND
+                    p.verified = TRUE AND
+                    p.user_id != %s
+                ORDER BY similarity DESC
+                LIMIT 10
+                ''', (drug_name, drug_name, user_id))
+                
+                results = cursor.fetchall()
 
-                if not pharmacies:
-                    await update.message.reply_text("هیچ داروخانه‌ای با این دارو پیدا نشد.")
+                if not results:
+                    await update.message.reply_text(
+                        "⚠️ هیچ داروخانه‌ای با این دارو پیدا نشد.\n\n"
+                        "میتوانید:\n"
+                        "- نام دارو را دقیق‌تر وارد کنید\n"
+                        "- نیاز خود را ثبت کنید\n"
+                        "- بعداً مجدداً جستجو کنید",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
                     return States.SEARCH_DRUG
 
-                message = "داروخانه‌های دارای این دارو:\n\n"
+                # ساخت پیام و دکمه‌ها
+                message = "🏥 داروخانه‌های دارای این دارو:\n\n"
                 keyboard = []
-                for pharmacy in pharmacies:
-                    button_text = format_button_text(pharmacy['name'], max_line_length=20)
-                    keyboard.append([InlineKeyboardButton(text=button_text, callback_data=f"pharmacy_{pharmacy['user_id']}")])
-                keyboard.append([InlineKeyboardButton(text="🔙 بازگشت", callback_data="back")])
+                
+                for item in results:
+                    btn_text = (
+                        f"{item['pharmacy_name']}\n"
+                        f"دارو: {format_button_text(item['drug_name'], 15)}\n"
+                        f"قیمت: {item['price']}"
+                    )
+                    
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            btn_text,
+                            callback_data=f"pharmacy_{item['pharmacy_id']}"
+                        )
+                    ])
+
+                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
 
                 await update.message.reply_text(
                     message,
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 return States.SELECT_PHARMACY
+                
         except Exception as e:
-            logger.error(f"Error in handle_search: {e}")
-            await update.message.reply_text("خطا در جستجو. لطفا دوباره تلاش کنید.")
+            logger.error(f"Database error in handle_search: {e}")
+            await update.message.reply_text(
+                "خطا در جستجو. لطفاً دوباره تلاش کنید.",
+                reply_markup=ReplyKeyboardRemove()
+            )
             return States.SEARCH_DRUG
+            
         finally:
             if conn:
                 conn.close()
+                
     except Exception as e:
         logger.error(f"Error in handle_search: {e}")
-        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        await update.message.reply_text(
+            "خطایی در پردازش جستجو رخ داد.",
+            reply_markup=ReplyKeyboardRemove()
+        )
         return ConversationHandler.END
-
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Initialize drug selection process"""
     try:
