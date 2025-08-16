@@ -3194,6 +3194,26 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                # First verify the tables and columns exist
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.tables 
+                        WHERE table_name = 'pharmacies' AND table_schema = 'public'
+                    ) AS pharmacies_exists,
+                    EXISTS (
+                        SELECT 1 FROM information_schema.tables 
+                        WHERE table_name = 'drug_items' AND table_schema = 'public'
+                    ) AS drug_items_exists
+                """)
+                tables_exist = cursor.fetchone()
+                
+                if not tables_exist['pharmacies_exists'] or not tables_exist['drug_items_exists']:
+                    await update.message.reply_text(
+                        "⚠️ سیستم در حال حاضر در دسترس نیست. لطفاً بعداً تلاش کنید.",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                    return ConversationHandler.END
+
                 # جستجوی پیشرفته با استفاده از pg_trgm
                 cursor.execute('''
                 SELECT 
@@ -3201,18 +3221,17 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     p.name as pharmacy_name,
                     di.name as drug_name,
                     di.price,
-                    di.quantity,
-                    similarity(di.name, %s) as similarity
+                    di.quantity
                 FROM pharmacies p
                 JOIN drug_items di ON p.user_id = di.user_id
                 WHERE 
-                    di.name % %s AND 
+                    di.name ILIKE %s AND 
                     di.quantity > 0 AND
                     p.verified = TRUE AND
                     p.user_id != %s
-                ORDER BY similarity DESC
+                ORDER BY p.name, di.name
                 LIMIT 10
-                ''', (drug_name, drug_name, user_id))
+                ''', (f'%{drug_name}%', user_id))
                 
                 results = cursor.fetchall()
 
@@ -3232,27 +3251,22 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = []
                 
                 for item in results:
-                    # Add defensive checks for dictionary access
-                    pharmacy_name = item.get('pharmacy_name', 'نامشخص')
-                    drug_name = item.get('drug_name', 'نامشخص')
-                    price = item.get('price', 'قیمت نامشخص')
-                    
-                    btn_text = (
-                        f"{pharmacy_name}\n"
-                        f"دارو: {format_button_text(drug_name, 15)}\n"
-                        f"قیمت: {price}"
-                    )
-                    
-                    pharmacy_id = item.get('pharmacy_id')
-                    if pharmacy_id is None:
-                        continue  # Skip if no pharmacy_id
-                        
-                    keyboard.append([
-                        InlineKeyboardButton(
-                            btn_text,
-                            callback_data=f"pharmacy_{pharmacy_id}"
+                    try:
+                        btn_text = (
+                            f"{item['pharmacy_name']}\n"
+                            f"دارو: {format_button_text(item['drug_name'], 15)}\n"
+                            f"قیمت: {item['price']}"
                         )
-                    ])
+                        
+                        keyboard.append([
+                            InlineKeyboardButton(
+                                btn_text,
+                                callback_data=f"pharmacy_{item['pharmacy_id']}"
+                            )
+                        ])
+                    except KeyError as e:
+                        logger.error(f"Missing expected column in result: {e}")
+                        continue
 
                 if not keyboard:
                     await update.message.reply_text(
@@ -3266,7 +3280,6 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     message,
                     reply_markup=InlineKeyboardMarkup(keyboard)
-                )
                 return States.SELECT_PHARMACY
                 
         except Exception as e:
