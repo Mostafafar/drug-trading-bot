@@ -3280,6 +3280,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     message,
                     reply_markup=InlineKeyboardMarkup(keyboard)
+                )
                 return States.SELECT_PHARMACY
                 
         except Exception as e:
