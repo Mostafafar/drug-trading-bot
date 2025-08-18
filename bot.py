@@ -3235,12 +3235,12 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 FROM drug_items di
                 LEFT JOIN pharmacies p ON di.user_id = p.user_id
                 LEFT JOIN users u ON di.user_id = u.id
-                LEFT JOIN pharmacies creator_p ON u.creator_id = creator_comments.user_id
+                LEFT JOIN pharmacies creator_p ON u.creator_id = creator_p.user_id  -- اصلاح خطا: creator_comments به creator_p تغییر کرد
                 WHERE 
                     di.name ILIKE %s AND 
                     di.quantity > 0 AND
                     (p.verified = TRUE OR creator_p.verified = TRUE) AND
-                    COALESCE(p.user_id, creator_p.user_id) != %s -- exclude بر اساس pharmacy_id
+                    COALESCE(p.user_id, creator_p.user_id) != %s  -- exclude بر اساس pharmacy_id
                 ORDER BY COALESCE(p.name, creator_p.name), di.name
                 LIMIT 10
                 ''', (f'%{drug_name}%', pharmacy_id))  # استفاده از pharmacy_id به جای user_id
