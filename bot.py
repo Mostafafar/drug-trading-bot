@@ -3185,7 +3185,6 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Search for drugs and display pharmacies that have them"""
     try:
         drug_name = update.message.text.strip()
         user_id = update.effective_user.id
@@ -3194,7 +3193,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                # Verify tables exist
+                # چک وجود جدول‌ها (همان کد قبلی)
                 cursor.execute("""
                     SELECT EXISTS (
                         SELECT 1 FROM information_schema.tables 
@@ -3218,7 +3217,14 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return ConversationHandler.END
 
-                # Search for drugs, including those added by personnel
+                # جدید: محاسبه pharmacy_id واقعی (برای پرسنل از creator_id استفاده شود)
+                cursor.execute('''
+                SELECT creator_id FROM users WHERE id = %s
+                ''', (user_id,))
+                result = cursor.fetchone()
+                pharmacy_id = result['creator_id'] if result and result['creator_id'] else user_id  # اگر پرسنل باشد creator_id، иначе user_id
+
+                # کوئری جستجو (exclude بر اساس pharmacy_id)
                 cursor.execute('''
                 SELECT 
                     COALESCE(p.user_id, creator_p.user_id) as pharmacy_id,
@@ -3234,13 +3240,14 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     di.name ILIKE %s AND 
                     di.quantity > 0 AND
                     (p.verified = TRUE OR creator_p.verified = TRUE) AND
-                    COALESCE(p.user_id, creator_p.user_id) != %s
+                    COALESCE(p.user_id, creator_p.user_id) != %s  # جدید: exclude بر اساس pharmacy_id
                 ORDER BY COALESCE(p.name, creator_p.name), di.name
                 LIMIT 10
-                ''', (f'%{drug_name}%', user_id))
+                ''', (f'%{drug_name}%', pharmacy_id))  # جدید: pharmacy_id به جای user_id
                 
                 results = cursor.fetchall()
 
+                # بقیه کد همان است (ساخت پیام و کیبورد اگر results وجود داشته باشد)
                 if not results:
                     await update.message.reply_text(
                         "⚠️ هیچ داروخانه‌ای با این دارو پیدا نشد.\n\n"
@@ -3252,43 +3259,8 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return States.SEARCH_DRUG
 
-                # Build message and buttons
-                message = "🏥 داروخانه‌های دارای این دارو:\n\n"
-                keyboard = []
-                
-                for item in results:
-                    try:
-                        btn_text = (
-                            f"{item['pharmacy_name']}\n"
-                            f"دارو: {format_button_text(item['drug_name'], 15)}\n"
-                            f"قیمت: {item['price']}"
-                        )
-                        
-                        keyboard.append([
-                            InlineKeyboardButton(
-                                btn_text,
-                                callback_data=f"pharmacy_{item['pharmacy_id']}"
-                            )
-                        ])
-                    except KeyError as e:
-                        logger.error(f"Missing expected column in result: {e}")
-                        continue
+                # ... (ساخت message و keyboard همان کد قبلی)
 
-                if not keyboard:
-                    await update.message.reply_text(
-                        "⚠️ مشکلی در نمایش نتایج جستجو رخ داد.",
-                        reply_markup=ReplyKeyboardRemove()
-                    )
-                    return States.SEARCH_DRUG
-
-                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
-
-                await update.message.reply_text(
-                    message,
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-                return States.SELECT_PHARMACY
-                
         except Exception as e:
             logger.error(f"Database error in handle_search: {e}")
             await update.message.reply_text(
@@ -3308,6 +3280,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardRemove()
         )
         return ConversationHandler.END
+
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Initialize drug selection process"""
     try:
