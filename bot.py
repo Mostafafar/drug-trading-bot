@@ -3322,21 +3322,35 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if conn:
                 conn.close()
         
+        # ارسال پیام تأیید
         await query.edit_message_text(
             f"✅ داروخانه {pharmacy_name} انتخاب شد.",
             reply_markup=None
         )
         
+        # فراخوانی تابع نمایش داروها
         return await show_two_column_selection(update, context)
         
     except Exception as e:
         logger.error(f"Error in select_pharmacy: {e}")
         await query.edit_message_text("خطا در انتخاب داروخانه")
     return ConversationHandler.END
-
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش داروهای دو طرف با صفحه‌بندی و دکمه‌های معمولی"""
     try:
+        # تشخیص نوع update و تنظیم chat_id
+        if update.callback_query:
+            query = update.callback_query
+            await query.answer()
+            chat_id = query.message.chat_id
+            # پیام قبلی را edit کنیم یا پیام جدید بفرستیم
+            try:
+                await query.edit_message_text("🔄 در حال بارگذاری داروها...")
+            except:
+                pass  # اگر edit ممکن نبود، ادامه می‌دهیم
+        else:
+            chat_id = update.effective_chat.id
+        
         pharmacy_id = context.user_data.get('selected_pharmacy_id')
         pharmacy_name = context.user_data.get('selected_pharmacy_name', 'داروخانه هدف')
         user_id = update.effective_user.id
@@ -3345,7 +3359,11 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         page_mine = context.user_data.get('page_mine', 0)
         
         if not pharmacy_id:
-            await update.message.reply_text("هیچ داروخانه‌ای انتخاب نشده است")
+            error_msg = "هیچ داروخانه‌ای انتخاب نشده است"
+            if update.callback_query:
+                await update.callback_query.edit_message_text(error_msg)
+            else:
+                await update.message.reply_text(error_msg)
             return States.SELECT_PHARMACY
         
         conn = None
@@ -3425,23 +3443,45 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 
                 reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
                 
-                await update.message.reply_text(
-                    message,
-                    reply_markup=reply_markup
-                )
+                # ارسال پیام با توجه به نوع update
+                if update.callback_query:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=message,
+                        reply_markup=reply_markup
+                    )
+                    try:
+                        await query.delete_message()  # پیام قبلی را حذف کنیم
+                    except:
+                        pass
+                else:
+                    await update.message.reply_text(
+                        message,
+                        reply_markup=reply_markup
+                    )
+                
                 return States.SELECT_DRUGS
                 
         except Exception as e:
             logger.error(f"Error in show_two_column_selection: {e}")
-            await update.message.reply_text("خطا در بارگذاری داروها")
+            error_msg = "خطا در بارگذاری داروها"
+            if update.callback_query:
+                await update.callback_query.edit_message_text(error_msg)
+            else:
+                await update.message.reply_text(error_msg)
         finally:
             if conn:
                 conn.close()
                 
     except Exception as e:
         logger.error(f"Error in show_two_column_selection: {e}")
-        await update.message.reply_text("خطا در نمایش داروها")
-    return ConversationHandler.END
+        error_msg = "خطا در نمایش داروها"
+        if update.callback_query:
+            await update.callback_query.edit_message_text(error_msg)
+        else:
+            await update.message.reply_text(error_msg)
+    return States.SELECT_DRUGS
+
 
 async def handle_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت صفحه‌بندی"""
@@ -3595,7 +3635,32 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in enter_quantity: {e}")
         await update.message.reply_text("خطا در ثبت تعداد")
     return States.SELECT_QUANTITY
-
+async def safe_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, reply_markup=None):
+    """ارسال پیام به صورت ایمن برای هر دو نوع update"""
+    try:
+        if update.callback_query:
+            # برای callback query، پیام جدید ارسال می‌کنیم
+            await context.bot.send_message(
+                chat_id=update.callback_query.message.chat_id,
+                text=text,
+                reply_markup=reply_markup
+            )
+            # پیام callback را حذف یا edit می‌کنیم
+            try:
+                await update.callback_query.delete_message()
+            except:
+                try:
+                    await update.callback_query.edit_message_text("✅")
+                except:
+                    pass
+        else:
+            # برای message معمولی
+            await update.message.reply_text(
+                text,
+                reply_markup=reply_markup
+            )
+    except Exception as e:
+        logger.error(f"Error in safe_reply: {e}")
         
         
                 
@@ -3968,15 +4033,33 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_back_to_pharmacies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle back to pharmacy selection"""
     try:
-        query = update.callback_query
-        await query.answer()
-        context.user_data.pop('current_list', None)
-        context.user_data.pop('page_target', None)
-        context.user_data.pop('page_mine', None)
-        return await handle_search(update, context)
+        # بررسی نوع update
+        if update.callback_query:
+            query = update.callback_query
+            await query.answer()
+            # پاک کردن داده‌های مربوط به صفحه‌بندی
+            context.user_data.pop('current_list', None)
+            context.user_data.pop('page_target', None)
+            context.user_data.pop('page_mine', None)
+            
+            # بازگشت به جستجو
+            await query.edit_message_text("لطفا نام داروی مورد نظر را وارد کنید:")
+            return States.SEARCH_DRUG
+        else:
+            # اگر از message می‌آید
+            context.user_data.pop('current_list', None)
+            context.user_data.pop('page_target', None)
+            context.user_data.pop('page_mine', None)
+            await update.message.reply_text("لطفا نام داروی مورد نظر را وارد کنید:")
+            return States.SEARCH_DRUG
+            
     except Exception as e:
         logger.error(f"Error in handle_back_to_pharmacies: {e}")
-        await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        error_msg = "خطایی رخ داد. لطفا دوباره تلاش کنید."
+        if update.callback_query:
+            await update.callback_query.edit_message_text(error_msg)
+        else:
+            await update.message.reply_text(error_msg)
         return ConversationHandler.END
 
 async def handle_match_notification(update: Update, context: ContextTypes.DEFAULT_TYPE):
