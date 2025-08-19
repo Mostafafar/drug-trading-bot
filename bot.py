@@ -3193,7 +3193,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                # چک وجود جدول‌ها
+                # چک وجود جدول‌ها (بدون تغییر)
                 cursor.execute("""
                     SELECT EXISTS (
                         SELECT 1 FROM information_schema.tables 
@@ -3217,33 +3217,39 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return ConversationHandler.END
 
-                # محاسبه pharmacy_id واقعی (برای پرسنل از creator_id استفاده شود)
+                # محاسبه pharmacy_id واقعی (برای پرسنل از creator_id استفاده شود) - بدون تغییر
                 cursor.execute('''
                 SELECT creator_id FROM users WHERE id = %s
                 ''', (user_id,))
                 result = cursor.fetchone()
-                pharmacy_id = result['creator_id'] if result and result['creator_id'] else user_id  # اگر پرسنل باشد creator_id، در غیر این صورت user_id
+                pharmacy_id = result['creator_id'] if result and result['creator_id'] else user_id
 
-                # کوئری جستجو (exclude بر اساس pharmacy_id)
+                # کوئری جستجو تغییر یافته: date اضافه شد، GROUP BY برای UNIQUE داروخانه‌ها، ARRAY_AGG برای جمع‌آوری جزئیات داروها
                 cursor.execute('''
                 SELECT 
                     COALESCE(p.user_id, creator_p.user_id) as pharmacy_id,
                     COALESCE(p.name, creator_p.name) as pharmacy_name,
-                    di.name as drug_name,
-                    di.price,
-                    di.quantity
+                    ARRAY_AGG(
+                        json_build_object(
+                            'drug_name', di.name,
+                            'price', di.price,
+                            'quantity', di.quantity,
+                            'date', di.date  -- اضافه شده: تاریخ انقضا
+                        )
+                    ) as drugs
                 FROM drug_items di
                 LEFT JOIN pharmacies p ON di.user_id = p.user_id
                 LEFT JOIN users u ON di.user_id = u.id
-                LEFT JOIN pharmacies creator_p ON u.creator_id = creator_p.user_id  -- اصلاح خطا: creator_comments به creator_p تغییر کرد
+                LEFT JOIN pharmacies creator_p ON u.creator_id = creator_p.user_id
                 WHERE 
                     di.name ILIKE %s AND 
                     di.quantity > 0 AND
                     (p.verified = TRUE OR creator_p.verified = TRUE) AND
-                    COALESCE(p.user_id, creator_p.user_id) != %s  -- exclude بر اساس pharmacy_id
-                ORDER BY COALESCE(p.name, creator_p.name), di.name
+                    COALESCE(p.user_id, creator_p.user_id) != %s
+                GROUP BY pharmacy_id, pharmacy_name  -- اضافه شده: گروه‌بندی بر اساس داروخانه برای جلوگیری از تکرار
+                ORDER BY pharmacy_name
                 LIMIT 10
-                ''', (f'%{drug_name}%', pharmacy_id))  # استفاده از pharmacy_id به جای user_id
+                ''', (f'%{drug_name}%', pharmacy_id))
                 
                 results = cursor.fetchall()
 
@@ -3258,34 +3264,27 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return States.SEARCH_DRUG
 
-                # ساخت پیام و کیبورد
+                # ساخت پیام تغییر یافته: جزئیات داروها (نام، تاریخ، تعداد، قیمت) در متن بالا
                 message = "🏥 داروخانه‌های دارای این دارو:\n\n"
                 keyboard = []
                 
                 for item in results:
-                    try:
-                        btn_text = (
-                            f"{item['pharmacy_name']}\n"
-                            f"دارو: {format_button_text(item['drug_name'], 15)}\n"
-                            f"قیمت: {item['price']}"
+                    message += f"🏥 داروخانه: {item['pharmacy_name']}\n"
+                    for drug in item['drugs']:  # اگر چند دارو، همه را لیست کن
+                        message += (
+                            f"   - دارو: {drug['drug_name']}\n"
+                            f"     تاریخ انقضا: {drug['date'] or 'نامشخص'}\n"  # اگر date NULL باشد
+                            f"     تعداد: {drug['quantity']}\n"
+                            f"     قیمت: {drug['price']}\n\n"
                         )
-                        
-                        keyboard.append([
-                            InlineKeyboardButton(
-                                btn_text,
-                                callback_data=f"pharmacy_{item['pharmacy_id']}"
-                            )
-                        ])
-                    except KeyError as e:
-                        logger.error(f"Missing expected column in result: {e}")
-                        continue
-
-                if not keyboard:
-                    await update.message.reply_text(
-                        "⚠️ مشکلی در نمایش نتایج جستجو رخ داد.",
-                        reply_markup=ReplyKeyboardRemove()
-                    )
-                    return States.SEARCH_DRUG
+                    
+                    # دکمه ساده: فقط نام داروخانه
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            item['pharmacy_name'],
+                            callback_data=f"pharmacy_{item['pharmacy_id']}"
+                        )
+                    ])
 
                 keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
 
@@ -3314,7 +3313,6 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardRemove()
         )
         return ConversationHandler.END
-
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Initialize drug selection process"""
     try:
