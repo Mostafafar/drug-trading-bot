@@ -4032,25 +4032,30 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_back_to_pharmacies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle back to pharmacy selection"""
     try:
-        # بررسی نوع update
+        # پاک کردن کامل context مربوط به انتخاب دارو
+        keys_to_remove = [
+            'selected_pharmacy_id', 'selected_pharmacy_name', 
+            'offer_items', 'comp_items', 'current_selection',
+            'current_list', 'page_target', 'page_mine'
+        ]
+        
+        for key in keys_to_remove:
+            context.user_data.pop(key, None)
+        
+        keyboard = [[InlineKeyboardButton("🔍 جستجوی مجدد", switch_inline_query_current_chat="")]]
+        
         if update.callback_query:
-            query = update.callback_query
-            await query.answer()
-            # پاک کردن داده‌های مربوط به صفحه‌بندی
-            context.user_data.pop('current_list', None)
-            context.user_data.pop('page_target', None)
-            context.user_data.pop('page_mine', None)
-            
-            # بازگشت به جستجو
-            await query.edit_message_text("لطفا نام داروی مورد نظر را وارد کنید:")
-            return States.SEARCH_DRUG
+            await update.callback_query.edit_message_text(
+                "برای انتخاب داروخانه دیگر، دکمه زیر را کلیک کنید:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
         else:
-            # اگر از message می‌آید
-            context.user_data.pop('current_list', None)
-            context.user_data.pop('page_target', None)
-            context.user_data.pop('page_mine', None)
-            await update.message.reply_text("لطفا نام داروی مورد نظر را وارد کنید:")
-            return States.SEARCH_DRUG
+            await update.message.reply_text(
+                "برای انتخاب داروخانه دیگر، دکمه زیر را کلیک کنید:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+        return States.SEARCH_DRUG_FOR_ADDING
             
     except Exception as e:
         logger.error(f"Error in handle_back_to_pharmacies: {e}")
@@ -4060,7 +4065,6 @@ async def handle_back_to_pharmacies(update: Update, context: ContextTypes.DEFAUL
         else:
             await update.message.reply_text(error_msg)
         return ConversationHandler.END
-
 async def handle_match_notification(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle match notification and initiate exchange"""
     try:
@@ -4216,6 +4220,11 @@ def main():
         admin_verify_handler = ConversationHandler(
             entry_points=[
                 CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$")
+                
+            ],
+            states={
+                States.ADMIN_VERIFY_PHARMACY_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_pharmacy_name)
             ],
             states={
                 States.REGISTER_PHONE: [
