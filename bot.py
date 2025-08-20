@@ -114,7 +114,8 @@ class States(Enum):
     PERSONNEL_LOGIN = auto()
     COMPENSATION_SELECTION = auto()  # Add this line
     COMPENSATION_QUANTITY = auto()
-    CONFIRM_TOTALS = auto()        
+    CONFIRM_TOTALS = auto()  
+    REGISTER_PHARMACY_NAME_ADMIN = auto()
 
 def get_db_connection(max_retries=3, retry_delay=1.0):
     """Get a database connection with retry logic"""
@@ -969,23 +970,12 @@ async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         query = update.callback_query
         await query.answer()
         
-        # درخواست شماره تلفن از کاربر
-        keyboard = [[KeyboardButton("اشتراک گذاری شماره تلفن", request_contact=True)]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-        
         await query.edit_message_text(
-            "لطفا برای تکمیل ثبت نام، شماره تلفن خود را با دکمه زیر به اشتراک بگذارید:",
+            "لطفا نام داروخانه خود را وارد کنید:",
             reply_markup=None
         )
         
-        await context.bot.send_message(
-            chat_id=query.from_user.id,
-            text="لطفا شماره تلفن خود را به اشتراک بگذارید:",
-            reply_markup=reply_markup
-        )
-        
-        context.user_data['awaiting_phone'] = True
-        return States.REGISTER_PHONE
+        return States.ADMIN_VERIFY_PHARMACY_NAME
         
     except Exception as e:
         logger.error(f"Error in admin_verify_start: {e}")
@@ -997,7 +987,27 @@ async def admin_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 text="خطایی رخ داد. لطفا دوباره تلاش کنید."
             )
         return ConversationHandler.END
-
+async def admin_verify_pharmacy_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """دریافت نام داروخانه برای تایید ادمین"""
+    try:
+        pharmacy_name = update.message.text
+        context.user_data['pharmacy_name'] = pharmacy_name
+        
+        # درخواست شماره تلفن از کاربر
+        keyboard = [[KeyboardButton("اشتراک گذاری شماره تلفن", request_contact=True)]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+        
+        await update.message.reply_text(
+            f"نام داروخانه: {pharmacy_name}\n\nلطفا شماره تلفن خود را به اشتراک بگذارید:",
+            reply_markup=reply_markup
+        )
+        
+        return States.REGISTER_PHONE
+        
+    except Exception as e:
+        logger.error(f"Error in admin_verify_pharmacy_name: {e}")
+        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
 async def receive_phone_for_admin_verify(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت شماره تلفن برای تایید ادمین"""
     try:
