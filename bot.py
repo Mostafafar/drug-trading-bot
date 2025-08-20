@@ -885,8 +885,9 @@ async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text="خطایی رخ داده است. به منوی اصلی بازگشتید."
         )
         return ConversationHandler.END
+
 async def reset_pharmacies(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """پاک کردن اطلاعات داروخانه‌ها و ریست وضعیت تأیید کاربران"""
+    """پاک کردن اطلاعات داروخانه‌ها و داده‌های مرتبط برای ثبت‌نام مجدد"""
     user_id = update.effective_user.id
     
     # بررسی دسترسی ادمین
@@ -905,8 +906,26 @@ async def reset_pharmacies(update: Update, context: ContextTypes.DEFAULT_TYPE):
             cursor.execute('''
                 SET CONSTRAINTS ALL DEFERRED;
                 
+                -- حذف داده‌های وابسته
+                DELETE FROM offer_items 
+                WHERE offer_id IN (SELECT id FROM offers WHERE pharmacy_id IN (SELECT user_id FROM pharmacies));
+                
+                DELETE FROM compensation_items 
+                WHERE offer_id IN (SELECT id FROM offers WHERE pharmacy_id IN (SELECT user_id FROM pharmacies));
+                
+                DELETE FROM offers 
+                WHERE pharmacy_id IN (SELECT user_id FROM pharmacies);
+                
                 DELETE FROM personnel_codes;
                 
+                DELETE FROM match_notifications 
+                WHERE user_id IN (SELECT user_id FROM pharmacies);
+                
+                DELETE FROM exchanges 
+                WHERE from_pharmacy_id IN (SELECT user_id FROM pharmacies) 
+                   OR to_pharmacy_id IN (SELECT user_id FROM pharmacies);
+                
+                -- ریست کردن وضعیت کاربران
                 UPDATE users 
                 SET is_verified = FALSE, 
                     is_pharmacy_admin = FALSE, 
@@ -916,10 +935,12 @@ async def reset_pharmacies(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     creator_id = NULL
                 WHERE id IN (SELECT user_id FROM pharmacies);
                 
+                -- حذف اطلاعات داروخانه‌ها
                 DELETE FROM pharmacies;
                 
                 SET CONSTRAINTS ALL IMMEDIATE;
                 
+                -- ریست سریال‌ها (اختیاری)
                 ALTER SEQUENCE pharmacies_user_id_seq RESTART WITH 1;
             ''')
             conn.commit()
