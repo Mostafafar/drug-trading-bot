@@ -3345,28 +3345,13 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in select_pharmacy: {e}")
         await query.edit_message_text("خطا در انتخاب داروخانه")
     return ConversationHandler.END
+
+                
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش داروهای دو طرف با صفحه‌بندی و دکمه‌های معمولی"""
+    """نمایش داروهای دو طرف با تفکیک صحیح"""
     try:
-        # تشخیص نوع update و تنظیم chat_id
-        if update.callback_query:
-            query = update.callback_query
-            await query.answer()
-            chat_id = query.message.chat_id
-            # پیام قبلی را edit کنیم یا پیام جدید بفرستیم
-            try:
-                await query.edit_message_text("🔄 در حال بارگذاری داروها...")
-            except:
-                pass  # اگر edit ممکن نبود، ادامه می‌دهیم
-        else:
-            chat_id = update.effective_chat.id
-        
         pharmacy_id = context.user_data.get('selected_pharmacy_id')
-        pharmacy_name = context.user_data.get('selected_pharmacy_name', 'داروخانه هدف')
         user_id = update.effective_user.id
-        drugs_per_page = context.user_data.get('drugs_per_page', 5)
-        page_target = context.user_data.get('page_target', 0)
-        page_mine = context.user_data.get('page_mine', 0)
         
         if not pharmacy_id:
             error_msg = "هیچ داروخانه‌ای انتخاب نشده است"
@@ -3380,14 +3365,18 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                # دریافت نام داروخانه
+                cursor.execute('SELECT name FROM pharmacies WHERE user_id = %s', (pharmacy_id,))
+                pharmacy_result = cursor.fetchone()
+                pharmacy_name = pharmacy_result['name'] if pharmacy_result else "داروخانه هدف"
+                
                 # داروهای داروخانه هدف
                 cursor.execute('''
                 SELECT id, name, price, quantity, date
                 FROM drug_items
                 WHERE user_id = %s AND quantity > 0
                 ORDER BY name
-                LIMIT %s OFFSET %s
-                ''', (pharmacy_id, drugs_per_page, page_target * drugs_per_page))
+                ''', (pharmacy_id,))
                 target_drugs = cursor.fetchall()
                 
                 # داروهای کاربر
@@ -3396,54 +3385,45 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 FROM drug_items
                 WHERE user_id = %s AND quantity > 0
                 ORDER BY name
-                LIMIT %s OFFSET %s
-                ''', (user_id, drugs_per_page, page_mine * drugs_per_page))
+                ''', (user_id,))
                 my_drugs = cursor.fetchall()
+                
+                # محاسبه قیمت کل
+                offer_items = context.user_data.get('offer_items', [])
+                comp_items = context.user_data.get('comp_items', [])
+                
+                offer_total = sum(parse_price(item['price']) * item['quantity'] for item in offer_items)
+                comp_total = sum(parse_price(item['price']) * item['quantity'] for item in comp_items)
+                price_difference = offer_total - comp_total
                 
                 # ساخت پیام
                 message = (
                     f"💊 انتخاب دارو برای مبادله با {pharmacy_name}\n\n"
-                    f"📌 داروهای {pharmacy_name} (صفحه {page_target + 1}):\n"
+                    f"📌 داروهای {pharmacy_name}:\n"
                 )
                 
                 keyboard = []
-                row = []
                 
                 # داروهای داروخانه هدف
-                for i, drug in enumerate(target_drugs, 1):
+                for drug in target_drugs:
                     btn_text = f"📌 {format_button_text(drug['name'], 15)} - {drug['price']}"
-                    row.append(KeyboardButton(btn_text))
-                    if len(row) == 2 or i == len(target_drugs):
-                        keyboard.append(row)
-                        row = []
+                    keyboard.append([KeyboardButton(btn_text)])
                 
-                # ناوبری داروخانه هدف
-                nav_row = []
-                if page_target > 0:
-                    nav_row.append(KeyboardButton("⬅️ صفحه قبل (هدف)"))
-                if len(target_drugs) == drugs_per_page:
-                    nav_row.append(KeyboardButton("➡️ صفحه بعد (هدف)"))
-                if nav_row:
-                    keyboard.append(nav_row)
-                
-                message += f"\n📌 داروهای شما (صفحه {page_mine + 1}):\n"
+                message += f"\n📌 داروهای شما:\n"
                 
                 # داروهای کاربر
-                for i, drug in enumerate(my_drugs, 1):
+                for drug in my_drugs:
                     btn_text = f"💊 {format_button_text(drug['name'], 15)} - {drug['price']}"
-                    row.append(KeyboardButton(btn_text))
-                    if len(row) == 2 or i == len(my_drugs):
-                        keyboard.append(row)
-                        row = []
+                    keyboard.append([KeyboardButton(btn_text)])
                 
-                # ناوبری داروهای کاربر
-                nav_row = []
-                if page_mine > 0:
-                    nav_row.append(KeyboardButton("⬅️ صفحه قبل (من)"))
-                if len(my_drugs) == drugs_per_page:
-                    nav_row.append(KeyboardButton("➡️ صفحه بعد (من)"))
-                if nav_row:
-                    keyboard.append(nav_row)
+                # نمایش خلاصه انتخاب‌ها
+                if offer_items or comp_items:
+                    message += f"\n📊 خلاصه انتخاب‌ها:\n"
+                    if offer_items:
+                        message += f"درخواستی: {len(offer_items)} دارو - {format_price(offer_total)}\n"
+                    if comp_items:
+                        message += f"جبرانی: {len(comp_items)} دارو - {format_price(comp_total)}\n"
+                    message += f"اختلاف: {format_price(price_difference)}\n"
                 
                 # دکمه‌های پایینی
                 keyboard.append([
@@ -3453,17 +3433,11 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 
                 reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
                 
-                # ارسال پیام با توجه به نوع update
                 if update.callback_query:
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=message,
+                    await update.callback_query.edit_message_text(
+                        message,
                         reply_markup=reply_markup
                     )
-                    try:
-                        await query.delete_message()  # پیام قبلی را حذف کنیم
-                    except:
-                        pass
                 else:
                     await update.message.reply_text(
                         message,
@@ -3491,7 +3465,6 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         else:
             await update.message.reply_text(error_msg)
     return States.SELECT_DRUGS
-
 
 async def handle_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت صفحه‌بندی"""
@@ -3590,7 +3563,7 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return States.SELECT_DRUGS
 
 async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """دریافت تعداد برای داروی انتخاب شده"""
+    """دریافت تعداد برای داروی انتخاب شده و نمایش اختلاف قیمت"""
     try:
         quantity = update.message.text.strip()
         current_selection = context.user_data.get('current_selection')
@@ -3610,6 +3583,9 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
             return States.SELECT_QUANTITY
         
+        # محاسبه قیمت این دارو
+        drug_price = parse_price(current_selection['price']) * quantity
+        
         # ذخیره در لیست مناسب
         if current_selection['type'] == 'target':
             if 'offer_items' not in context.user_data:
@@ -3621,6 +3597,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 'quantity': quantity,
                 'pharmacy_id': context.user_data['selected_pharmacy_id']
             })
+            list_type = "درخواستی"
         else:
             if 'comp_items' not in context.user_data:
                 context.user_data['comp_items'] = []
@@ -3630,9 +3607,21 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 'price': current_selection['price'],
                 'quantity': quantity
             })
+            list_type = "جبرانی"
+        
+        # محاسبه اختلاف قیمت
+        offer_items = context.user_data.get('offer_items', [])
+        comp_items = context.user_data.get('comp_items', [])
+        
+        offer_total = sum(parse_price(item['price']) * item['quantity'] for item in offer_items)
+        comp_total = sum(parse_price(item['price']) * item['quantity'] for item in comp_items)
+        price_difference = offer_total - comp_total
         
         await update.message.reply_text(
-            f"✅ {quantity} عدد از {current_selection['name']} انتخاب شد.",
+            f"✅ {quantity} عدد از {current_selection['name']} به لیست {list_type} اضافه شد.\n"
+            f"💰 قیمت این مورد: {format_price(drug_price)}\n"
+            f"📊 اختلاف قیمت کل: {format_price(price_difference)}\n\n"
+            f"💡 نکته: برای مبادله مناسب، اختلاف قیمت باید صفر یا منفی باشد.",
             reply_markup=ReplyKeyboardRemove()
         )
         
