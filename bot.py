@@ -4225,8 +4225,7 @@ def main():
             states={
                 States.ADMIN_VERIFY_PHARMACY_NAME: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_pharmacy_name)
-            ],
-            states={
+                ],
                 States.REGISTER_PHONE: [
                     MessageHandler(filters.CONTACT | filters.TEXT, receive_phone_for_admin_verify)
                 ]
