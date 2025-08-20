@@ -3366,8 +3366,9 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی در پردازش جستجو رخ داد.")
     return ConversationHandler.END
 
+
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """انتخاب داروخانه و نمایش داروها با صفحه‌بندی"""
+    """انتخاب داروخانه و نمایش داروها"""
     try:
         query = update.callback_query
         await query.answer()
@@ -3383,9 +3384,8 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'selected_pharmacy_id': pharmacy_id,
             'offer_items': [],
             'comp_items': [],
-            'page_target': 0,
-            'page_mine': 0,
-            'drugs_per_page': 5
+            'target_drugs': [],
+            'my_drugs': []
         })
         
         # دریافت نام داروخانه
@@ -3404,30 +3404,41 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if conn:
                 conn.close()
         
-        # ارسال پیام تأیید
-        await query.edit_message_text(
-            f"✅ داروخانه {pharmacy_name} انتخاب شد.",
-            reply_markup=None
-        )
+        # ارسال پیام تأیید و نمایش داروها
+        await query.edit_message_text(f"✅ داروخانه {pharmacy_name} انتخاب شد.")
         
         # فراخوانی تابع نمایش داروها
         return await show_two_column_selection(update, context)
         
     except Exception as e:
         logger.error(f"Error in select_pharmacy: {e}")
-        await query.edit_message_text("خطا در انتخاب داروخانه")
-    return ConversationHandler.END
-
+        try:
+            await query.edit_message_text("خطا در انتخاب داروخانه")
+        except:
+            await context.bot.send_message(chat_id=query.message.chat_id, text="خطا در انتخاب داروخانه")
+    return States.SELECT_PHARMACY
                 
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش داروهای دو طرف با دکمه‌های پایین صفحه"""
     try:
+        # تشخیص نوع update (message یا callback query)
+        if update.message:
+            chat_id = update.message.chat_id
+            reply_method = update.message.reply_text
+        elif update.callback_query:
+            chat_id = update.callback_query.message.chat_id
+            reply_method = context.bot.send_message
+            await update.callback_query.answer()
+        else:
+            logger.error("Invalid update type in show_two_column_selection")
+            return States.SELECT_DRUGS
+
         pharmacy_id = context.user_data.get('selected_pharmacy_id')
         user_id = update.effective_user.id
         
         if not pharmacy_id:
             error_msg = "هیچ داروخانه‌ای انتخاب نشده است"
-            await update.message.reply_text(error_msg)
+            await reply_method(chat_id=chat_id, text=error_msg)
             return States.SELECT_PHARMACY
         
         conn = None
@@ -3522,35 +3533,35 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 if action_buttons:
                     keyboard.append(action_buttons)
                 
-                # ردیف چهارم: صفحه‌بندی اگر داروهای بیشتری وجود دارد
-                if len(target_drugs) > 5 or len(my_drugs) > 5:
-                    pagination_buttons = []
-                    if len(target_drugs) > 5:
-                        pagination_buttons.append(KeyboardButton("📌 صفحه بعد"))
-                    if len(my_drugs) > 5:
-                        pagination_buttons.append(KeyboardButton("💊 صفحه بعد"))
-                    keyboard.append(pagination_buttons)
-                
                 reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
                 
-                await update.message.reply_text(
-                    message,
-                    reply_markup=reply_markup
-                )
+                # اگر callback query بود، اول پیام قبلی رو پاک کنیم
+                if update.callback_query:
+                    try:
+                        await update.callback_query.delete_message()
+                    except:
+                        pass
+                
+                await reply_method(chat_id=chat_id, text=message, reply_markup=reply_markup)
                 
                 return States.SELECT_DRUGS
                 
         except Exception as e:
             logger.error(f"Error in show_two_column_selection: {e}")
-            await update.message.reply_text("خطا در بارگذاری داروها")
+            await reply_method(chat_id=chat_id, text="خطا در بارگذاری داروها")
         finally:
             if conn:
                 conn.close()
                 
     except Exception as e:
         logger.error(f"Error in show_two_column_selection: {e}")
-        await update.message.reply_text("خطا در نمایش داروها")
+        if update.message:
+            await update.message.reply_text("خطا در نمایش داروها")
+        elif update.callback_query:
+            await context.bot.send_message(chat_id=update.callback_query.message.chat_id, text="خطا در نمایش داروها")
     return States.SELECT_DRUGS
+
+
 async def handle_drug_selection_from_keyboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """پردازش انتخاب دارو از کیبورد پایین صفحه"""
     try:
@@ -3725,6 +3736,53 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی در انتخاب دارو رخ داد")
     return States.SELECT_DRUGS
 
+async def handle_back_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت دکمه بازگشت"""
+    try:
+        if update.message.text == "🔙 بازگشت به داروخانه‌ها":
+            # پاک کردن context مربوط به انتخاب دارو
+            keys_to_remove = [
+                'selected_pharmacy_id', 'selected_pharmacy_name', 
+                'offer_items', 'comp_items', 'current_selection',
+                'target_drugs', 'my_drugs', 'target_page', 'my_page'
+            ]
+            
+            for key in keys_to_remove:
+                context.user_data.pop(key, None)
+            
+            keyboard = [[InlineKeyboardButton("🔍 جستجوی مجدد", switch_inline_query_current_chat="")]]
+            
+            await update.message.reply_text(
+                "برای انتخاب داروخانه دیگر، دکمه زیر را کلیک کنید:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+            return States.SEARCH_DRUG_FOR_ADDING
+            
+    except Exception as e:
+        logger.error(f"Error in handle_back_button: {e}")
+        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+    return States.SELECT_DRUGS
+async def handle_finish_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت دکمه اتمام انتخاب"""
+    try:
+        if update.message.text == "✅ اتمام انتخاب":
+            return await submit_offer(update, context)
+            
+    except Exception as e:
+        logger.error(f"Error in handle_finish_selection: {e}")
+        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+    return States.SELECT_DRUGS
+async def handle_finish_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت دکمه اتمام انتخاب"""
+    try:
+        if update.message.text == "✅ اتمام انتخاب":
+            return await submit_offer(update, context)
+            
+    except Exception as e:
+        logger.error(f"Error in handle_finish_selection: {e}")
+        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+    return States.SELECT_DRUGS
 async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده"""
     try:
@@ -4651,11 +4709,21 @@ def main():
         application.add_handler(InlineQueryHandler(handle_inline_query))
         application.add_handler(ChosenInlineResultHandler(handle_chosen_inline_result))
         # اضافه کردن هندلر برای پردازش انتخاب از کیبورد
+        
         application.add_handler(MessageHandler(
-            filters.TEXT & filters.Regex(r'^(📌 \d+|💊 \d+|✅ اتمام انتخاب|🔙 بازگشت|📌 صفحه بعد|💊 صفحه بعد)$'),
+            filters.TEXT & filters.Regex(r'^(📌 \d+|💊 \d+)$'),
             handle_drug_selection_from_keyboard
         ))
-        
+
+        application.add_handler(MessageHandler(
+            filters.TEXT & filters.Regex(r'^🔙 بازگشت به داروخانه‌ها$'),
+            handle_back_button
+        ))
+
+        application.add_handler(MessageHandler(
+            filters.TEXT & filters.Regex(r'^✅ اتمام انتخاب$'),
+            handle_finish_selection
+        ))
         # Add callback query handler
         application.add_handler(CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"))
         application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
