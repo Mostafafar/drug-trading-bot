@@ -885,6 +885,57 @@ async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text="خطایی رخ داده است. به منوی اصلی بازگشتید."
         )
         return ConversationHandler.END
+async def reset_pharmacies(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """پاک کردن اطلاعات داروخانه‌ها و ریست وضعیت تأیید کاربران"""
+    user_id = update.effective_user.id
+    
+    # بررسی دسترسی ادمین
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute('SELECT is_admin FROM users WHERE id = %s', (user_id,))
+            result = cursor.fetchone()
+            if not result or not result[0]:
+                await update.message.reply_text("❌ فقط ادمین می‌تواند این عملیات را انجام دهد.")
+                return
+    
+        # اجرای دستورات پاک‌سازی
+        with conn.cursor() as cursor:
+            cursor.execute('''
+                SET CONSTRAINTS ALL DEFERRED;
+                
+                DELETE FROM personnel_codes;
+                
+                UPDATE users 
+                SET is_verified = FALSE, 
+                    is_pharmacy_admin = FALSE, 
+                    verification_method = NULL, 
+                    verification_code = NULL,
+                    simple_code = NULL,
+                    creator_id = NULL
+                WHERE id IN (SELECT user_id FROM pharmacies);
+                
+                DELETE FROM pharmacies;
+                
+                SET CONSTRAINTS ALL IMMEDIATE;
+                
+                ALTER SEQUENCE pharmacies_user_id_seq RESTART WITH 1;
+            ''')
+            conn.commit()
+            
+            await update.message.reply_text(
+                "✅ تمام اطلاعات داروخانه‌ها پاک شد. کاربران باید دوباره ثبت‌نام کنند."
+            )
+            
+    except Exception as e:
+        logger.error(f"خطا در پاک‌سازی داروخانه‌ها: {e}")
+        if conn:
+            conn.rollback()
+        await update.message.reply_text("❌ خطایی در پاک‌سازی اطلاعات رخ داد.")
+    finally:
+        if conn:
+            conn.close()
 
 async def simple_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start simple verification process"""
@@ -4598,7 +4649,7 @@ def main():
         application.add_handler(CallbackQueryHandler(submit_offer, pattern=r'^submit_offer$'))
         application.add_handler(CallbackQueryHandler(handle_back_to_pharmacies, pattern=r'^back_to_pharmacies$'))
         application.add_handler(CallbackQueryHandler(handle_pagination, pattern="^(next_page|prev_page)$"))
-        
+        application.add_handler(CommandHandler('reset_pharmacies', reset_pharmacies))
         
         # Add error handler
         application.add_error_handler(error_handler)
