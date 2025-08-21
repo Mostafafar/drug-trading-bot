@@ -4010,7 +4010,6 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
     return States.COMPENSATION_SELECTION
 
-
 async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show selected drugs and compensation items with price difference"""
     try:
@@ -4026,7 +4025,8 @@ async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "هیچ دارویی از داروخانه انتخاب نشده است.",
                 reply_markup=ReplyKeyboardRemove()
             )
-            return States.SELECT_DRUGS
+            # بازگشت به لیست انتخاب دارو
+            return await show_two_column_selection(update, context)
         
         offer_total = sum(parse_price(item['price']) * item['quantity'] for item in offer_items)
         comp_total = sum(parse_price(item['price']) * item['quantity'] for item in comp_items)
@@ -4095,6 +4095,7 @@ async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message:
             await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 
 async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Confirm the offer before sending"""
