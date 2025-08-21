@@ -3842,11 +3842,9 @@ async def handle_back_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
             for key in keys_to_remove:
                 context.user_data.pop(key, None)
             
-            keyboard = [[InlineKeyboardButton("🔍 جستجوی مجدد", switch_inline_query_current_chat="")]]
-            
             await update.message.reply_text(
-                "برای انتخاب داروخانه دیگر، دکمه زیر را کلیک کنید:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                "لطفا نام داروی مورد نظر را وارد کنید:",
+                reply_markup=ReplyKeyboardRemove()
             )
             
             return States.SEARCH_DRUG
