@@ -4050,6 +4050,9 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show selected drugs and compensation items with price difference"""
     try:
+         if not update.message:
+            logger.error("No message in update")
+            return States.SELECT_DRUGS
         offer_items = context.user_data.get('offer_items', [])
         comp_items = context.user_data.get('comp_items', [])
         
