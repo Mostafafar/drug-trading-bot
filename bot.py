@@ -3595,14 +3595,20 @@ async def handle_drug_selection_from_keyboard(update: Update, context: ContextTy
         current_list_type = context.user_data.get('current_list_type', 'mine')
         drugs = context.user_data.get(f'{current_list_type}_drugs', [])
         
+        # مدیریت دکمه‌های خاص - این باید اول از همه بررسی شود
+        if selection == "✅ اتمام انتخاب":
+            return await handle_finish_selection(update, context)
+        elif selection == "🔙 بازگشت به داروخانه‌ها":
+            return await handle_back_button(update, context)
+        
         # مدیریت دکمه‌های جابجایی و صفحه‌بندی
-        if selection == "📌 داروهای داروخانه هدف":
+        elif selection == "📌 داروهای داروخانه هدف":
             context.user_data['current_list_type'] = 'target'
-            context.user_data['page_target'] = 0  # ریست صفحه برای لیست جدید
+            context.user_data['page_target'] = 0
             return await show_two_column_selection(update, context)
         elif selection == "💊 داروهای شما":
             context.user_data['current_list_type'] = 'mine'
-            context.user_data['page_mine'] = 0  # ریست صفحه برای لیست جدید
+            context.user_data['page_mine'] = 0
             return await show_two_column_selection(update, context)
         elif "صفحه قبل" in selection:
             context.user_data[f'page_{current_list_type}'] = max(0, context.user_data.get(f'page_{current_list_type}', 0) - 1)
