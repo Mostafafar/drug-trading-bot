@@ -3822,16 +3822,7 @@ async def handle_back_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.error(f"Error in handle_back_button: {e}")
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
     return States.SELECT_DRUGS
-async def handle_finish_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت دکمه اتمام انتخاب"""
-    try:
-        if update.message.text == "✅ اتمام انتخاب":
-            return await submit_offer(update, context)
-            
-    except Exception as e:
-        logger.error(f"Error in handle_finish_selection: {e}")
-        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
-    return States.SELECT_DRUGS
+
 async def handle_finish_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت دکمه اتمام انتخاب"""
     try:
