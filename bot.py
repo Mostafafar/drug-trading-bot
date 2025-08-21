@@ -4437,17 +4437,14 @@ def main():
         if not load_drug_data():
             logger.warning("Failed to load drug data - some features may not work")
         
-        # Create application
-        persistence = PicklePersistence(filepath='bot_data.pickle')
-        
         # Create application with persistence
+        persistence = PicklePersistence(filepath='bot_data.pickle')
         application = ApplicationBuilder().token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY").persistence(persistence).build()
         
-        # Add conversation handler for admin verification process
+        # Admin verification handler
         admin_verify_handler = ConversationHandler(
             entry_points=[
                 CallbackQueryHandler(admin_verify_start, pattern="^admin_verify$")
-                
             ],
             states={
                 States.ADMIN_VERIFY_PHARMACY_NAME: [
@@ -4461,7 +4458,7 @@ def main():
             allow_reentry=True
         )
         
-        # Add conversation handler with registration states (normal registration)
+        # Registration handler (normal registration)
         registration_handler = ConversationHandler(
             entry_points=[
                 CallbackQueryHandler(register_pharmacy_name, pattern="^register$")
@@ -4502,7 +4499,7 @@ def main():
             allow_reentry=True
         )
         
-        # Add conversation handler for simple verification
+        # Simple verification handler
         simple_verify_handler = ConversationHandler(
             entry_points=[
                 CallbackQueryHandler(simple_verify_start, pattern="^simple_verify$")
@@ -4516,7 +4513,7 @@ def main():
             allow_reentry=True
         )
         
-        # Add conversation handler for personnel login
+        # Personnel login handler
         personnel_handler = ConversationHandler(
             entry_points=[
                 CallbackQueryHandler(personnel_login_start, pattern="^personnel_login$")
@@ -4530,22 +4527,11 @@ def main():
             allow_reentry=True
         )
         
-        # Add all handlers
-        application.add_handler(CommandHandler('start', start))
-        application.add_handler(admin_verify_handler)
-        application.add_handler(registration_handler)
-        application.add_handler(simple_verify_handler)
-        application.add_handler(personnel_handler)
-        application.add_handler(MessageHandler(filters.Regex('^ساخت کد پرسنل$'), generate_personnel_code))
-        
-
-        
-        
-        # Add conversation handler for drug management
+        # Drug management handler
         drug_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^اضافه کردن دارو$'), add_drug_item),
-                InlineQueryHandler(handle_inline_query),  # Inline برای جستجو
+                InlineQueryHandler(handle_inline_query),
                 ChosenInlineResultHandler(handle_chosen_inline_result),
                 MessageHandler(filters.Regex('^لیست داروهای من$'), list_my_drugs),
                 CallbackQueryHandler(edit_drugs, pattern="^edit_drugs$"),
@@ -4557,40 +4543,34 @@ def main():
             ],
             states={
                 States.SEARCH_DRUG_FOR_ADDING: [
-                    CallbackQueryHandler(add_drug_item, pattern="^back$"),
-                    InlineQueryHandler(handle_inline_query),  # Handle inline queries
+                    InlineQueryHandler(handle_inline_query),
                     CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"),
                     ChosenInlineResultHandler(handle_chosen_inline_result),
-                    
-  
+                    CallbackQueryHandler(add_drug_item, pattern="^back$")
                 ],
                 States.ADD_DRUG_DATE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
-        
-                    CallbackQueryHandler(add_drug_date, pattern="^back_to_search$")
-                    
-                    
+                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
                 ],
                 States.ADD_DRUG_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
                     CallbackQueryHandler(handle_back, pattern="^back$")
-                   
                 ],
                 States.EDIT_DRUG: [
                     CallbackQueryHandler(edit_drugs, pattern="^back_to_list$"),
                     CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
-                    CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)  $"),
+                    CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
                     CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$")
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
             allow_reentry=True,
-            per_chat=False,  # جدید: state بر اساس کاربر نه چت
-            per_user=True    #
+            per_chat=False,
+            per_user=True
         )
         
-        # Add conversation handler for needs management
+        # Needs management handler
         needs_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^ثبت نیاز جدید$'), add_need),
@@ -4622,7 +4602,7 @@ def main():
             allow_reentry=True
         )
         
-        # Add conversation handler for search and trade
+        # Search and trade handler
         trade_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex(r'^جستجوی دارو$'), search_drug),
@@ -4636,54 +4616,54 @@ def main():
             states={
                 States.SEARCH_DRUG: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
-            ],
+                ],
                 States.SELECT_PHARMACY: [
                     CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_\d+$'),
                     CallbackQueryHandler(handle_back, pattern=r'^back$')
-            ],
+                ],
                 States.SELECT_DRUGS: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, select_drug),
-                    CallbackQueryHandler(handle_back_to_pharmacies, pattern=r'^back_to_pharmacies$'),
-                    CallbackQueryHandler(submit_offer, pattern=r'^submit_offer$'),
+                    MessageHandler(filters.Regex(r'^(📌 \d+ - .+|💊 \d+ - .+|📌 صفحه قبل \(هدف\)|📌 صفحه بعد \(هدف\)|💊 صفحه قبل \(من\)|💊 صفحه بعد \(من\))$'), 
+                                 handle_drug_selection_from_keyboard),
+                    MessageHandler(filters.Regex(r'^🔙 بازگشت به داروخانه‌ها$'), handle_back_button),
+                    MessageHandler(filters.Regex(r'^✅ اتمام انتخاب$'), handle_finish_selection),
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^edit_selection$'),
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^add_more$'),
-                    CallbackQueryHandler(handle_pagination, pattern=r'^(next_page|prev_page)$')
-           ],
+                    CallbackQueryHandler(handle_back_to_pharmacies, pattern=r'^back_to_pharmacies$')
+                ],
                 States.SELECT_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, enter_quantity),
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^back_to_selection$')
-           ],
+                ],
+                States.COMPENSATION_SELECTION: [
+                    CallbackQueryHandler(show_two_column_selection, pattern=r'^add_more$'),
+                    CallbackQueryHandler(handle_compensation_selection, pattern=r'^compensate$'),
+                    CallbackQueryHandler(handle_compensation_selection, pattern=r'^comp_\d+$'),
+                    CallbackQueryHandler(confirm_totals, pattern=r'^comp_finish$')
+                ],
+                States.COMPENSATION_QUANTITY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation_quantity),
+                    CallbackQueryHandler(show_two_column_selection, pattern=r'^back_to_compensation$')
+                ],
                 States.CONFIRM_OFFER: [
                     CallbackQueryHandler(confirm_offer, pattern=r'^confirm_offer$'),
                     CallbackQueryHandler(send_offer, pattern=r'^send_offer$'),
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^edit_selection$'),
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^add_more$'),
                     CallbackQueryHandler(handle_back_to_pharmacies, pattern=r'^back_to_selection$')
-           ],
-                States.COMPENSATION_SELECTION: [
-                    CallbackQueryHandler(show_two_column_selection, pattern=r'^add_more$'),
-                    CallbackQueryHandler(handle_compensation_selection, pattern=r'^compensate$'),
-                    CallbackQueryHandler(handle_compensation_selection, pattern=r'^comp_\d+$'),
-                    CallbackQueryHandler(confirm_totals, pattern=r'^comp_finish$')
-          ],
-                States.COMPENSATION_QUANTITY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation_quantity),
-                    CallbackQueryHandler(show_two_column_selection, pattern=r'^back_to_compensation$')
-          ],
+                ],
                 States.CONFIRM_TOTALS: [
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^edit_selection$'),
                     CallbackQueryHandler(confirm_totals, pattern=r'^back_to_totals$'),
                     CallbackQueryHandler(send_offer, pattern=r'^send_offer$')
-                ]  
-         },
-         fallbacks=[CommandHandler('cancel', cancel)],
-         allow_reentry=True,
-         per_chat=False,
-         per_user=True
-         # To address the PTBUserWarning
+                ]
+            },
+            fallbacks=[CommandHandler('cancel', cancel)],
+            allow_reentry=True,
+            per_chat=False,
+            per_user=True
         )
         
-        # Add conversation handler for medical categories
+        # Medical categories handler
         categories_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.Regex('^تنظیم شاخه‌های دارویی$'), setup_medical_categories),
@@ -4700,7 +4680,7 @@ def main():
             allow_reentry=True
         )
         
-        # Add conversation handler for admin commands
+        # Admin commands handler
         admin_handler = ConversationHandler(
             entry_points=[
                 CommandHandler('upload_excel', upload_excel_start),
@@ -4717,9 +4697,11 @@ def main():
         )
         
         # Add handlers
-                # Add callback query handler for admin actions
-
+        application.add_handler(CommandHandler('start', start))
+        application.add_handler(admin_verify_handler)
         application.add_handler(registration_handler)
+        application.add_handler(simple_verify_handler)
+        application.add_handler(personnel_handler)
         application.add_handler(drug_handler)
         application.add_handler(needs_handler)
         application.add_handler(trade_handler)
@@ -4727,36 +4709,12 @@ def main():
         application.add_handler(admin_handler)
         application.add_handler(InlineQueryHandler(handle_inline_query))
         application.add_handler(ChosenInlineResultHandler(handle_chosen_inline_result))
-        # اضافه کردن هندلر برای پردازش انتخاب از کیبورد
-        
-        application.add_handler(MessageHandler(
-            filters.TEXT & filters.Regex(r'^(📌 \d+|💊 \d+)$'),
-            handle_drug_selection_from_keyboard
-        ))
-
-        application.add_handler(MessageHandler(
-            filters.TEXT & filters.Regex(r'^🔙 بازگشت به داروخانه‌ها$'),
-            handle_back_button
-        ))
-
-        application.add_handler(MessageHandler(
-            filters.TEXT & filters.Regex(r'^✅ اتمام انتخاب$'),
-            handle_finish_selection
-        ))
-        # Add callback query handler
-        application.add_handler(CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"))
+        application.add_handler(MessageHandler(filters.Regex('^ساخت کد پرسنل$'), generate_personnel_code))
         application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
-        # In your main() function:
-        application.add_handler(CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"))
         application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_user_"))
-        # In your main() function where you set up handlers:
+        application.add_handler(CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"))
         application.add_handler(CallbackQueryHandler(submit_offer, pattern="^submit_offer$"))
-        # Add this to your main() function where you set up handlers:
-        application.add_handler(CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_[0-9]+$'))
-        application.add_handler(CallbackQueryHandler(select_drug, pattern=r'^select_(target|mine)_[0-9]+$'))
-        application.add_handler(CallbackQueryHandler(submit_offer, pattern=r'^submit_offer$'))
-        application.add_handler(CallbackQueryHandler(handle_back_to_pharmacies, pattern=r'^back_to_pharmacies$'))
-        application.add_handler(CallbackQueryHandler(handle_pagination, pattern="^(next_page|prev_page)$"))
+        application.add_handler(CallbackQueryHandler(handle_back_to_pharmacies, pattern="^back_to_pharmacies$"))
         application.add_handler(CommandHandler('reset_pharmacies', reset_pharmacies))
         
         # Add error handler
