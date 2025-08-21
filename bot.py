@@ -3849,7 +3849,7 @@ async def handle_back_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             
-            return States.SEARCH_DRUG_FOR_ADDING
+            return States.SEARCH_DRUG
             
     except Exception as e:
         logger.error(f"Error in handle_back_button: {e}")
