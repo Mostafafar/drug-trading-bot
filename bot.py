@@ -4050,9 +4050,10 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show selected drugs and compensation items with price difference"""
     try:
-         if not update.message:
-             logger.error("No message in update")
-             return States.SELECT_DRUGS
+        if not update.message:
+            logger.error("No message in update")
+            return States.SELECT_DRUGS
+            
         offer_items = context.user_data.get('offer_items', [])
         comp_items = context.user_data.get('comp_items', [])
         
@@ -4097,14 +4098,17 @@ async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 conn = get_db_connection()
                 with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                    # ابتدا همه داروها را بگیرید
                     cursor.execute('''
                     SELECT di.id, di.name, di.price, di.quantity
                     FROM drug_items di
                     WHERE di.user_id = %s AND di.quantity > 0
-                    ORDER BY parse_price(di.price) DESC
-                    LIMIT 3
                     ''', (update.effective_user.id,))
-                    suggested_drugs = cursor.fetchall()
+                    all_drugs = cursor.fetchall()
+                    
+                    # در پایتون بر اساس قیمت عددی مرتب کنید
+                    all_drugs.sort(key=lambda x: parse_price(x['price']), reverse=True)
+                    suggested_drugs = all_drugs[:3]  # 3 مورد اول
                     
                     if suggested_drugs:
                         message += "\n📜 پیشنهاد داروهای جبرانی:\n"
@@ -4121,9 +4125,11 @@ async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return States.CONFIRM_OFFER
+        
     except Exception as e:
         logger.error(f"Error in submit_offer: {e}")
-        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        if update.message:
+            await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
 async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
