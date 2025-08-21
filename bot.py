@@ -4306,7 +4306,7 @@ async def handle_back_to_pharmacies(update: Update, context: ContextTypes.DEFAUL
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             
-        return States.SEARCH_DRUG_FOR_ADDING
+            return States.SEARCH_DRUG
             
     except Exception as e:
         logger.error(f"Error in handle_back_to_pharmacies: {e}")
