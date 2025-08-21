@@ -3417,10 +3417,12 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         if update.message:
             chat_id = update.message.chat_id
             reply_method = update.message.reply_text
+            use_chat_id = False  # برای reply_text، chat_id لازم نیست
         elif update.callback_query:
             chat_id = update.callback_query.message.chat_id
             reply_method = context.bot.send_message
             await update.callback_query.answer()
+            use_chat_id = True  # برای send_message، chat_id لازم است
         else:
             logger.error("Invalid update type in show_two_column_selection")
             return States.SELECT_DRUGS
@@ -3429,7 +3431,11 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         user_id = update.effective_user.id
         
         if not pharmacy_id:
-            await reply_method(chat_id=chat_id, text="هیچ داروخانه‌ای انتخاب نشده است")
+            error_text = "هیچ داروخانه‌ای انتخاب نشده است"
+            if use_chat_id:
+                await reply_method(chat_id=chat_id, text=error_text)
+            else:
+                await reply_method(text=error_text)
             return States.SELECT_PHARMACY
         
         page_target = context.user_data.get('page_target', 0)
@@ -3559,23 +3565,32 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                     except:
                         pass
                 
-                await reply_method(chat_id=chat_id, text=message, reply_markup=reply_markup)
+                # فراخوانی شرطی reply_method
+                if use_chat_id:
+                    await reply_method(chat_id=chat_id, text=message, reply_markup=reply_markup)
+                else:
+                    await reply_method(text=message, reply_markup=reply_markup)
                 
                 return States.SELECT_DRUGS
                 
         except Exception as e:
             logger.error(f"Error in show_two_column_selection: {e}")
-            await reply_method(chat_id=chat_id, text="خطا در بارگذاری داروها")
+            error_text = "خطا در نمایش داروها"
+            if use_chat_id:
+                await reply_method(chat_id=chat_id, text=error_text)
+            else:
+                await reply_method(text=error_text)
         finally:
             if conn:
                 conn.close()
                 
     except Exception as e:
         logger.error(f"Error in show_two_column_selection: {e}")
+        error_text = "خطا در نمایش داروها"
         if update.message:
-            await update.message.reply_text("خطا در نمایش داروها")
+            await update.message.reply_text(error_text)
         elif update.callback_query:
-            await context.bot.send_message(chat_id=update.callback_query.message.chat_id, text="خطا در نمایش داروها")
+            await context.bot.send_message(chat_id=chat_id, text=error_text)
     return States.SELECT_DRUGS
 
 async def handle_drug_selection_from_keyboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
