@@ -4228,6 +4228,21 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "✅ پیشنهاد شما با موفقیت ارسال شد!\n\n"
                     "پس از تأیید داروخانه با شما تماس گرفته خواهد شد."
                 )
+                
+                # نمایش منوی اصلی بعد از ارسال موفقیت‌آمیز
+                keyboard = [
+                    ['اضافه کردن دارو', 'جستجوی دارو'],
+                    ['تنظیم شاخه‌های دارویی', 'لیست داروهای من'],
+                    ['ثبت نیاز جدید', 'لیست نیازهای من']
+                ]
+                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="به منوی اصلی بازگشتید:",
+                    reply_markup=reply_markup
+                )
+                
         except Exception as e:
             logger.error(f"Error saving offer: {e}")
             if conn:
@@ -4239,6 +4254,7 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         context.user_data.clear()
         return ConversationHandler.END
+        
     except Exception as e:
         logger.error(f"Error in send_offer: {e}")
         await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
