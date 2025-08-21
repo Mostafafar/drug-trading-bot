@@ -4613,8 +4613,12 @@ def main():
                     CallbackQueryHandler(handle_back, pattern=r'^back$')
                 ],
                 States.SELECT_DRUGS: [
-                    MessageHandler(filters.Regex(r'^(📌 \d+ - .+|💊 \d+ - .+|📌 صفحه قبل \(هدف\)|📌 صفحه بعد \(هدف\)|💊 صفحه قبل \(من\)|💊 صفحه بعد \(من\))$'), 
-                                 handle_drug_selection_from_keyboard),
+                    MessageHandler(
+                        filters.Regex(
+                            r'^(📌 \d+ - .+|💊 \d+ - .+|📌 صفحه قبل|📌 صفحه بعد|💊 صفحه قبل|💊 صفحه بعد|📌 داروهای داروخانه هدف|💊 داروهای شما|✅ اتمام انتخاب|🔙 بازگشت به داروخانه‌ها)$'
+                        ),
+                        handle_drug_selection_from_keyboard
+                    ),
                     MessageHandler(filters.Regex(r'^🔙 بازگشت به داروخانه‌ها$'), handle_back_button),
                     MessageHandler(filters.Regex(r'^✅ اتمام انتخاب$'), handle_finish_selection),
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^edit_selection$'),
