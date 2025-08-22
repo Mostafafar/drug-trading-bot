@@ -3305,6 +3305,72 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 results = cursor.fetchall()
 
                 if not results:
+                    # ایجاد کیبورد با دکمه بازگشت
+                    keyboard = [
+                        [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")]
+                    ]
+                    
+                    await update.message.reply_text(
+                        "⚠️ هیچ داروخانه‌ای با این دارو پیدا نشد.",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                    return States.SEARCH_DRUG
+
+                # گروه‌بندی نتایج بر اساس داروخانه
+                pharmacy_results = {}
+                for item in results:
+                    pharmacy_id = item['pharmacy_id']
+                    if pharmacy_id not in pharmacy_results:
+                        pharmacy_results[pharmacy_id] = {
+                            'name': item['pharmacy_name'],
+                            'drugs': []
+                        }
+                    pharmacy_results[pharmacy_id]['drugs'].append(item)
+
+                # ساخت پیام و کیبورد
+                message = "🏥 نتایج جستجو:\n\n"
+                keyboard = []
+                
+                for pharmacy_id, data in pharmacy_results.items():
+                    pharmacy_name = data['name']
+                    drugs = data['drugs']
+                    
+                    # اضافه کردن به پیام
+                    message += f"🏥 {pharmacy_name}:\n"
+                    for drug in drugs[:3]:  # حداکثر 3 دارو نمایش داده شود
+                        message += f"  💊 {drug['drug_name']} - {drug['price']} - {drug['quantity']} عدد\n"
+                    if len(drugs) > 3:
+                        message += f"  ... و {len(drugs) - 3} داروی دیگر\n"
+                    message += "\n"
+                    
+                    # اضافه کردن دکمه اینلاین
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"🏥 {pharmacy_name} ({len(drugs)} دارو)",
+                            callback_data=f"pharmacy_{pharmacy_id}"
+                        )
+                    ])
+
+                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
+
+                await update.message.reply_text(
+                    message,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                return States.SELECT_PHARMACY
+                
+        except Exception as e:
+            logger.error(f"Database error in handle_search: {e}")
+            await update.message.reply_text("خطا در جستجو.")
+        finally:
+            if conn:
+                conn.close()
+                
+    except Exception as e:
+        logger.error(f"Error in handle_search: {e}")
+        await update.message.reply_text("خطایی در پردازش جستجو رخ داد.")
+    return ConversationHandler.END
+                if not results:
                     await update.message.reply_text(
                         "⚠️ هیچ داروخانه‌ای با این دارو پیدا نشد.",
                         reply_markup=ReplyKeyboardRemove()
