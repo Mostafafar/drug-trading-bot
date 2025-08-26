@@ -4589,7 +4589,10 @@ def main():
                     MessageHandler(filters.CONTACT | filters.TEXT, receive_phone_for_admin_verify)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)],  # تغییر fallback
+            CommandHandler('cancel', clear_conversation_state),
+            MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
+            CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+            ],  # تغییر fallback
             allow_reentry=True
         )
         
@@ -4630,7 +4633,10 @@ def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, complete_registration)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            CommandHandler('cancel', clear_conversation_state),
+            MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
+            CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+            ],
             allow_reentry=True
         )
         
@@ -4644,7 +4650,10 @@ def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            CommandHandler('cancel', clear_conversation_state),
+            MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
+            CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+            ],
             allow_reentry=True
         )
         
@@ -4658,7 +4667,10 @@ def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, verify_personnel_code)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            CommandHandler('cancel', clear_conversation_state),
+            MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
+            CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+            ],
             allow_reentry=True
         )
         
@@ -4699,7 +4711,10 @@ def main():
                     CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            CommandHandler('cancel', clear_conversation_state),
+            MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
+            CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+            ], 
             allow_reentry=True,
             per_chat=False,
             per_user=True
@@ -4733,7 +4748,10 @@ def main():
                     CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            CommandHandler('cancel', clear_conversation_state),
+            MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
+            CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+            ], 
             allow_reentry=True
         )
         
@@ -4796,7 +4814,10 @@ def main():
                     CallbackQueryHandler(send_offer, pattern=r'^send_offer$')
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            CommandHandler('cancel', clear_conversation_state),
+            MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
+            CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+            ], 
             allow_reentry=True,
             per_chat=False,
             per_user=True
@@ -4815,7 +4836,10 @@ def main():
                     CallbackQueryHandler(save_categories, pattern="^save_categories$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            CommandHandler('cancel', clear_conversation_state),
+            MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
+            CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+            ],
             allow_reentry=True
         )
         
@@ -4831,7 +4855,10 @@ def main():
                     MessageHandler(filters.Document.ALL | (filters.TEXT & filters.Entity("url")), handle_excel_upload)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)],   # تغییر fallback
+            CommandHandler('cancel', clear_conversation_state),
+            MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
+            CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+            ],   # تغییر fallback
             allow_reentry=True
         )
         
