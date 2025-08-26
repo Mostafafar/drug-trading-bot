@@ -4437,6 +4437,33 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
     except Exception as e:
         logger.error(f"Error in error handler: {e}")
+async def main_menu_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """دسترسی به منوی اصلی از هر جای ربات"""
+    try:
+        # ایجاد کیبورد منوی اصلی
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        await update.message.reply_text(
+            "به منوی اصلی بازگشتید. لطفاً یک گزینه را انتخاب کنید:",
+            reply_markup=reply_markup
+        )
+        
+        # پاک کردن state فعلی
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"Error in main_menu_access: {e}")
+        await update.message.reply_text("خطایی در بازگشت به منوی اصلی رخ داد.")
+        return ConversationHandler.END
+
+# اضافه کردن این هندلر در تابع main
+
 
         
 def main():
@@ -4732,6 +4759,7 @@ def main():
         application.add_handler(CallbackQueryHandler(submit_offer, pattern="^submit_offer$"))
         application.add_handler(CallbackQueryHandler(handle_back_to_pharmacies, pattern="^back_to_pharmacies$"))
         application.add_handler(CommandHandler('reset_pharmacies', reset_pharmacies))
+        application.add_handler(MessageHandler(filters.Regex('^منوی اصلی$'), main_menu_access))
         
         # Add error handler
         application.add_error_handler(error_handler)
