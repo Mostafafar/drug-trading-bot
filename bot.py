@@ -883,39 +883,55 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
+
 async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle back button with proper keyboard"""
+    """بهبود هندلر بازگشت با مدیریت بهتر state"""
     try:
-        query = update.callback_query
-        await query.answer()
+        if update.callback_query:
+            await update.callback_query.answer()
+            chat_id = update.callback_query.message.chat_id
+        else:
+            chat_id = update.message.chat_id
         
+        # پاک کردن state مربوط به عملیات جاری
+        keys_to_remove = [
+            'selected_pharmacy_id', 'selected_pharmacy_name', 
+            'offer_items', 'comp_items', 'current_selection',
+            'current_list', 'page_target', 'page_mine',
+            'selected_drug', 'expiry_date', 'drug_quantity',
+            'need_name', 'need_desc', 'editing_drug', 'editing_need',
+            'edit_field', 'match_drug', 'match_need'
+        ]
+        
+        for key in keys_to_remove:
+            context.user_data.pop(key, None)
+        
+        # نمایش منوی اصلی
         keyboard = [
             ['اضافه کردن دارو', 'جستجوی دارو'],
-            ['تنظیم شاخه‌های دارویی', 'لیست داروهای من'],
-            ['ثبت نیاز جدید', 'لیست نیازهای من']
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
         ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="به منوی اصلی بازگشتید. لطفاً یک گزینه را انتخاب کنید:",
+            reply_markup=reply_markup
+        )
+        
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"Error in handle_back: {e}")
         try:
-            await query.edit_message_text(
-                "به منوی اصلی بازگشتید. لطفا یک گزینه را انتخاب کنید:",
-                reply_markup=None  # Remove any existing inline keyboard
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="خطایی در بازگشت رخ داد. به منوی اصلی بازگشتید."
             )
         except:
             pass
-            
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="به منوی اصلی بازگشتید. لطفا یک گزینه را انتخاب کنید:",
-            reply_markup=reply_markup
-        )
-        return ConversationHandler.END
-    except Exception as e:
-        logger.error(f"Error in handle_back: {e}")
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="خطایی رخ داده است. به منوی اصلی بازگشتید."
-        )
         return ConversationHandler.END
 
 async def reset_pharmacies(update: Update, context: ContextTypes.DEFAULT_TYPE):
