@@ -4595,13 +4595,6 @@ async def handle_main_menu_command(update: Update, context: ContextTypes.DEFAULT
         return await setup_medical_categories(update, context)
     else:  # منوی اصلی یا بازگشت
         return await clear_conversation_state(update, context)
-
-# اضافه کردن این هندلر در تابع main
-
-
-# اضافه کردن این هندلر در تابع main
-
-
         
 def main():
     """Start the bot"""
@@ -4738,22 +4731,26 @@ def main():
                     InlineQueryHandler(handle_inline_query),
                     CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"),
                     ChosenInlineResultHandler(handle_chosen_inline_result),
-                    CallbackQueryHandler(add_drug_item, pattern="^back$")
+                    CallbackQueryHandler(add_drug_item, pattern="^back$"),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.ADD_DRUG_DATE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
-                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
+                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$"),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.ADD_DRUG_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
-                    CallbackQueryHandler(handle_back, pattern="^back$")
+                    CallbackQueryHandler(handle_back, pattern="^back$"),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.EDIT_DRUG: [
                     CallbackQueryHandler(edit_drugs, pattern="^back_to_list$"),
                     CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
                     CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
-                    CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$")
+                    CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$"),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ]
             },
             fallbacks=[
@@ -4779,20 +4776,24 @@ def main():
             ],
             states={
                 States.ADD_NEED_NAME: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.ADD_NEED_DESC: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.ADD_NEED_QUANTITY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.EDIT_NEED: [
                     CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
                     CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
                     CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit),
-                    CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
+                    CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$"),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ]
             },
             fallbacks=[
@@ -4817,50 +4818,59 @@ def main():
             ],
             states={
                 States.SEARCH_DRUG: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.SELECT_PHARMACY: [
                     CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_\d+$'),
-                    CallbackQueryHandler(handle_back, pattern=r'^back$')
+                    CallbackQueryHandler(handle_back, pattern=r'^back$'),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.SELECT_DRUGS: [
                     MessageHandler(
                         filters.Regex(
                             r'^(📌 \d+ - .+|💊 \d+ - .+|📌 صفحه قبل|📌 صفحه بعد|💊 صفحه قبل|💊 صفحه بعد|📌 داروهای داروخانه هدف|💊 داروهای شما|✅ اتمام انتخاب|🔙 بازگشت به داروخانه‌ها)$'
                         ),
+                        
                         handle_drug_selection_from_keyboard
                     ),
                     MessageHandler(filters.Regex(r'^🔙 بازگشت به داروخانه‌ها$'), handle_back_button),
                     MessageHandler(filters.Regex(r'^✅ اتمام انتخاب$'), handle_finish_selection),
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^edit_selection$'),
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^add_more$'),
-                    CallbackQueryHandler(handle_back_to_pharmacies, pattern=r'^back_to_pharmacies$')
+                    CallbackQueryHandler(handle_back_to_pharmacies, pattern=r'^back_to_pharmacies$'),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.SELECT_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, enter_quantity),
-                    CallbackQueryHandler(show_two_column_selection, pattern=r'^back_to_selection$')
+                    CallbackQueryHandler(show_two_column_selection, pattern=r'^back_to_selection$'),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.COMPENSATION_SELECTION: [
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^add_more$'),
                     CallbackQueryHandler(handle_compensation_selection, pattern=r'^compensate$'),
                     CallbackQueryHandler(handle_compensation_selection, pattern=r'^comp_\d+$'),
-                    CallbackQueryHandler(confirm_totals, pattern=r'^comp_finish$')
+                    CallbackQueryHandler(confirm_totals, pattern=r'^comp_finish$'),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.COMPENSATION_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_compensation_quantity),
-                    CallbackQueryHandler(show_two_column_selection, pattern=r'^back_to_compensation$')
+                    CallbackQueryHandler(show_two_column_selection, pattern=r'^back_to_compensation$'),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.CONFIRM_OFFER: [
                     CallbackQueryHandler(confirm_offer, pattern=r'^confirm_offer$'),
                     CallbackQueryHandler(send_offer, pattern=r'^send_offer$'),
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^edit_selection$'),
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^add_more$'),
-                    CallbackQueryHandler(handle_back_to_pharmacies, pattern=r'^back_to_selection$')
+                    CallbackQueryHandler(handle_back_to_pharmacies, pattern=r'^back_to_selection$'),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ],
                 States.CONFIRM_TOTALS: [
                     CallbackQueryHandler(show_two_column_selection, pattern=r'^edit_selection$'),
                     CallbackQueryHandler(confirm_totals, pattern=r'^back_to_totals$'),
-                    CallbackQueryHandler(send_offer, pattern=r'^send_offer$')
+                    CallbackQueryHandler(send_offer, pattern=r'^send_offer$'),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ]
             },
             fallbacks=[
@@ -4884,7 +4894,8 @@ def main():
             states={
                 States.SETUP_CATEGORIES: [
                     CallbackQueryHandler(toggle_category, pattern="^togglecat_"),
-                    CallbackQueryHandler(save_categories, pattern="^save_categories$")
+                    CallbackQueryHandler(save_categories, pattern="^save_categories$"),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ]
             },
             fallbacks=[
@@ -4904,7 +4915,8 @@ def main():
             ],
             states={
                 States.ADMIN_UPLOAD_EXCEL: [
-                    MessageHandler(filters.Document.ALL | (filters.TEXT & filters.Entity("url")), handle_excel_upload)
+                    MessageHandler(filters.Document.ALL | (filters.TEXT & filters.Entity("url")), handle_excel_upload),
+                    MessageHandler(filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'), handle_main_menu_command)
                 ]
             },
             fallbacks=[
