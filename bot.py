@@ -4555,6 +4555,46 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         logger.error(f"Error handling state change: {e}")
         return ConversationHandler.END
+# بعد از تابع safe_reply و قبل از تابع main این توابع را اضافه کنید:
+
+def is_main_menu_command(text: str) -> bool:
+    """بررسی آیا متن یک دستور منوی اصلی است"""
+    main_menu_commands = [
+        'اضافه کردن دارو',
+        'جستجوی دارو', 
+        'لیست داروهای من',
+        'ثبت نیاز جدید',
+        'لیست نیازهای من',
+        'ساخت کد پرسنل',
+        'تنظیم شاخه‌های دارویی',
+        'منوی اصلی',
+        '🔙 بازگشت به منوی اصلی'
+    ]
+    return text in main_menu_commands
+
+async def handle_main_menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """هندل کردن دستورات منوی اصلی در هر state"""
+    command = update.message.text
+    
+    # پاک کردن state فعلی
+    context.user_data.clear()
+    
+    if command == "اضافه کردن دارو":
+        return await add_drug_item(update, context)
+    elif command == "جستجوی دارو":
+        return await search_drug(update, context)
+    elif command == "لیست داروهای من":
+        return await list_my_drugs(update, context)
+    elif command == "ثبت نیاز جدید":
+        return await add_need(update, context)
+    elif command == "لیست نیازهای من":
+        return await list_my_needs(update, context)
+    elif command == "ساخت کد پرسنل":
+        return await generate_personnel_code(update, context)
+    elif command == "تنظیم شاخه‌های دارویی":
+        return await setup_medical_categories(update, context)
+    else:  # منوی اصلی یا بازگشت
+        return await clear_conversation_state(update, context)
 
 # اضافه کردن این هندلر در تابع main
 
@@ -4902,6 +4942,11 @@ def main():
         application.add_handler(CommandHandler('cancel', clear_conversation_state))
         application.add_handler(MessageHandler(filters.Regex('^🔙 بازگشت به منوی اصلی$'), handle_state_change))
         application.add_handler(CommandHandler('cancel', handle_state_change))
+        # در انتهای تابع main، بعد از سایر هندلرها:
+        application.add_handler(MessageHandler(
+        filters.TEXT & filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی|منوی اصلی|🔙 بازگشت به منوی اصلی)$'),
+        handle_main_menu_command
+        ))
         
         # Add error handler
         application.add_error_handler(error_handler)
