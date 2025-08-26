@@ -4564,7 +4564,7 @@ def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, complete_registration)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
             allow_reentry=True
         )
         
@@ -4578,7 +4578,7 @@ def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, simple_verify_code)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
             allow_reentry=True
         )
         
@@ -4592,7 +4592,7 @@ def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, verify_personnel_code)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
             allow_reentry=True
         )
         
@@ -4633,7 +4633,7 @@ def main():
                     CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
             allow_reentry=True,
             per_chat=False,
             per_user=True
@@ -4667,7 +4667,7 @@ def main():
                     CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
             allow_reentry=True
         )
         
@@ -4730,7 +4730,7 @@ def main():
                     CallbackQueryHandler(send_offer, pattern=r'^send_offer$')
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
             allow_reentry=True,
             per_chat=False,
             per_user=True
@@ -4749,7 +4749,7 @@ def main():
                     CallbackQueryHandler(save_categories, pattern="^save_categories$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
             allow_reentry=True
         )
         
@@ -4765,7 +4765,7 @@ def main():
                     MessageHandler(filters.Document.ALL | (filters.TEXT & filters.Entity("url")), handle_excel_upload)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],  # تغییر fallback
+            fallbacks=[CommandHandler('cancel', clear_conversation_state)],   # تغییر fallback
             allow_reentry=True
         )
         
