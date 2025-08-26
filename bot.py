@@ -582,7 +582,37 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     finally:
         if conn:
             conn.close()
-
+async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """پاک کردن state و context برای شروع جدید"""
+    try:
+        # پاک کردن context کاربر
+        context.user_data.clear()
+        
+        # بازگشت به منوی اصلی
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        if update.callback_query:
+            await update.callback_query.message.reply_text(
+                "به منوی اصلی بازگشتید:",
+                reply_markup=reply_markup
+            )
+        else:
+            await update.message.reply_text(
+                "به منوی اصلی بازگشتید:",
+                reply_markup=reply_markup
+            )
+        
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"Error clearing state: {e}")
+        return ConversationHandler.END
 # Command Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler with both registration options and verification check"""
@@ -4493,7 +4523,7 @@ def main():
                     MessageHandler(filters.CONTACT | filters.TEXT, receive_phone_for_admin_verify)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler('cancel', clear_conversation_state)],  # تغییر fallback
             allow_reentry=True
         )
         
@@ -4735,7 +4765,7 @@ def main():
                     MessageHandler(filters.Document.ALL | (filters.TEXT & filters.Entity("url")), handle_excel_upload)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler('cancel', cancel)],  # تغییر fallback
             allow_reentry=True
         )
         
@@ -4760,6 +4790,10 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_back_to_pharmacies, pattern="^back_to_pharmacies$"))
         application.add_handler(CommandHandler('reset_pharmacies', reset_pharmacies))
         application.add_handler(MessageHandler(filters.Regex('^منوی اصلی$'), main_menu_access))
+        application.add_handler(MessageHandler(filters.Regex('^منوی اصلی$'), clear_conversation_state))
+        application.add_handler(MessageHandler(filters.Regex('^🔙 بازگشت به منوی اصلی$'), clear_conversation_state))
+        application.add_handler(CommandHandler('menu', clear_conversation_state))
+        application.add_handler(CommandHandler('cancel', clear_conversation_state))
         
         # Add error handler
         application.add_error_handler(error_handler)
