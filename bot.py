@@ -2496,10 +2496,14 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """List user's drug items"""
+    """لیست داروهای کاربر با مدیریت خطای بهتر"""
     conn = None
     try:
         await ensure_user(update, context)
+        
+        # پاک کردن stateهای قبلی
+        context.user_data.pop('editing_drug', None)
+        context.user_data.pop('edit_field', None)
         
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
@@ -2514,8 +2518,13 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if drugs:
                 message = "💊 لیست داروهای شما:\n\n"
                 for drug in drugs:
+                    # کوتاه کردن نام طولانی داروها
+                    drug_name = drug['name']
+                    if len(drug_name) > 50:
+                        drug_name = drug_name[:47] + "..."
+                    
                     message += (
-                        f"• {drug['name']}\n"
+                        f"• {drug_name}\n"
                         f"  قیمت: {drug['price']}\n"
                         f"  تاریخ انقضا: {drug['date']}\n"
                         f"  موجودی: {drug['quantity']}\n\n"
@@ -2523,22 +2532,35 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 keyboard = [
                     [InlineKeyboardButton(
-                        f"✏️ ویرایش داروها\n({len(drugs)} دارو)",
+                        f"✏️ ویرایش داروها",
                         callback_data="edit_drugs"
                     )],
-                    [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+                    [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")]
                 ]
                 
                 await update.message.reply_text(
                     message,
-                    reply_markup=InlineKeyboardMarkup(keyboard))
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
                 return States.EDIT_DRUG
             else:
-                await update.message.reply_text("شما هنوز هیچ دارویی اضافه نکرده‌اید.")
+                await update.message.reply_text(
+                    "شما هنوز هیچ دارویی اضافه نکرده‌اید.",
+                    reply_markup=ReplyKeyboardMarkup(
+                        [['اضافه کردن دارو', '🔙 بازگشت به منوی اصلی']],
+                        resize_keyboard=True
+                    )
+                )
                 
     except Exception as e:
         logger.error(f"Error listing drugs: {e}")
-        await update.message.reply_text("خطا در دریافت لیست داروها. لطفا دوباره تلاش کنید.")
+        await update.message.reply_text(
+            "خطا در دریافت لیست داروها. لطفاً دوباره تلاش کنید.",
+            reply_markup=ReplyKeyboardMarkup(
+                [['🔙 بازگشت به منوی اصلی']],
+                resize_keyboard=True
+            )
+        )
     finally:
         if conn:
             conn.close()
@@ -4507,6 +4529,34 @@ async def main_menu_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in main_menu_access: {e}")
         await update.message.reply_text("خطایی در بازگشت به منوی اصلی رخ داد.")
         return ConversationHandler.END
+async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت تغییر فاز بین عملیات مختلف"""
+    try:
+        # پاک کردن state کامل
+        context.user_data.clear()
+        
+        # بازگشت به منوی اصلی
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        await update.message.reply_text(
+            "عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
+            reply_markup=reply_markup
+        )
+        
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"Error handling state change: {e}")
+        return ConversationHandler.END
+
+# اضافه کردن این هندلر در تابع main
+
 
 # اضافه کردن این هندلر در تابع main
 
@@ -4810,6 +4860,8 @@ def main():
         application.add_handler(MessageHandler(filters.Regex('^🔙 بازگشت به منوی اصلی$'), clear_conversation_state))
         application.add_handler(CommandHandler('menu', clear_conversation_state))
         application.add_handler(CommandHandler('cancel', clear_conversation_state))
+        application.add_handler(MessageHandler(filters.Regex('^🔙 بازگشت به منوی اصلی$'), handle_state_change))
+        application.add_handler(CommandHandler('cancel', handle_state_change))
         
         # Add error handler
         application.add_error_handler(error_handler)
