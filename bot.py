@@ -2183,29 +2183,71 @@ async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT
         return ConversationHandler.END
 
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start process to add a drug item with inline query"""
+    """شروع فرآیند اضافه کردن دارو"""
     try:
-        await ensure_user(update, context)
+        # بررسی اینکه آپدیت از نوع پیام است یا callback
+        if update.message:
+            chat_id = update.message.chat_id
+            reply_method = update.message.reply_text
+        elif update.callback_query:
+            await update.callback_query.answer()
+            chat_id = update.callback_query.message.chat_id
+            reply_method = lambda text, **kwargs: context.bot.send_message(chat_id=chat_id, text=text, **kwargs)
+        else:
+            logger.error("No valid message or callback_query in update")
+            return ConversationHandler.END
+
+        # بررسی وضعیت کاربر
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                SELECT is_verified, is_pharmacy_admin, is_personnel 
+                FROM users 
+                WHERE id = %s
+                ''', (update.effective_user.id,))
+                result = cursor.fetchone()
+                
+                if not result or not (result[0] or result[1] or result[2]):
+                    await reply_method(
+                        "❌ شما دسترسی لازم برای اضافه کردن دارو را ندارید. لطفاً ابتدا ثبت‌نام کنید.",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                    return ConversationHandler.END
+        except Exception as e:
+            logger.error(f"Error checking user verification: {e}")
+            if conn:
+                conn.rollback()
+            await reply_method("خطایی در بررسی وضعیت کاربر رخ داد.")
+            return ConversationHandler.END
+        finally:
+            if conn:
+                conn.close()
+
+        # ارسال پیام برای جستجوی دارو
+        keyboard = [[InlineKeyboardButton("🔍 جستجوی دارو", switch_inline_query_current_chat="")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # ایجاد دکمه برای جستجوی اینلاین
-        keyboard = [
-            [InlineKeyboardButton(
-                "🔍 جستجوی دارو", 
-                switch_inline_query_current_chat=""
-            )],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
-        ]
-        
-        await update.message.reply_text(
-            "برای اضافه کردن دارو جدید، روی دکمه جستجو کلیک کنید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+        await reply_method(
+            "لطفاً نام دارو را جستجو کنید:",
+            reply_markup=reply_markup
         )
         return States.SEARCH_DRUG_FOR_ADDING
+
     except Exception as e:
         logger.error(f"Error in add_drug_item: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        try:
+            if update.callback_query:
+                await context.bot.send_message(
+                    chat_id=update.callback_query.message.chat_id,
+                    text="خطایی رخ داده است. لطفاً دوباره تلاش کنید."
+                )
+            else:
+                await reply_method("خطایی رخ داده است. لطفاً دوباره تلاش کنید.")
+        except Exception as e2:
+            logger.error(f"Error in error handling: {e2}")
         return ConversationHandler.END
-
 def split_drug_info(full_text):
     """جدا کردن نام دارو (قسمت غیرعددی) و اطلاعات عددی/توضیحات"""
     # پیدا کردن اولین عدد در متن
@@ -4718,7 +4760,8 @@ def main():
             fallbacks=[
                 CommandHandler('cancel', clear_conversation_state),
                 MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
-                CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+                CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$'),
+                CallbackQueryHandler(lambda u, c: c.bot.send_message(u.callback_query.message.chat_id, "گزینه نامعتبر. لطفاً دوباره تلاش کنید."), pattern=r'.*')
             ], 
             allow_reentry=True,
             per_chat=False,
@@ -4756,7 +4799,8 @@ def main():
             fallbacks=[
                 CommandHandler('cancel', clear_conversation_state),
                 MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
-                CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+                CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$'),
+                CallbackQueryHandler(lambda u, c: c.bot.send_message(u.callback_query.message.chat_id, "گزینه نامعتبر. لطفاً دوباره تلاش کنید."), pattern=r'.*')
             ], 
             allow_reentry=True
         )
@@ -4823,7 +4867,8 @@ def main():
             fallbacks=[
                 CommandHandler('cancel', clear_conversation_state),
                 MessageHandler(filters.Regex(r'^🔙 بازگشت به منوی اصلی$'), clear_conversation_state),
-                CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$')
+                CallbackQueryHandler(clear_conversation_state, pattern=r'^back_to_main$'),
+                CallbackQueryHandler(lambda u, c: c.bot.send_message(u.callback_query.message.chat_id, "گزینه نامعتبر. لطفاً دوباره تلاش کنید."), pattern=r'.*')
             ], 
             allow_reentry=True,
             per_chat=False,
