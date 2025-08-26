@@ -799,7 +799,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data == "cancel":
             return await cancel(update, context)
         elif query.data == "back_to_main":  # <-- این خط را اضافه کنید
-            return await handle_back(update, context)
+            return await clear_conversation_state(update, context)
         elif query.data.startswith("pharmacy_"):
             return await select_pharmacy(update, context)
         elif query.data.startswith("offer_"):
