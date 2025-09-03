@@ -4654,7 +4654,7 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', clear_conversation_state), 
-            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)],
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), handle_state_change)],
             
             allow_reentry=True
         )
@@ -4697,7 +4697,7 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', clear_conversation_state),
-            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)],
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), handle_state_change)],
             allow_reentry=True,
             per_chat=False,
             per_user=True
@@ -4732,7 +4732,7 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', clear_conversation_state), 
-            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)],        
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), handle_state_change)],        
             allow_reentry=True
         )
         
@@ -4796,7 +4796,7 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', clear_conversation_state), 
-            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)],
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), handle_state_change)],
             allow_reentry=True,
             per_chat=False,
             per_user=True
@@ -4816,7 +4816,7 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', clear_conversation_state), 
-            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)],
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), handle_state_change)],
             allow_reentry=True
         )
         
@@ -4832,7 +4832,7 @@ def main():
                 ]
             },
             fallbacks=[CommandHandler('cancel', clear_conversation_state),  
-            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)],
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), handle_state_change)],
             allow_reentry=True
         )
         
