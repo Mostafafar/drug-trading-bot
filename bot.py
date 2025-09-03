@@ -641,6 +641,52 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
         except Exception as send_error:
             logger.error(f"Error sending error message: {send_error}")
         return ConversationHandler.END
+async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت تغییر فاز بین عملیات مختلف با پاک کردن state قبلی"""
+    try:
+        # پاک کردن state قبلی
+        await clear_conversation_state(update, context)
+        
+        # دریافت متن ورودی
+        text = update.message.text
+        
+        # هدایت به عملیات مربوطه
+        if text == 'ساخت کد پرسنل':
+            return await generate_personnel_code(update, context)
+        elif text == 'جستجوی دارو':
+            return await search_drug(update, context)
+        elif text == 'اضافه کردن دارو':
+            return await add_drug_item(update, context)
+        elif text == 'لیست داروهای من':
+            return await list_my_drugs(update, context)
+        elif text == 'ثبت نیاز جدید':
+            return await add_need(update, context)
+        elif text == 'لیست نیازهای من':
+            return await list_my_needs(update, context)
+        elif text == 'تنظیم شاخه‌های دارویی':
+            return await setup_medical_categories(update, context)
+        else:
+            # اگر ورودی غیرمنتظره بود، به منوی اصلی برگرد
+            keyboard = [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['لیست داروهای من', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                ['تنظیم شاخه‌های دارویی']
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            await update.message.reply_text(
+                "لطفاً یک گزینه معتبر از منوی اصلی انتخاب کنید:",
+                reply_markup=reply_markup
+            )
+            return ConversationHandler.END
+            
+    except Exception as e:
+        logger.error(f"Error in handle_state_change: {e}")
+        try:
+            await update.message.reply_text("خطایی رخ داد. لطفاً دوباره تلاش کنید.")
+        except Exception as send_error:
+            logger.error(f"Error sending error message: {send_error}")
+        return ConversationHandler.END
 # Command Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler with both registration options and verification check"""
@@ -4821,6 +4867,7 @@ def main():
         filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'),
         handle_state_change  # تابعی که state رو پاک میکنه و عملیات رو شروع میکنه
         ))
+        
         
         # Add error handler
         application.add_error_handler(error_handler)
