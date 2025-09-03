@@ -583,35 +583,63 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
         if conn:
             conn.close()
 async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """پاک کردن state و context برای شروع جدید"""
+    """Clear the conversation state and return to the main menu."""
     try:
-        # پاک کردن context کاربر
+        # Clear all user data to reset the conversation state
         context.user_data.clear()
         
-        # بازگشت به منوی اصلی
+        # Define the main menu keyboard
         keyboard = [
             ['اضافه کردن دارو', 'جستجوی دارو'],
             ['لیست داروهای من', 'ثبت نیاز جدید'],
             ['لیست نیازهای من', 'ساخت کد پرسنل'],
             ['تنظیم شاخه‌های دارویی']
         ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
         
+        # Handle both callback query and message updates
         if update.callback_query:
-            await update.callback_query.message.reply_text(
-                "به منوی اصلی بازگشتید:",
+            await update.callback_query.answer()  # Always answer the callback query
+            try:
+                # Try to edit the existing message
+                await update.callback_query.edit_message_text(
+                    text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
+                    reply_markup=reply_markup
+                )
+            except Exception as edit_error:
+                logger.error(f"Error editing callback message: {edit_error}")
+                # Fallback to sending a new message if editing fails
+                await context.bot.send_message(
+                    chat_id=update.callback_query.message.chat_id,
+                    text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
+                    reply_markup=reply_markup
+                )
+        elif update.message:
+            # Handle regular message update
+            await update.message.reply_text(
+                text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
                 reply_markup=reply_markup
             )
         else:
-            await update.message.reply_text(
-                "به منوی اصلی بازگشتید:",
+            # Fallback in case neither callback nor message is present
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
                 reply_markup=reply_markup
             )
         
         return ConversationHandler.END
         
     except Exception as e:
-        logger.error(f"Error clearing state: {e}")
+        logger.error(f"Error in clear_conversation_state: {e}")
+        try:
+            # Attempt to notify the user of the error
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="خطایی در بازگشت به منوی اصلی رخ داد. لطفاً دوباره تلاش کنید."
+            )
+        except Exception as send_error:
+            logger.error(f"Error sending error message: {send_error}")
         return ConversationHandler.END
 # Command Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -697,6 +725,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 async def generate_personnel_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ساخت کد پرسنل توسط داروخانه تایید شده"""
+    await clear_conversation_state(update, context)
     conn = None
     try:
         conn = get_db_connection()
@@ -934,77 +963,7 @@ async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return ConversationHandler.END
 
-async def reset_pharmacies(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """پاک کردن اطلاعات داروخانه‌ها و داده‌های مرتبط برای ثبت‌نام مجدد"""
-    user_id = update.effective_user.id
-    
-    # بررسی دسترسی ادمین
-    conn = None
-    try:
-        conn = get_db_connection()
-        with conn.cursor() as cursor:
-            cursor.execute('SELECT is_admin FROM users WHERE id = %s', (user_id,))
-            result = cursor.fetchone()
-            if not result or not result[0]:
-                await update.message.reply_text("❌ فقط ادمین می‌تواند این عملیات را انجام دهد.")
-                return
-    
-        # اجرای دستورات پاک‌سازی
-        with conn.cursor() as cursor:
-            cursor.execute('''
-                SET CONSTRAINTS ALL DEFERRED;
-                
-                -- حذف داده‌های وابسته
-                DELETE FROM offer_items 
-                WHERE offer_id IN (SELECT id FROM offers WHERE pharmacy_id IN (SELECT user_id FROM pharmacies));
-                
-                DELETE FROM compensation_items 
-                WHERE offer_id IN (SELECT id FROM offers WHERE pharmacy_id IN (SELECT user_id FROM pharmacies));
-                
-                DELETE FROM offers 
-                WHERE pharmacy_id IN (SELECT user_id FROM pharmacies);
-                
-                DELETE FROM personnel_codes;
-                
-                DELETE FROM match_notifications 
-                WHERE user_id IN (SELECT user_id FROM pharmacies);
-                
-                DELETE FROM exchanges 
-                WHERE from_pharmacy_id IN (SELECT user_id FROM pharmacies) 
-                   OR to_pharmacy_id IN (SELECT user_id FROM pharmacies);
-                
-                -- ریست کردن وضعیت کاربران
-                UPDATE users 
-                SET is_verified = FALSE, 
-                    is_pharmacy_admin = FALSE, 
-                    verification_method = NULL, 
-                    verification_code = NULL,
-                    simple_code = NULL,
-                    creator_id = NULL
-                WHERE id IN (SELECT user_id FROM pharmacies);
-                
-                -- حذف اطلاعات داروخانه‌ها
-                DELETE FROM pharmacies;
-                
-                SET CONSTRAINTS ALL IMMEDIATE;
-                
-                -- ریست سریال‌ها (اختیاری)
-                ALTER SEQUENCE pharmacies_user_id_seq RESTART WITH 1;
-            ''')
-            conn.commit()
-            
-            await update.message.reply_text(
-                "✅ تمام اطلاعات داروخانه‌ها پاک شد. کاربران باید دوباره ثبت‌نام کنند."
-            )
-            
-    except Exception as e:
-        logger.error(f"خطا در پاک‌سازی داروخانه‌ها: {e}")
-        if conn:
-            conn.rollback()
-        await update.message.reply_text("❌ خطایی در پاک‌سازی اطلاعات رخ داد.")
-    finally:
-        if conn:
-            conn.close()
+
 
 async def simple_verify_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start simple verification process"""
@@ -1338,6 +1297,7 @@ async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def generate_personnel_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ساخت کد پرسنل توسط داروخانه تایید شده"""
+    await clear_conversation_state(update, context)
     conn = None
     try:
         conn = get_db_connection()
@@ -1860,61 +1820,6 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 
-async def generate_simple_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Generate a simple verification code (admin only)"""
-    try:
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                # Check if user is admin
-                cursor.execute('''
-                SELECT is_admin FROM users WHERE id = %s
-                ''', (update.effective_user.id,))
-                result = cursor.fetchone()
-                
-                if not result or not result[0]:
-                    await update.message.reply_text("شما مجوز انجام این کار را ندارید.")
-                    return
-    
-        except Exception as e:
-            logger.error(f"Error checking admin status: {e}")
-            await update.message.reply_text("خطا در بررسی مجوزها.")
-            return
-        finally:
-            if conn:
-                conn.close()
-        
-        # Generate a 5-digit code
-        code = str(random.randint(10000, 99999))
-        
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                cursor.execute('''
-                INSERT INTO simple_codes (code, max_uses)
-                VALUES (%s, %s)
-                ON CONFLICT (code) DO UPDATE SET max_uses = EXCLUDED.max_uses
-                ''', (code, 5))
-                conn.commit()
-                
-                await update.message.reply_text(
-                    f"✅ کد تایید ساده ایجاد شد:\n\n"
-                    f"کد: {code}\n"
-                    f"حداکثر استفاده: 5 کاربر\n\n"
-                    "این کد را می‌توانید به دیگران بدهید تا بدون ثبت مدارک از ربات استفاده کنند."
-                )
-        except Exception as e:
-            logger.error(f"Error generating simple code: {e}")
-            await update.message.reply_text("خطا در ایجاد کد تایید.")
-        finally:
-            if conn:
-                conn.close()
-    except Exception as e:
-        logger.error(f"Error in generate_simple_code: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-
 async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Verify a pharmacy (admin only)"""
     try:
@@ -1990,6 +1895,7 @@ async def verify_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
 async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Toggle medical category selection with instant visual feedback"""
+    await clear_conversation_state(update, context)
     query = update.callback_query
     await query.answer("🔄 در حال به‌روزرسانی...")  # بازخورد فوری
     
@@ -2070,6 +1976,7 @@ async def toggle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save selected medical categories"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -2099,6 +2006,7 @@ async def save_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Initialize category selection screen"""
+    await clear_conversation_state(update, context)
     conn = None
     try:
         user_id = update.effective_user.id
@@ -2159,6 +2067,7 @@ async def setup_medical_categories(update: Update, context: ContextTypes.DEFAULT
 # Drug Management
 async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle add drug from inline query result"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -2184,6 +2093,7 @@ async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT
 
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a drug item with inline query"""
+    await clear_conversation_state(update, context)
     try:
         await ensure_user(update, context)
         
@@ -2221,6 +2131,7 @@ def split_drug_info(full_text):
 
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline query for drug search with smart splitting"""
+    await clear_conversation_state(update, context)
     query = update.inline_query.query
     if not query:
         return
@@ -2287,6 +2198,7 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
         return ConversationHandler.END
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع جستجو با اینلاین کوئری"""
+    await clear_conversation_state(update, context)
     keyboard = [
         [InlineKeyboardButton("🔍 جستجوی دارو", switch_inline_query_current_chat="")],
         [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
@@ -2301,6 +2213,7 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
 
 async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Select drug from search results to add"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -2401,6 +2314,7 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده"""
+    await clear_conversation_state(update, context)
     try:
         quantity = update.message.text.strip()
         
@@ -2497,6 +2411,7 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """لیست داروهای کاربر با مدیریت خطای بهتر"""
+    await clear_conversation_state(update, context)
     conn = None
     try:
         await ensure_user(update, context)
@@ -2569,6 +2484,7 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start drug editing process"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -2617,6 +2533,7 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Edit specific drug item"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -2675,6 +2592,7 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug edit action selection"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -2721,6 +2639,7 @@ async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_
 
 async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save drug edit changes"""
+    await clear_conversation_state(update, context)
     try:
         edit_field = context.user_data.get('edit_field')
         new_value = update.message.text
@@ -2795,6 +2714,7 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug deletion confirmation"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -2919,6 +2839,7 @@ async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
 # Needs Management
 async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start process to add a need"""
+    await clear_conversation_state(update, context)
     try:
         await ensure_user(update, context)
         await update.message.reply_text("لطفا نام دارویی که نیاز دارید را وارد کنید:")
@@ -2941,6 +2862,7 @@ async def save_need_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save need description"""
+    await clear_conversation_state(update, context)
     try:
         context.user_data['need_desc'] = update.message.text
         await update.message.reply_text("لطفا تعداد مورد نیاز را وارد کنید:")
@@ -2952,6 +2874,7 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save need to database"""
+    await clear_conversation_state(update, context)
     try:
         try:
             quantity = int(update.message.text)
@@ -3004,6 +2927,7 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List user's needs"""
+    await clear_conversation_state(update, context)
     try:
         await ensure_user(update, context)
         
@@ -3053,6 +2977,7 @@ async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start needs editing process"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -3101,6 +3026,7 @@ async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def edit_need_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Edit specific need item"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -3159,6 +3085,7 @@ async def edit_need_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_need_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle need edit action selection"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -3212,6 +3139,7 @@ async def handle_need_edit_action(update: Update, context: ContextTypes.DEFAULT_
 
 async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save need edit changes"""
+    await clear_conversation_state(update, context)
     try:
         edit_field = context.user_data.get('edit_field')
         new_value = update.message.text
@@ -3284,6 +3212,7 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle need deletion confirmation"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -3325,6 +3254,7 @@ async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
 # Drug Trading Functions
 async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start drug search process"""
+    await clear_conversation_state(update, context)
     try:
         await update.message.reply_text(
             "لطفا نام داروی مورد نظر را وارد کنید:",
@@ -3338,6 +3268,7 @@ async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """جستجوی دارو و نمایش نتایج با دکمه اینلاین برای انتخاب داروخانه"""
+    await clear_conversation_state(update, context)
     try:
         drug_name = update.message.text.strip()
         user_id = update.effective_user.id
@@ -3443,6 +3374,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle pharmacy selection and initiate drug selection"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -3488,6 +3420,8 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش داروهای کاربر در صفحه اول و داروهای داروخانه هدف در صفحه دوم"""
+    await clear_conversation_state(update, context)
+    
     try:
         # تعیین متغیرهای اولیه
         chat_id = None
@@ -3665,6 +3599,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
     return States.SELECT_DRUGS
 async def handle_drug_selection_from_keyboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """پردازش انتخاب دارو از کیبورد"""
+    await clear_conversation_state(update, context)
     try:
         selection = update.message.text
         current_list_type = context.user_data.get('current_list_type', 'mine')
@@ -3734,6 +3669,7 @@ async def handle_drug_selection_from_keyboard(update: Update, context: ContextTy
 
 async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive quantity for selected drug and show updated price difference"""
+    await clear_conversation_state(update, context)
     try:
         quantity = update.message.text.strip()
         current_selection = context.user_data.get('current_selection')
@@ -3805,6 +3741,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """انتخاب دارو از لیست"""
+    await clear_conversation_state(update, context)
     try:
         selection = update.message.text
         user_id = update.effective_user.id
@@ -3880,6 +3817,7 @@ async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_back_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت دکمه بازگشت"""
+    await clear_conversation_state(update, context)
     try:
         if update.message.text == "🔙 بازگشت به داروخانه‌ها":
             # پاک کردن context مربوط به انتخاب دارو
@@ -3906,6 +3844,7 @@ async def handle_back_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def handle_finish_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت دکمه اتمام انتخاب"""
+    await clear_conversation_state(update, context)
     try:
         if update.message.text == "✅ اتمام انتخاب":
             return await submit_offer(update, context)
@@ -3917,6 +3856,7 @@ async def handle_finish_selection(update: Update, context: ContextTypes.DEFAULT_
 
 async def safe_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, reply_markup=None):
     """ارسال پیام به صورت ایمن برای هر دو نوع update"""
+    await clear_conversation_state(update, context)
     try:
         if update.callback_query:
             # برای callback query، پیام جدید ارسال می‌کنیم
@@ -3947,6 +3887,7 @@ async def safe_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: s
     
 async def handle_compensation_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle selection of compensation drugs"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -3997,6 +3938,7 @@ async def handle_compensation_selection(update: Update, context: ContextTypes.DE
     return States.COMPENSATION_SELECTION
 async def save_compensation_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save quantity for compensation drug"""
+    await clear_conversation_state(update, context)
     try:
         quantity = update.message.text.strip()
         current_drug = context.user_data.get('current_comp_drug')
@@ -4038,6 +3980,7 @@ async def save_compensation_quantity(update: Update, context: ContextTypes.DEFAU
     return States.COMPENSATION_SELECTION
 async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show final totals before sending offer"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -4087,6 +4030,7 @@ async def confirm_totals(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show selected drugs and compensation items with price difference"""
+    await clear_conversation_state(update, context)
     try:
         if not update.message:
             logger.error("No message in update")
@@ -4174,6 +4118,7 @@ async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Confirm the offer before sending"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -4230,6 +4175,7 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send the finalized offer to the pharmacy"""
+    await clear_conversation_state(update, context)
     try:
         query = update.callback_query
         await query.answer()
@@ -4338,6 +4284,7 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_back_to_pharmacies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle back to pharmacy selection"""
+    await clear_conversation_state(update, context)
     try:
         # پاک کردن کامل context مربوط به انتخاب دارو
         keys_to_remove = [
@@ -4374,6 +4321,7 @@ async def handle_back_to_pharmacies(update: Update, context: ContextTypes.DEFAUL
         return ConversationHandler.END
 async def handle_match_notification(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle match notification and initiate exchange"""
+    
     try:
         query = update.callback_query
         await query.answer()
@@ -4482,6 +4430,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=update.effective_chat.id,
                     text=error_message
                 )
+                await clear_conversation_state(update, context)
             except:
                 pass
             
@@ -4658,7 +4607,9 @@ def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, verify_personnel_code)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            fallbacks=[CommandHandler('cancel', clear_conversation_state), 
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)]
+            
             allow_reentry=True
         )
         
@@ -4699,7 +4650,8 @@ def main():
                     CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            fallbacks=[CommandHandler('cancel', clear_conversation_state),
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)]
             allow_reentry=True,
             per_chat=False,
             per_user=True
@@ -4733,7 +4685,8 @@ def main():
                     CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            fallbacks=[CommandHandler('cancel', clear_conversation_state), 
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)]        
             allow_reentry=True
         )
         
@@ -4796,7 +4749,8 @@ def main():
                     CallbackQueryHandler(send_offer, pattern=r'^send_offer$')
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            fallbacks=[CommandHandler('cancel', clear_conversation_state), 
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)]
             allow_reentry=True,
             per_chat=False,
             per_user=True
@@ -4815,7 +4769,8 @@ def main():
                     CallbackQueryHandler(save_categories, pattern="^save_categories$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+            fallbacks=[CommandHandler('cancel', clear_conversation_state), 
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)]
             allow_reentry=True
         )
         
@@ -4831,7 +4786,8 @@ def main():
                     MessageHandler(filters.Document.ALL | (filters.TEXT & filters.Entity("url")), handle_excel_upload)
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)],   # تغییر fallback
+            fallbacks=[CommandHandler('cancel', clear_conversation_state),  
+            MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), clear_conversation_state)]
             allow_reentry=True
         )
         
@@ -4862,6 +4818,10 @@ def main():
         application.add_handler(CommandHandler('cancel', clear_conversation_state))
         application.add_handler(MessageHandler(filters.Regex('^🔙 بازگشت به منوی اصلی$'), handle_state_change))
         application.add_handler(CommandHandler('cancel', handle_state_change))
+        application.add_handler(MessageHandler(
+        filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'),
+        handle_state_change  # تابعی که state رو پاک میکنه و عملیات رو شروع میکنه
+        ))
         
         # Add error handler
         application.add_error_handler(error_handler)
