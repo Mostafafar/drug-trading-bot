@@ -4778,7 +4778,6 @@ def main():
         admin_handler = ConversationHandler(
             entry_points=[
                 CommandHandler('upload_excel', upload_excel_start),
-                CommandHandler('generate_code', generate_simple_code),
                 CommandHandler('verify', verify_pharmacy)
             ],
             states={
