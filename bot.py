@@ -4809,7 +4809,7 @@ def main():
         application.add_handler(CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"))
         application.add_handler(CallbackQueryHandler(submit_offer, pattern="^submit_offer$"))
         application.add_handler(CallbackQueryHandler(handle_back_to_pharmacies, pattern="^back_to_pharmacies$"))
-        application.add_handler(CommandHandler('reset_pharmacies', reset_pharmacies))
+        
         application.add_handler(MessageHandler(filters.Regex('^منوی اصلی$'), main_menu_access))
         application.add_handler(MessageHandler(filters.Regex('^منوی اصلی$'), clear_conversation_state))
         application.add_handler(MessageHandler(filters.Regex('^🔙 بازگشت به منوی اصلی$'), clear_conversation_state))
