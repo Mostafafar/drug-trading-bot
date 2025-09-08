@@ -582,31 +582,76 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     finally:
         if conn:
             conn.close()
-async def clear_state_silently(context: ContextTypes.DEFAULT_TYPE):
-    """پاک کردن state بدون نمایش پیام"""
-    keys_to_remove = [
-        # داروها
-        'selected_drug', 'expiry_date', 'drug_quantity', 'editing_drug', 
-        'edit_field', 'matched_drugs', 'current_selection',
+async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT_TYPE, silent: bool = False):
+    """Clear the conversation state without showing cancellation message"""
+    try:
+        # پاک کردن تمام stateهای مربوط به عملیات مختلف
+        keys_to_remove = [
+            # داروها
+            'selected_drug', 'expiry_date', 'drug_quantity', 'editing_drug', 
+            'edit_field', 'matched_drugs', 'current_selection',
+            
+            # نیازها
+            'need_name', 'need_desc', 'editing_need',
+            
+            # جستجو و مبادله
+            'selected_pharmacy_id', 'selected_pharmacy_name', 
+            'offer_items', 'comp_items', 'current_list', 
+            'page_target', 'page_mine', 'match_drug', 'match_need',
+            'current_comp_drug', 'target_drugs', 'my_drugs',
+            
+            # سایر
+            'pharmacy_name', 'founder_name', 'national_card',
+            'license', 'medical_card', 'phone', 'address',
+            'verification_code'
+        ]
         
-        # نیازها
-        'need_name', 'need_desc', 'editing_need',
+        for key in keys_to_remove:
+            if key in context.user_data:
+                del context.user_data[key]
         
-        # جستجو و مبادله
-        'selected_pharmacy_id', 'selected_pharmacy_name', 
-        'offer_items', 'comp_items', 'current_list', 
-        'page_target', 'page_mine', 'match_drug', 'match_need',
-        'current_comp_drug', 'target_drugs', 'my_drugs',
+        if silent:
+            return ConversationHandler.END
+            
+        # فقط اگر silent نباشد پیام نشان دهد
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
         
-        # سایر
-        'pharmacy_name', 'founder_name', 'national_card',
-        'license', 'medical_card', 'phone', 'address',
-        'verification_code'
-    ]
-    
-    for key in keys_to_remove:
-        if key in context.user_data:
-            del context.user_data[key]
+        if update.callback_query:
+            await update.callback_query.answer()
+            try:
+                await update.callback_query.edit_message_text(
+                    text="به منوی اصلی بازگشتید:",
+                    reply_markup=reply_markup
+                )
+            except:
+                await context.bot.send_message(
+                    chat_id=update.callback_query.message.chat_id,
+                    text="به منوی اصلی بازگشتید:",
+                    reply_markup=reply_markup
+                )
+        elif update.message:
+            await update.message.reply_text(
+                text="به منوی اصلی بازگشتید:",
+                reply_markup=reply_markup
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="به منوی اصلی بازگشتید:",
+                reply_markup=reply_markup
+            )
+        
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"Error in clear_conversation_state: {e}")
+        return ConversationHandler.END
 # Command Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler with both registration options and verification check"""
@@ -4449,10 +4494,10 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         text = update.message.text
         
-        # پاک کردن state بدون نمایش پیام
-        await clear_state_silently(context)
+        # ابتدا state فعلی را کاملاً پاک کنید (بی صدا)
+        await clear_conversation_state(update, context, silent=True)
         
-        # مستقیم به عملیات جدید بروید
+        # سپس عملیات جدید را شروع کنید
         if text == 'ساخت کد پرسنل':
             return await generate_personnel_code(update, context)
         elif text == 'جستجوی دارو':
@@ -4468,7 +4513,7 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
         elif text == 'تنظیم شاخه‌های دارویی':
             return await setup_medical_categories(update, context)
         else:
-            # فقط در صورت انتخاب گزینه نامعتبر منو را نشان دهید
+            # اگر گزینه نامعتبر بود، فقط منو را نشان دهد
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
                 ['لیست داروهای من', 'ثبت نیاز جدید'],
@@ -4484,7 +4529,6 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
             
     except Exception as e:
         logger.error(f"Error in handle_state_change: {e}")
-        await update.message.reply_text("خطایی رخ داد. لطفاً دوباره تلاش کنید.")
         return ConversationHandler.END
 def main():
     """Start the bot"""
