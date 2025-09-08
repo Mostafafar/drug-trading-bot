@@ -607,53 +607,6 @@ async def clear_state_silently(context: ContextTypes.DEFAULT_TYPE):
     for key in keys_to_remove:
         if key in context.user_data:
             del context.user_data[key]
-        
-        # منوی اصلی
-        keyboard = [
-            ['اضافه کردن دارو', 'جستجوی دارو'],
-            ['لیست داروهای من', 'ثبت نیاز جدید'],
-            ['لیست نیازهای من', 'ساخت کد پرسنل'],
-            ['تنظیم شاخه‌های دارویی']
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-        
-        if update.callback_query:
-            await update.callback_query.answer()
-            try:
-                await update.callback_query.edit_message_text(
-                    text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
-                    reply_markup=reply_markup
-                )
-            except:
-                await context.bot.send_message(
-                    chat_id=update.callback_query.message.chat_id,
-                    text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
-                    reply_markup=reply_markup
-                )
-        elif update.message:
-            await update.message.reply_text(
-                text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
-                reply_markup=reply_markup
-            )
-        else:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
-                reply_markup=reply_markup
-            )
-        
-        return ConversationHandler.END
-        
-    except Exception as e:
-        logger.error(f"Error in clear_conversation_state: {e}")
-        try:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="خطایی در بازگشت به منوی اصلی رخ داد. لطفاً دوباره تلاش کنید."
-            )
-        except:
-            pass
-        return ConversationHandler.END
 # Command Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler with both registration options and verification check"""
