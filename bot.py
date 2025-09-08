@@ -582,13 +582,33 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     finally:
         if conn:
             conn.close()
-async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Clear the conversation state and return to the main menu."""
-    try:
-        # Clear all user data to reset the conversation state
-        context.user_data.clear()
+async def clear_state_silently(context: ContextTypes.DEFAULT_TYPE):
+    """پاک کردن state بدون نمایش پیام"""
+    keys_to_remove = [
+        # داروها
+        'selected_drug', 'expiry_date', 'drug_quantity', 'editing_drug', 
+        'edit_field', 'matched_drugs', 'current_selection',
         
-        # Define the main menu keyboard
+        # نیازها
+        'need_name', 'need_desc', 'editing_need',
+        
+        # جستجو و مبادله
+        'selected_pharmacy_id', 'selected_pharmacy_name', 
+        'offer_items', 'comp_items', 'current_list', 
+        'page_target', 'page_mine', 'match_drug', 'match_need',
+        'current_comp_drug', 'target_drugs', 'my_drugs',
+        
+        # سایر
+        'pharmacy_name', 'founder_name', 'national_card',
+        'license', 'medical_card', 'phone', 'address',
+        'verification_code'
+    ]
+    
+    for key in keys_to_remove:
+        if key in context.user_data:
+            del context.user_data[key]
+        
+        # منوی اصلی
         keyboard = [
             ['اضافه کردن دارو', 'جستجوی دارو'],
             ['لیست داروهای من', 'ثبت نیاز جدید'],
@@ -597,31 +617,25 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
         
-        # Handle both callback query and message updates
         if update.callback_query:
-            await update.callback_query.answer()  # Always answer the callback query
+            await update.callback_query.answer()
             try:
-                # Try to edit the existing message
                 await update.callback_query.edit_message_text(
                     text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
                     reply_markup=reply_markup
                 )
-            except Exception as edit_error:
-                logger.error(f"Error editing callback message: {edit_error}")
-                # Fallback to sending a new message if editing fails
+            except:
                 await context.bot.send_message(
                     chat_id=update.callback_query.message.chat_id,
                     text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
                     reply_markup=reply_markup
                 )
         elif update.message:
-            # Handle regular message update
             await update.message.reply_text(
                 text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
                 reply_markup=reply_markup
             )
         else:
-            # Fallback in case neither callback nor message is present
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
@@ -633,15 +647,13 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
     except Exception as e:
         logger.error(f"Error in clear_conversation_state: {e}")
         try:
-            # Attempt to notify the user of the error
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="خطایی در بازگشت به منوی اصلی رخ داد. لطفاً دوباره تلاش کنید."
             )
-        except Exception as send_error:
-            logger.error(f"Error sending error message: {send_error}")
+        except:
+            pass
         return ConversationHandler.END
-
 # Command Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler with both registration options and verification check"""
@@ -4480,48 +4492,14 @@ async def main_menu_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی در بازگشت به منوی اصلی رخ داد.")
         return ConversationHandler.END
 async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت تغییر فاز بین عملیات مختلف بدون نمایش پیام لغو"""
     try:
-        # پاک کردن state کامل
-        context.user_data.clear()
+        text = update.message.text
         
-        # ایجاد کیبورد منوی اصلی
-        keyboard = [
-            ['اضافه کردن دارو', 'جستجوی دارو'],
-            ['لیست داروهای من', 'ثبت نیاز جدید'],
-            ['لیست نیازهای من', 'ساخت کد پرسنل'],
-            ['تنظیم شاخه‌های دارویی']
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        # پاک کردن state بدون نمایش پیام
+        await clear_state_silently(context)
         
-        # مدیریت هر دو نوع ورودی
-        if update.callback_query:
-            await update.callback_query.answer()
-            try:
-                await update.callback_query.edit_message_text(
-                    text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
-                    reply_markup=reply_markup
-                )
-            except Exception as edit_error:
-                logger.error(f"Error editing callback message: {edit_error}")
-                await context.bot.send_message(
-                    chat_id=update.callback_query.message.chat_id,
-                    text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
-                    reply_markup=reply_markup
-                )
-        elif update.message:
-            await update.message.reply_text(
-                text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
-                reply_markup=reply_markup
-            )
-        else:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="عملیات قبلی لغو شد. به منوی اصلی بازگشتید:",
-                reply_markup=reply_markup
-            )
-        
-        # هدایت به عملیات مربوطه
-        text = update.message.text if update.message else None
+        # مستقیم به عملیات جدید بروید
         if text == 'ساخت کد پرسنل':
             return await generate_personnel_code(update, context)
         elif text == 'جستجوی دارو':
@@ -4536,18 +4514,24 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
             return await list_my_needs(update, context)
         elif text == 'تنظیم شاخه‌های دارویی':
             return await setup_medical_categories(update, context)
-        
-        return ConversationHandler.END
-        
-    except Exception as e:
-        logger.error(f"Error handling state change: {e}")
-        try:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="خطایی در تغییر فاز رخ داد. لطفاً دوباره تلاش کنید."
+        else:
+            # فقط در صورت انتخاب گزینه نامعتبر منو را نشان دهید
+            keyboard = [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['لیست داروهای من', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                ['تنظیم شاخه‌های دارویی']
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            await update.message.reply_text(
+                "لطفاً یک گزینه معتبر از منوی اصلی انتخاب کنید:",
+                reply_markup=reply_markup
             )
-        except Exception as send_error:
-            logger.error(f"Error sending error message: {send_error}")
+            return ConversationHandler.END
+            
+    except Exception as e:
+        logger.error(f"Error in handle_state_change: {e}")
+        await update.message.reply_text("خطایی رخ داد. لطفاً دوباره تلاش کنید.")
         return ConversationHandler.END
 def main():
     """Start the bot"""
