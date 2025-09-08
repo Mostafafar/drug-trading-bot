@@ -2494,53 +2494,61 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start drug editing process"""
-    await clear_conversation_state(update, context, silent=True)
     try:
         query = update.callback_query
         await query.answer()
-
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                cursor.execute('''
-                SELECT id, name, price, date, quantity 
-                FROM drug_items 
+        
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+            cursor.execute('''
+                SELECT id, name, price, quantity, date
+                FROM drug_items
                 WHERE user_id = %s AND quantity > 0
-                ORDER BY name
-                ''', (update.effective_user.id,))
-                drugs = cursor.fetchall()
-                
-                if not drugs:
-                    await query.edit_message_text("هیچ دارویی برای ویرایش وجود ندارد.")
-                    return ConversationHandler.END
-                
-                # در تابع edit_drugs:
-                keyboard = []
-                for drug in drugs:
-                    display_text = f"{format_button_text(drug['name'])}\nموجودی: {drug['quantity']}"
-                    keyboard.append([InlineKeyboardButton(
-                        display_text,
-                        callback_data=f"edit_drug_{drug['id']}"
-                    )])
-                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
+                ORDER BY created_at DESC
+            ''', (update.effective_user.id,))
+            drugs = cursor.fetchall()
+            
+            if not drugs:
                 await query.edit_message_text(
-                    "لطفا دارویی که می‌خواهید ویرایش کنید را انتخاب کنید:",
-                    reply_markup=InlineKeyboardMarkup(keyboard))
-                return States.EDIT_DRUG
-                
-        except Exception as e:
-            logger.error(f"Error in edit_drugs: {e}")
-            await query.edit_message_text("خطا در دریافت لیست داروها.")
-            return ConversationHandler.END
-        finally:
-            if conn:
-                conn.close()
+                    "هیچ دارویی برای ویرایش یافت نشد.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")]
+                    ])
+                )
+                return ConversationHandler.END
+            
+            message = "📋 لیست داروهای شما برای ویرایش:\n\n"
+            keyboard = []
+            for drug in drugs:
+                message += (
+                    f"💊 {drug['name']}\n"
+                    f"💰 قیمت: {format_price(parse_price(drug['price']))}\n"
+                    f"📦 تعداد: {drug['quantity']}\n"
+                    f"📅 تاریخ انقضا: {drug['date']}\n\n"
+                )
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"ویرایش {format_button_text(drug['name'])}",
+                        callback_data=f"edit_drug_{drug['id']}"
+                    )
+                ])
+            
+            keyboard.append([InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                message,
+                reply_markup=reply_markup
+            )
+            return States.EDIT_DRUG
+            
     except Exception as e:
         logger.error(f"Error in edit_drugs: {e}")
-        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        await query.edit_message_text("خطایی در نمایش لیست برای ویرایش رخ داد.")
         return ConversationHandler.END
+    finally:
+        if conn:
+            conn.close()
 
 async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Edit specific drug item"""
