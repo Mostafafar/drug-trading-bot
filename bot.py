@@ -116,6 +116,7 @@ class States(Enum):
     COMPENSATION_QUANTITY = auto()
     CONFIRM_TOTALS = auto()  
     ADMIN_VERIFY_PHARMACY_NAME = auto()
+    SEARCH_DRUG_FOR_NEED = auto()  # اضافه کردن این خط
 
 def get_db_connection(max_retries=3, retry_delay=1.0):
     """Get a database connection with retry logic"""
