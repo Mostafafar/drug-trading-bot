@@ -2898,6 +2898,34 @@ async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in add_need: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def handle_need_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle callback for need drug selection"""
+    await clear_conversation_state(update, context, silent=True)
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        if query.data.startswith("need_drug_"):
+            idx = int(query.data.split("_")[2])
+            if 0 <= idx < len(drug_list):
+                selected_drug = drug_list[idx]
+                context.user_data['need_drug'] = {
+                    'name': selected_drug[0],
+                    'price': selected_drug[1]
+                }
+                
+                # حذف inline keyboard و نمایش پیام جدید
+                await query.edit_message_text(
+                    f"✅ داروی مورد نیاز انتخاب شد: {selected_drug[0]}\n💰 قیمت مرجع: {selected_drug[1]}\n\n"
+                    "📝 لطفا توضیحاتی درباره این نیاز وارد کنید (اختیاری):",
+                    reply_markup=None
+                )
+                return States.ADD_NEED_DESC
+                
+    except Exception as e:
+        logger.error(f"Error handling need drug callback: {e}")
+        await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
 async def handle_need_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug selection for need from inline query"""
     await clear_conversation_state(update, context, silent=True)
@@ -4944,7 +4972,7 @@ def main():
         filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'),
         handle_state_change  # تابعی که state رو پاک میکنه و عملیات رو شروع میکنه
         ))
-        
+        application.add_handler(CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"))
         
         # Add error handler
         application.add_error_handler(error_handler)
