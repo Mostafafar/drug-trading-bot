@@ -2838,15 +2838,54 @@ async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
         return ConversationHandler.END
 # Needs Management
 async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start process to add a need"""
+    """Start process to add a need with drug search"""
     await clear_conversation_state(update, context, silent=True)
     try:
         await ensure_user(update, context)
-        await update.message.reply_text("لطفا نام دارویی که نیاز دارید را وارد کنید:")
-        return States.ADD_NEED_NAME
+        
+        # ایجاد دکمه برای جستجوی اینلاین برای نیاز
+        keyboard = [
+            [InlineKeyboardButton(
+                "🔍 جستجوی داروی مورد نیاز", 
+                switch_inline_query_current_chat=""
+            )],
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+        ]
+        
+        await update.message.reply_text(
+            "برای ثبت نیاز جدید، روی دکمه جستجو کلیک کنید و داروی مورد نیاز را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return States.SEARCH_DRUG_FOR_NEED
     except Exception as e:
         logger.error(f"Error in add_need: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+async def handle_need_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle drug selection for need from inline query"""
+    await clear_conversation_state(update, context, silent=True)
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        if query.data.startswith("need_drug_"):
+            idx = int(query.data.split("_")[2])
+            if 0 <= idx < len(drug_list):
+                selected_drug = drug_list[idx]
+                context.user_data['need_drug'] = {
+                    'name': selected_drug[0],
+                    'price': selected_drug[1]
+                }
+                
+                await query.edit_message_text(
+                    f"✅ داروی مورد نیاز انتخاب شد: {selected_drug[0]}\n💰 قیمت مرجع: {selected_drug[1]}\n\n"
+                    "📝 لطفا توضیحاتی درباره این نیاز وارد کنید (اختیاری):"
+                )
+                return States.ADD_NEED_DESC
+                
+    except Exception as e:
+        logger.error(f"Error handling need drug selection: {e}")
+        await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
 async def save_need_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
