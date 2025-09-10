@@ -2949,7 +2949,7 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save need to database"""
+    """Save need to database with selected drug"""
     await clear_conversation_state(update, context, silent=True)
     try:
         try:
@@ -2958,25 +2958,32 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
                 return States.ADD_NEED_QUANTITY
             
+            # دریافت اطلاعات دارو از context
+            need_drug = context.user_data.get('need_drug', {})
+            drug_name = need_drug.get('name', '')
+            drug_price = need_drug.get('price', '')
+            
             conn = None
             try:
                 conn = get_db_connection()
                 with conn.cursor() as cursor:
                     cursor.execute('''
                     INSERT INTO user_needs (
-                        user_id, name, description, quantity
-                    ) VALUES (%s, %s, %s, %s)
+                        user_id, name, description, quantity, reference_price
+                    ) VALUES (%s, %s, %s, %s, %s)
                     ''', (
                         update.effective_user.id,
-                        context.user_data['need_name'],
+                        drug_name,  # استفاده از نام دارو از اکسل
                         context.user_data.get('need_desc', ''),
-                        quantity
+                        quantity,
+                        drug_price  # ذخیره قیمت مرجع
                     ))
                     conn.commit()
                     
                     await update.message.reply_text(
                         f"✅ نیاز شما با موفقیت ثبت شد!\n\n"
-                        f"نام: {context.user_data['need_name']}\n"
+                        f"نام: {drug_name}\n"
+                        f"قیمت مرجع: {drug_price}\n"
                         f"توضیحات: {context.user_data.get('need_desc', 'بدون توضیح')}\n"
                         f"تعداد: {quantity}"
                     )
@@ -3000,7 +3007,6 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in save_need: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """لیست نیازهای کاربر بدون پیام لغو"""
     try:
@@ -4761,11 +4767,15 @@ def main():
                 CallbackQueryHandler(edit_needs, pattern="^edit_needs$"),
                 CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
                 CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
-                CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
+                CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$"),
+                CallbackQueryHandler(handle_need_drug_selection, pattern="^need_drug_") 
             ],
             states={
-                States.ADD_NEED_NAME: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_name)
+                States.SEARCH_DRUG_FOR_NEED: [  # اضافه کردن این state
+                    InlineQueryHandler(handle_inline_query),
+                    CallbackQueryHandler(handle_need_drug_selection, pattern="^need_drug_"),
+                    ChosenInlineResultHandler(handle_chosen_inline_result),
+                    CallbackQueryHandler(add_need, pattern="^back$")
                 ],
                 States.ADD_NEED_DESC: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)
