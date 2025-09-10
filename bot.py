@@ -2142,7 +2142,7 @@ def split_drug_info(full_text):
     return title, description
 
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle inline query for drug search with smart splitting"""
+    """Handle inline query for drug search with options for both add and need"""
     await clear_conversation_state(update, context, silent=True)
     query = update.inline_query.query
     if not query:
@@ -2155,10 +2155,11 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             title_part = name.split()[0]  # اولین کلمه به عنوان عنوان
             desc_part = ' '.join(name.split()[1:]) if len(name.split()) > 1 else name
             
+            # ایجاد دو گزینه: برای اضافه کردن دارو و برای ثبت نیاز
             results.append(
                 InlineQueryResultArticle(
-                    id=str(idx),
-                    title=title_part,
+                    id=f"add_{idx}",
+                    title=f"➕ {title_part}",
                     description=f"{desc_part} - قیمت: {price}",
                     input_message_content=InputTextMessageContent(
                         f"💊 {name}\n💰 قیمت: {price}"
@@ -2171,6 +2172,24 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                     ])
                 )
             )
+            
+            results.append(
+                InlineQueryResultArticle(
+                    id=f"need_{idx}",
+                    title=f"📝 {title_part}",
+                    description=f"{desc_part} - قیمت: {price}",
+                    input_message_content=InputTextMessageContent(
+                        f"💊 {name}\n💰 قیمت: {price}"
+                    ),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "📝 ثبت به عنوان نیاز",
+                            callback_data=f"need_drug_{idx}"
+                        )]
+                    ])
+                )
+            )
+            
         if len(results) >= 50:
             break
     
@@ -2179,22 +2198,40 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
     try:
         result_id = update.chosen_inline_result.result_id
         try:
-            # Split the result_id which should be in format "name|price"
-            drug_name, drug_price = result_id.split('|')
-            
-            # Store all required data in context
-            context.user_data['selected_drug'] = {
-                'name': drug_name.strip(),
-                'price': drug_price.strip()
-            }
-            logger.info(f"User {update.chosen_inline_result.from_user.id} selected drug: {drug_name} with price: {drug_price}")
-            
-            await context.bot.send_message(
-                chat_id=update.chosen_inline_result.from_user.id,
-                text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
-            )
-            return States.ADD_DRUG_DATE
-        except ValueError:
+            # بررسی نوع انتخاب (اضافه کردن یا نیاز)
+            if result_id.startswith('add_'):
+                # پردازش اضافه کردن دارو (کد قبلی)
+                idx = int(result_id.split('_')[1])
+                drug_name, drug_price = drug_list[idx]
+                
+                context.user_data['selected_drug'] = {
+                    'name': drug_name.strip(),
+                    'price': drug_price.strip()
+                }
+                
+                await context.bot.send_message(
+                    chat_id=update.chosen_inline_result.from_user.id,
+                    text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
+                )
+                return States.ADD_DRUG_DATE
+                
+            elif result_id.startswith('need_'):
+                # پردازش ثبت نیاز
+                idx = int(result_id.split('_')[1])
+                drug_name, drug_price = drug_list[idx]
+                
+                context.user_data['need_drug'] = {
+                    'name': drug_name.strip(),
+                    'price': drug_price.strip()
+                }
+                
+                await context.bot.send_message(
+                    chat_id=update.chosen_inline_result.from_user.id,
+                    text=f"✅ داروی مورد نیاز انتخاب شد: {drug_name}\n💰 قیمت مرجع: {drug_price}\n\n📝 لطفا توضیحاتی درباره این نیاز وارد کنید (اختیاری):"
+                )
+                return States.ADD_NEED_DESC
+                
+        except (ValueError, IndexError):
             logger.error(f"Invalid result_id format: {result_id}")
             await context.bot.send_message(
                 chat_id=update.chosen_inline_result.from_user.id,
@@ -2202,7 +2239,7 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             )
             return ConversationHandler.END
     except Exception as e:
-        logger.error(f"Error in handle_chosen_inline_result for user {update.chosen_inline_result.from_user.id}: {e}")
+        logger.error(f"Error in handle_chosen_inline_result: {e}")
         await context.bot.send_message(
             chat_id=update.chosen_inline_result.from_user.id,
             text="خطایی در انتخاب دارو رخ داد. لطفا دوباره تلاش کنید."
