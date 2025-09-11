@@ -2140,7 +2140,6 @@ def split_drug_info(full_text):
         title = full_text
         description = "قیمت نامشخص"
     return title, description
-
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline query for drug search with options for both add and need"""
     await clear_conversation_state(update, context, silent=True)
@@ -2152,7 +2151,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     for idx, (name, price) in enumerate(drug_list):
         if query.lower() in name.lower():
             # جدا کردن نام و توضیحات
-            title_part = name.split()[0]  # اولین کلمه به عنوان عنوان
+            title_part = name.split()[0] if name.split() else name
             desc_part = ' '.join(name.split()[1:]) if len(name.split()) > 1 else name
             
             # ایجاد دو گزینه: برای اضافه کردن دارو و برای ثبت نیاز
@@ -2184,7 +2183,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton(
                             "📝 ثبت به عنوان نیاز",
-                            switch_inline_query_current_chat=f"/need {name}"
+                            callback_data=f"need_drug_{idx}"
                         )]
                     ])
                 )
@@ -2194,26 +2193,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             break
     
     await update.inline_query.answer(results)
-async def need_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /need command for direct need registration"""
-    if context.args:
-        drug_name = ' '.join(context.args)
-        # جستجوی دارو در لیست
-        for name, price in drug_list:
-            if drug_name.lower() in name.lower():
-                context.user_data['need_drug'] = {
-                    'name': name,
-                    'price': price
-                }
-                await update.message.reply_text(
-                    f"✅ داروی مورد نیاز انتخاب شد: {name}\n💰 قیمت مرجع: {price}\n\n"
-                    "📝 لطفا توضیحاتی درباره این نیاز وارد کنید (اختیاری):"
-                )
-                return States.ADD_NEED_DESC
-        
-        await update.message.reply_text("دارو یافت نشد. لطفا نام کامل‌تر وارد کنید.")
-    else:
-        await update.message.reply_text("لطفا نام دارو را بعد از /need وارد کنید.")
+
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result_id = update.chosen_inline_result.result_id
@@ -2906,7 +2886,7 @@ async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🔍 جستجوی داروی مورد نیاز", 
                 switch_inline_query_current_chat=""
             )],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_main")]
         ]
         
         await update.message.reply_text(
@@ -2941,11 +2921,15 @@ async def handle_need_drug_callback(update: Update, context: ContextTypes.DEFAUL
                     reply_markup=None
                 )
                 return States.ADD_NEED_DESC
+            else:
+                await query.edit_message_text("❌ دارو یافت نشد. لطفا دوباره تلاش کنید.")
+        else:
+            await query.edit_message_text("❌ عملیات نامعتبر است.")
                 
     except Exception as e:
         logger.error(f"Error handling need drug callback: {e}")
         await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+    return ConversationHandler.END
 async def handle_need_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug selection for need from inline query"""
     await clear_conversation_state(update, context, silent=True)
@@ -3011,29 +2995,51 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
             drug_name = need_drug.get('name', '')
             drug_price = need_drug.get('price', '')
             
+            if not drug_name:
+                await update.message.reply_text("خطا: اطلاعات دارو یافت نشد. لطفا دوباره شروع کنید.")
+                return ConversationHandler.END
+            
             conn = None
             try:
                 conn = get_db_connection()
                 with conn.cursor() as cursor:
-                    cursor.execute('''
-                    INSERT INTO user_needs (
-                        user_id, name, description, quantity, reference_price
-                    ) VALUES (%s, %s, %s, %s, %s)
-                    ''', (
-                        update.effective_user.id,
-                        drug_name,  # استفاده از نام دارو از اکسل
-                        context.user_data.get('need_desc', ''),
-                        quantity,
-                        drug_price  # ذخیره قیمت مرجع
-                    ))
+                    # اگر ستون reference_price وجود ندارد، ابتدا آن را اضافه کنید
+                    try:
+                        cursor.execute('''
+                        INSERT INTO user_needs (
+                            user_id, name, description, quantity, reference_price
+                        ) VALUES (%s, %s, %s, %s, %s)
+                        ''', (
+                            update.effective_user.id,
+                            drug_name,
+                            context.user_data.get('need_desc', ''),
+                            quantity,
+                            drug_price
+                        ))
+                    except psycopg2.Error as e:
+                        # اگر ستون reference_price وجود ندارد، بدون آن insert کنید
+                        if 'column' in str(e).lower() and 'reference_price' in str(e).lower():
+                            cursor.execute('''
+                            INSERT INTO user_needs (
+                                user_id, name, description, quantity
+                            ) VALUES (%s, %s, %s, %s)
+                            ''', (
+                                update.effective_user.id,
+                                drug_name,
+                                context.user_data.get('need_desc', ''),
+                                quantity
+                            ))
+                        else:
+                            raise e
+                    
                     conn.commit()
                     
                     await update.message.reply_text(
                         f"✅ نیاز شما با موفقیت ثبت شد!\n\n"
-                        f"نام: {drug_name}\n"
-                        f"قیمت مرجع: {drug_price}\n"
-                        f"توضیحات: {context.user_data.get('need_desc', 'بدون توضیح')}\n"
-                        f"تعداد: {quantity}"
+                        f"💊 نام: {drug_name}\n"
+                        f"💰 قیمت مرجع: {drug_price}\n"
+                        f"📝 توضیحات: {context.user_data.get('need_desc', 'بدون توضیح')}\n"
+                        f"📦 تعداد: {quantity}"
                     )
                     
                     # Check for matches with other users' drugs
@@ -4819,11 +4825,12 @@ def main():
                 CallbackQueryHandler(handle_need_drug_selection, pattern="^need_drug_") 
             ],
             states={
-                States.SEARCH_DRUG_FOR_NEED: [  # اضافه کردن این state
+                States.SEARCH_DRUG_FOR_NEED: [
                     InlineQueryHandler(handle_inline_query),
-                    CallbackQueryHandler(handle_need_drug_selection, pattern="^need_drug_"),
+                    CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"),
                     ChosenInlineResultHandler(handle_chosen_inline_result),
-                    CallbackQueryHandler(add_need, pattern="^back$")
+                    CallbackQueryHandler(lambda u, c: clear_conversation_state(u, c, silent=True), pattern="^back_to_main$")
+        
                 ],
                 States.ADD_NEED_DESC: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)
@@ -4993,7 +5000,6 @@ def main():
         handle_state_change  # تابعی که state رو پاک میکنه و عملیات رو شروع میکنه
         ))
         application.add_handler(CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"))
-        application.add_handler(CommandHandler('need', need_command))
         
         # Add error handler
         application.add_error_handler(error_handler)
