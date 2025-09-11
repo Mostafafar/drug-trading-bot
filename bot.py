@@ -2886,7 +2886,7 @@ async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🔍 جستجوی داروی مورد نیاز", 
                 switch_inline_query_current_chat=""
             )],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_main")]
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
         ]
         
         await update.message.reply_text(
@@ -2899,7 +2899,7 @@ async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 async def handle_need_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle callback for need drug selection"""
+    """Handle callback for need drug selection from inline query"""
     await clear_conversation_state(update, context, silent=True)
     try:
         query = update.callback_query
@@ -2921,15 +2921,11 @@ async def handle_need_drug_callback(update: Update, context: ContextTypes.DEFAUL
                     reply_markup=None
                 )
                 return States.ADD_NEED_DESC
-            else:
-                await query.edit_message_text("❌ دارو یافت نشد. لطفا دوباره تلاش کنید.")
-        else:
-            await query.edit_message_text("❌ عملیات نامعتبر است.")
                 
     except Exception as e:
         logger.error(f"Error handling need drug callback: {e}")
         await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
-    return ConversationHandler.END
+        return ConversationHandler.END
 async def handle_need_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug selection for need from inline query"""
     await clear_conversation_state(update, context, silent=True)
@@ -2979,7 +2975,6 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in save_need_desc: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save need to database with selected drug"""
     await clear_conversation_state(update, context, silent=True)
@@ -2995,51 +2990,29 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
             drug_name = need_drug.get('name', '')
             drug_price = need_drug.get('price', '')
             
-            if not drug_name:
-                await update.message.reply_text("خطا: اطلاعات دارو یافت نشد. لطفا دوباره شروع کنید.")
-                return ConversationHandler.END
-            
             conn = None
             try:
                 conn = get_db_connection()
                 with conn.cursor() as cursor:
-                    # اگر ستون reference_price وجود ندارد، ابتدا آن را اضافه کنید
-                    try:
-                        cursor.execute('''
-                        INSERT INTO user_needs (
-                            user_id, name, description, quantity, reference_price
-                        ) VALUES (%s, %s, %s, %s, %s)
-                        ''', (
-                            update.effective_user.id,
-                            drug_name,
-                            context.user_data.get('need_desc', ''),
-                            quantity,
-                            drug_price
-                        ))
-                    except psycopg2.Error as e:
-                        # اگر ستون reference_price وجود ندارد، بدون آن insert کنید
-                        if 'column' in str(e).lower() and 'reference_price' in str(e).lower():
-                            cursor.execute('''
-                            INSERT INTO user_needs (
-                                user_id, name, description, quantity
-                            ) VALUES (%s, %s, %s, %s)
-                            ''', (
-                                update.effective_user.id,
-                                drug_name,
-                                context.user_data.get('need_desc', ''),
-                                quantity
-                            ))
-                        else:
-                            raise e
-                    
+                    cursor.execute('''
+                    INSERT INTO user_needs (
+                        user_id, name, description, quantity, reference_price
+                    ) VALUES (%s, %s, %s, %s, %s)
+                    ''', (
+                        update.effective_user.id,
+                        drug_name,  # استفاده از نام دارو از اکسل
+                        context.user_data.get('need_desc', ''),
+                        quantity,
+                        drug_price  # ذخیره قیمت مرجع
+                    ))
                     conn.commit()
                     
                     await update.message.reply_text(
                         f"✅ نیاز شما با موفقیت ثبت شد!\n\n"
-                        f"💊 نام: {drug_name}\n"
-                        f"💰 قیمت مرجع: {drug_price}\n"
-                        f"📝 توضیحات: {context.user_data.get('need_desc', 'بدون توضیح')}\n"
-                        f"📦 تعداد: {quantity}"
+                        f"نام: {drug_name}\n"
+                        f"قیمت مرجع: {drug_price}\n"
+                        f"توضیحات: {context.user_data.get('need_desc', 'بدون توضیح')}\n"
+                        f"تعداد: {quantity}"
                     )
                     
                     # Check for matches with other users' drugs
