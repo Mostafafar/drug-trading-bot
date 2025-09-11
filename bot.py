@@ -2184,7 +2184,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton(
                             "📝 ثبت به عنوان نیاز",
-                            callback_data=f"need_drug_{idx}"
+                            switch_inline_query_current_chat=f"/need {name}"
                         )]
                     ])
                 )
@@ -2194,6 +2194,26 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             break
     
     await update.inline_query.answer(results)
+async def need_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /need command for direct need registration"""
+    if context.args:
+        drug_name = ' '.join(context.args)
+        # جستجوی دارو در لیست
+        for name, price in drug_list:
+            if drug_name.lower() in name.lower():
+                context.user_data['need_drug'] = {
+                    'name': name,
+                    'price': price
+                }
+                await update.message.reply_text(
+                    f"✅ داروی مورد نیاز انتخاب شد: {name}\n💰 قیمت مرجع: {price}\n\n"
+                    "📝 لطفا توضیحاتی درباره این نیاز وارد کنید (اختیاری):"
+                )
+                return States.ADD_NEED_DESC
+        
+        await update.message.reply_text("دارو یافت نشد. لطفا نام کامل‌تر وارد کنید.")
+    else:
+        await update.message.reply_text("لطفا نام دارو را بعد از /need وارد کنید.")
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result_id = update.chosen_inline_result.result_id
@@ -4973,6 +4993,7 @@ def main():
         handle_state_change  # تابعی که state رو پاک میکنه و عملیات رو شروع میکنه
         ))
         application.add_handler(CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"))
+        application.add_handler(CommandHandler('need', need_command))
         
         # Add error handler
         application.add_error_handler(error_handler)
