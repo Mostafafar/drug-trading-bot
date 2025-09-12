@@ -2084,22 +2084,52 @@ async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT
         query = update.callback_query
         await query.answer()
         
-        idx = int(query.data.split("_")[2])
-        if 0 <= idx < len(drug_list):
-            selected_drug = drug_list[idx]
-            context.user_data['selected_drug'] = {
-                'name': selected_drug[0],
-                'price': selected_drug[1]
-            }
-            
-            await query.edit_message_text(
-                f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
-                "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
-            )
-            return States.ADD_DRUG_DATE
-            
+        if query.data.startswith("add_drug_"):
+            idx = int(query.data.split("_")[2])
+            if 0 <= idx < len(drug_list):
+                selected_drug = drug_list[idx]
+                context.user_data['selected_drug'] = {
+                    'name': selected_drug[0],
+                    'price': selected_drug[1]
+                }
+                
+                await query.edit_message_text(
+                    f"✅ دارو انتخاب شده: {selected_drug[0]}\n💰 قیمت: {selected_drug[1]}\n\n"
+                    "📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):",
+                    reply_markup=None
+                )
+                return States.ADD_DRUG_DATE
+                
     except Exception as e:
         logger.error(f"Error handling add drug callback: {e}")
+        await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+
+async def handle_need_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle need drug selection from inline query result"""
+    await clear_conversation_state(update, context, silent=True)
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        if query.data.startswith("need_drug_"):
+            idx = int(query.data.split("_")[2])
+            if 0 <= idx < len(drug_list):
+                selected_drug = drug_list[idx]
+                context.user_data['need_drug'] = {
+                    'name': selected_drug[0],
+                    'price': selected_drug[1]
+                }
+                
+                await query.edit_message_text(
+                    f"✅ داروی مورد نیاز انتخاب شد: {selected_drug[0]}\n💰 قیمت مرجع: {selected_drug[1]}\n\n"
+                    "📝 لطفا توضیحاتی درباره این نیاز وارد کنید (اختیاری):",
+                    reply_markup=None
+                )
+                return States.ADD_NEED_DESC
+                
+    except Exception as e:
+        logger.error(f"Error handling need drug callback: {e}")
         await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
@@ -2109,11 +2139,11 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await ensure_user(update, context)
         
-        # ایجاد دکمه برای جستجوی اینلاین
+        # ایجاد دکمه برای جستجوی اینلاین برای اضافه کردن دارو
         keyboard = [
             [InlineKeyboardButton(
-                "🔍 جستجوی دارو", 
-                switch_inline_query_current_chat=""
+                "🔍 جستجوی دارو برای اضافه کردن", 
+                switch_inline_query_current_chat="add "
             )],
             [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
         ]
@@ -2141,11 +2171,21 @@ def split_drug_info(full_text):
         description = "قیمت نامشخص"
     return title, description
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle inline query for drug search with options for both add and need"""
+    """Handle inline query for drug search with separate options for add and need"""
     await clear_conversation_state(update, context, silent=True)
     query = update.inline_query.query
+    
+    # تشخیص نوع جستجو (اضافه کردن دارو یا نیاز)
+    search_type = "add"
+    if query.startswith("need "):
+        search_type = "need"
+        query = query[5:].strip()  # حذف "need " از ابتدای کوئری
+    elif query.startswith("add "):
+        query = query[4:].strip()  # حذف "add " از ابتدای کوئری
+    
     if not query:
-        return
+        # اگر کوئری خالی است، همه داروها را نشان بده
+        query = ""
     
     results = []
     for idx, (name, price) in enumerate(drug_list):
@@ -2154,40 +2194,42 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             title_part = name.split()[0] if name.split() else name
             desc_part = ' '.join(name.split()[1:]) if len(name.split()) > 1 else name
             
-            # ایجاد دو گزینه: برای اضافه کردن دارو و برای ثبت نیاز
-            results.append(
-                InlineQueryResultArticle(
-                    id=f"add_{idx}",
-                    title=f"➕ {title_part}",
-                    description=f"{desc_part} - قیمت: {price}",
-                    input_message_content=InputTextMessageContent(
-                        f"💊 {name}\n💰 قیمت: {price}"
-                    ),
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "➕ اضافه به لیست داروها",
-                            callback_data=f"add_drug_{idx}"
-                        )]
-                    ])
+            if search_type == "add":
+                # فقط گزینه اضافه کردن دارو
+                results.append(
+                    InlineQueryResultArticle(
+                        id=f"add_{idx}",
+                        title=f"➕ {title_part}",
+                        description=f"{desc_part} - قیمت: {price}",
+                        input_message_content=InputTextMessageContent(
+                            f"💊 {name}\n💰 قیمت: {price}"
+                        ),
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(
+                                "➕ اضافه به لیست داروها",
+                                callback_data=f"add_drug_{idx}"
+                            )]
+                        ])
+                    )
                 )
-            )
-            
-            results.append(
-                InlineQueryResultArticle(
-                    id=f"need_{idx}",
-                    title=f"📝 {title_part}",
-                    description=f"{desc_part} - قیمت: {price}",
-                    input_message_content=InputTextMessageContent(
-                        f"💊 {name}\n💰 قیمت: {price}"
-                    ),
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "📝 ثبت به عنوان نیاز",
-                            callback_data=f"need_drug_{idx}"
-                        )]
-                    ])
+            else:
+                # فقط گزینه ثبت نیاز
+                results.append(
+                    InlineQueryResultArticle(
+                        id=f"need_{idx}",
+                        title=f"📝 {title_part}",
+                        description=f"{desc_part} - قیمت: {price}",
+                        input_message_content=InputTextMessageContent(
+                            f"💊 {name}\n💰 قیمت: {price}"
+                        ),
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(
+                                "📝 ثبت به عنوان نیاز",
+                                callback_data=f"need_drug_{idx}"
+                            )]
+                        ])
+                    )
                 )
-            )
             
         if len(results) >= 50:
             break
@@ -2883,8 +2925,8 @@ async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ایجاد دکمه برای جستجوی اینلاین برای نیاز
         keyboard = [
             [InlineKeyboardButton(
-                "🔍 جستجوی داروی مورد نیاز", 
-                switch_inline_query_current_chat=""
+                "🔍 جستجوی دارو برای نیاز", 
+                switch_inline_query_current_chat="need "
             )],
             [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
         ]
@@ -4802,8 +4844,8 @@ def main():
                     InlineQueryHandler(handle_inline_query),
                     CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"),
                     ChosenInlineResultHandler(handle_chosen_inline_result),
-                    CallbackQueryHandler(lambda u, c: clear_conversation_state(u, c, silent=True), pattern="^back_to_main$")
-        
+                    CallbackQueryHandler(add_need, pattern="^back$")
+                    
                 ],
                 States.ADD_NEED_DESC: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)
@@ -4973,7 +5015,8 @@ def main():
         handle_state_change  # تابعی که state رو پاک میکنه و عملیات رو شروع میکنه
         ))
         application.add_handler(CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"))
-        
+        application.add_handler(CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"))
+
         # Add error handler
         application.add_error_handler(error_handler)
         
