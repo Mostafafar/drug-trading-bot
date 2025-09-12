@@ -2239,54 +2239,44 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result_id = update.chosen_inline_result.result_id
-        try:
-            # بررسی نوع انتخاب (اضافه کردن یا نیاز)
-            if result_id.startswith('add_'):
-                # پردازش اضافه کردن دارو (کد قبلی)
-                idx = int(result_id.split('_')[1])
-                drug_name, drug_price = drug_list[idx]
-                
-                context.user_data['selected_drug'] = {
-                    'name': drug_name.strip(),
-                    'price': drug_price.strip()
-                }
-                
-                await context.bot.send_message(
-                    chat_id=update.chosen_inline_result.from_user.id,
-                    text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
-                )
-                return States.ADD_DRUG_DATE
-                
-            elif result_id.startswith('need_'):
-                # پردازش ثبت نیاز
-                idx = int(result_id.split('_')[1])
-                drug_name, drug_price = drug_list[idx]
-                
-                context.user_data['need_drug'] = {
-                    'name': drug_name.strip(),
-                    'price': drug_price.strip()
-                }
-                
-                await context.bot.send_message(
-                    chat_id=update.chosen_inline_result.from_user.id,
-                    text=f"✅ داروی مورد نیاز انتخاب شد: {drug_name}\n💰 قیمت مرجع: {drug_price}\n\n📝 لطفا توضیحاتی درباره این نیاز وارد کنید (اختیاری):"
-                )
-                return States.ADD_NEED_DESC
-                
-        except (ValueError, IndexError):
-            logger.error(f"Invalid result_id format: {result_id}")
+        user_id = update.chosen_inline_result.from_user.id
+        
+        if result_id.startswith('add_'):
+            # پردازش برای اضافه کردن دارو
+            idx = int(result_id.split('_')[1])
+            drug_name, drug_price = drug_list[idx]
+            
+            context.user_data['selected_drug'] = {
+                'name': drug_name.strip(),
+                'price': drug_price.strip()
+            }
+            
             await context.bot.send_message(
-                chat_id=update.chosen_inline_result.from_user.id,
-                text="خطا در انتخاب دارو. لطفا دوباره تلاش کنید."
+                chat_id=user_id,
+                text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
             )
-            return ConversationHandler.END
+            
+        elif result_id.startswith('need_'):
+            # پردازش برای ثبت نیاز
+            idx = int(result_id.split('_')[1])
+            drug_name, drug_price = drug_list[idx]
+            
+            context.user_data['need_drug'] = {
+                'name': drug_name.strip(),
+                'price': drug_price.strip()
+            }
+            
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"✅ داروی مورد نیاز انتخاب شد: {drug_name}\n💰 قیمت مرجع: {drug_price}\n\n📝 لطفا توضیحاتی درباره این نیاز وارد کنید (اختیاری):"
+            )
+            
     except Exception as e:
         logger.error(f"Error in handle_chosen_inline_result: {e}")
         await context.bot.send_message(
             chat_id=update.chosen_inline_result.from_user.id,
             text="خطایی در انتخاب دارو رخ داد. لطفا دوباره تلاش کنید."
-        )
-        return ConversationHandler.END
+            )
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع جستجو با اینلاین کوئری"""
     await clear_conversation_state(update, context, silent=True)
