@@ -2997,16 +2997,13 @@ async def save_need_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save need description"""
-    await clear_conversation_state(update, context, silent=True)
-    try:
-        context.user_data['need_desc'] = update.message.text
-        await update.message.reply_text("لطفا تعداد مورد نیاز را وارد کنید:")
-        return States.ADD_NEED_QUANTITY
-    except Exception as e:
-        logger.error(f"Error in save_need_desc: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+    logger.info(f"Received description: {update.message.text} for user {update.effective_user.id}")
+    context.user_data['need_desc'] = update.message.text
+    await update.message.reply_text(
+        "📦 لطفا تعداد مورد نیاز را وارد کنید:"
+    )
+    logger.info("Replying with quantity prompt and returning ADD_NEED_QUANTITY")
+    return States.ADD_NEED_QUANTITY
 async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save need to database with selected drug"""
     await clear_conversation_state(update, context, silent=True)
