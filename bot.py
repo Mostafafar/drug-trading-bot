@@ -3449,7 +3449,6 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 results = cursor.fetchall()
 
                 if not results:
-                    # ایجاد کیبورد با دکمه بازگشت
                     keyboard = [
                         [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")]
                     ]
@@ -3479,15 +3478,14 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pharmacy_name = data['name']
                     drugs = data['drugs']
                     
-                    # اضافه کردن به پیام
                     message += f"🏥 {pharmacy_name}:\n"
-                    for drug in drugs[:3]:  # حداکثر 3 دارو نمایش داده شود
+                    for drug in drugs[:3]:
                         message += f"  💊 {drug['drug_name']} - {drug['price']} - {drug['quantity']} عدد\n"
                     if len(drugs) > 3:
                         message += f"  ... و {len(drugs) - 3} داروی دیگر\n"
                     message += "\n"
                     
-                    # اضافه کردن دکمه اینلاین
+                    # اضافه کردن دکمه اینلاین با pharmacy_id
                     keyboard.append([
                         InlineKeyboardButton(
                             f"🏥 {pharmacy_name} ({len(drugs)} دارو)",
@@ -3521,44 +3519,47 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
         
-        pharmacy_id = int(query.data.split('_')[1])
-        context.user_data['selected_pharmacy_id'] = pharmacy_id
-        
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                cursor.execute('SELECT name FROM pharmacies WHERE user_id = %s', (pharmacy_id,))
-                result = cursor.fetchone()
-                pharmacy_name = result[0] if result else "داروخانه ناشناس"
-                context.user_data['selected_pharmacy_name'] = pharmacy_name
-        except Exception as e:
-            logger.error(f"Error getting pharmacy name: {e}")
-            pharmacy_name = "داروخانه ناشناس"
-        finally:
-            if conn:
-                conn.close()
-        
-        # Initialize pagination
-        context.user_data['page_target'] = 0
-        context.user_data['page_mine'] = 0
-        
-        # Initialize selection lists
-        context.user_data['offer_items'] = []
-        context.user_data['comp_items'] = []
-        
-        await query.edit_message_text(f"داروخانه {pharmacy_name} انتخاب شد.\nدر حال بارگذاری داروها...")
-        
-        return await show_two_column_selection(update, context)
-        
+        # استخراج pharmacy_id از callback_data
+        if query.data.startswith("pharmacy_"):
+            pharmacy_id = int(query.data.split('_')[1])
+            context.user_data['selected_pharmacy_id'] = pharmacy_id
+            
+            conn = None
+            try:
+                conn = get_db_connection()
+                with conn.cursor() as cursor:
+                    cursor.execute('SELECT name FROM pharmacies WHERE user_id = %s', (pharmacy_id,))
+                    result = cursor.fetchone()
+                    pharmacy_name = result[0] if result else "داروخانه ناشناس"
+                    context.user_data['selected_pharmacy_name'] = pharmacy_name
+                    
+                    await query.edit_message_text(f"داروخانه {pharmacy_name} انتخاب شد.\nدر حال بارگذاری داروها...")
+                    
+                    # Initialize pagination and selection lists
+                    context.user_data['page_target'] = 0
+                    context.user_data['page_mine'] = 0
+                    context.user_data['offer_items'] = []
+                    context.user_data['comp_items'] = []
+                    
+                    return await show_two_column_selection(update, context)
+                    
+            except Exception as e:
+                logger.error(f"Error getting pharmacy name: {e}")
+                await query.edit_message_text("خطا در دریافت اطلاعات داروخانه")
+            finally:
+                if conn:
+                    conn.close()
+        else:
+            await query.edit_message_text("خطا در انتخاب داروخانه")
+            
     except Exception as e:
         logger.error(f"Error in select_pharmacy: {e}")
         try:
             await query.edit_message_text("خطا در انتخاب داروخانه")
         except:
             await context.bot.send_message(chat_id=query.message.chat_id, text="خطا در انتخاب داروخانه")
+    
     return States.SELECT_DRUGS
-
 
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش داروهای کاربر در صفحه اول و داروهای داروخانه هدف در صفحه دوم"""
