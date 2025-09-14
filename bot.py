@@ -2418,77 +2418,117 @@ async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Save a drug item to the database"""
     try:
-        # Get all required data from context
-        selected_drug = context.user_data.get('selected_drug', {})
+        # Get drug information from context
+        drug_name = context.user_data.get('selected_drug')
         expiry_date = context.user_data.get('expiry_date')
-        quantity = update.message.text.strip()
-
-        # Validate all required fields
-        if not selected_drug or not expiry_date:
+        quantity_text = update.message.text
+        
+        if not drug_name or not expiry_date:
             await update.message.reply_text(
-                "اطلاعات دارو ناقص است. لطفا دوباره از ابتدا شروع کنید:\n"
-                "1. روی دکمه 'اضافه کردن دارو' کلیک کنید\n"
-                "2. دارو را از لیست انتخاب کنید\n"
-                "3. تاریخ انقضا و تعداد را وارد کنید"
+                "خطا: اطلاعات دارو ناقص است. لطفاً از ابتدا شروع کنید.",
+                reply_markup=ReplyKeyboardRemove()
             )
-            return ConversationHandler.END
-
+            return await clear_conversation_state(update, context, silent=True)
+        
         # Validate quantity
         try:
-            quantity = int(quantity)
+            quantity = int(quantity_text)
             if quantity <= 0:
-                await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید:")
+                await update.message.reply_text(
+                    "لطفاً یک عدد معتبر برای تعداد وارد کنید.",
+                    reply_markup=ReplyKeyboardRemove()
+                )
                 return States.ADD_DRUG_QUANTITY
         except ValueError:
-            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید:")
+            await update.message.reply_text(
+                "لطفاً یک عدد معتبر برای تعداد وارد کنید.",
+                reply_markup=ReplyKeyboardRemove()
+            )
             return States.ADD_DRUG_QUANTITY
-
-        # Save to database
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                cursor.execute('''
+        
+        # Get user ID and check if user is personnel
+        user_id = update.effective_user.id
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # Check if user is personnel and get creator_id
+            cursor.execute(
+                "SELECT is_personnel, creator_id FROM users WHERE id = %s",
+                (user_id,)
+            )
+            result = cursor.fetchone()
+            if result and result[0]:  # If user is personnel
+                user_id = result[1]  # Use creator_id (pharmacy ID)
+                if not user_id:
+                    await update.message.reply_text(
+                        "خطا: داروخانه مرتبط با پرسنل یافت نشد.",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                    conn.close()
+                    return await clear_conversation_state(update, context, silent=True)
+            
+            # Get drug price from drug_list or set default
+            drug_price = "0"
+            for name, price in drug_list:
+                if name.lower() == drug_name.lower():
+                    drug_price = price
+                    break
+            
+            # Insert drug item into database
+            cursor.execute("""
                 INSERT INTO drug_items (user_id, name, price, date, quantity)
                 VALUES (%s, %s, %s, %s, %s)
-                ''', (
-                    update.effective_user.id,
-                    selected_drug['name'],
-                    selected_drug['price'],
-                    expiry_date,
-                    quantity
-                ))
-                conn.commit()
-                
-                await update.message.reply_text(
-                    f"✅ دارو با موفقیت ثبت شد:\n"
-                    f"💊 نام: {selected_drug['name']}\n"
-                    f"💰 قیمت: {selected_drug['price']}\n"
-                    f"📅 تاریخ انقضا: {expiry_date}\n"
-                    f"📦 تعداد: {quantity}"
-                )
-                
-                # Clear context
-                context.user_data.pop('selected_drug', None)
-                context.user_data.pop('expiry_date', None)
-                
-                return await start(update, context)  # Return to main menu
-                
-        except Exception as e:
-            logger.error(f"Error saving drug item for user {update.effective_user.id}: {e}")
-            if conn:
-                conn.rollback()
-            await update.message.reply_text("خطا در ثبت دارو. لطفا دوباره تلاش کنید.")
-            return ConversationHandler.END
-        finally:
-            if conn:
-                conn.close()
-                
-    except Exception as e:
-        logger.error(f"Error in save_drug_item for user {update.effective_user.id}: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+                RETURNING id
+            """, (user_id, drug_name, drug_price, expiry_date, quantity))
+            
+            drug_id = cursor.fetchone()[0]
+            conn.commit()
+        
+        # Clear context data
+        context.user_data.pop('selected_drug', None)
+        context.user_data.pop('expiry_date', None)
+        
+        # Send success message
+        keyboard = [[
+            InlineKeyboardButton("اضافه کردن داروی دیگر", callback_data="back_to_search"),
+            InlineKeyboardButton("بازگشت به منوی اصلی", callback_data="back_to_main")
+        ]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"✅ دارو '{drug_name}' با موفقیت ثبت شد!\n"
+            f"📅 تاریخ انقضا: {expiry_date}\n"
+            f"📦 تعداد: {quantity}\n"
+            f"💰 قیمت: {drug_price}",
+            reply_markup=reply_markup
+        )
+        
+        # Check for matches with user needs
+        context.application.create_task(check_for_matches(user_id, context))
+        
         return ConversationHandler.END
+    
+    except psycopg2.Error as e:
+        logger.error(f"Database error in save_drug_item: {e}")
+        await update.message.reply_text(
+            "خطایی در ذخیره دارو رخ داد. لطفاً دوباره تلاش کنید.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        if conn:
+            conn.rollback()
+            conn.close()
+        return await clear_conversation_state(update, context, silent=True)
+    
+    except Exception as e:
+        logger.error(f"Error in save_drug_item: {e}")
+        await update.message.reply_text(
+            "خطایی رخ داد. لطفاً دوباره تلاش کنید.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        if conn:
+            conn.close()
+        return await clear_conversation_state(update, context, silent=True)
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """لیست داروهای کاربر بدون پیام لغو"""
     try:
