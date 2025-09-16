@@ -3164,58 +3164,55 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """لیست نیازهای کاربر بدون پیام لغو"""
     try:
-        # پاک کردن stateهای قبلی (بی صدا)
-        await clear_conversation_state(update, context, silent=True)
-        
-        await ensure_user(update, context)
-        
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                cursor.execute('''
-                SELECT id, name, description, quantity 
-                FROM user_needs 
+        user_id = update.effective_user.id
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+            cursor.execute('''
+                SELECT id, name, description, quantity
+                FROM user_needs
                 WHERE user_id = %s
                 ORDER BY created_at DESC
-                ''', (update.effective_user.id,))
-                needs = cursor.fetchall()
-                
-                if needs:
-                    message = "📝 لیست نیازهای شما:\n\n"
-                    for need in needs:
-                        message += (
-                            f"• {need['name']}\n"
-                            f"  توضیحات: {need['description'] or 'بدون توضیح'}\n"
-                            f"  تعداد: {need['quantity']}\n\n"
-                        )
-                    
-                    keyboard = [
-                        [InlineKeyboardButton("✏️ ویرایش نیازها", callback_data="edit_needs")],
-                        [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")]
-                    ]
-                    
-                    await update.message.reply_text(
-                        message,
-                        reply_markup=InlineKeyboardMarkup(keyboard)
-                    )
-                    return States.EDIT_NEED
-                else:
-                    await update.message.reply_text("شما هنوز هیچ نیازی ثبت نکرده‌اید.")
-                    
-        except Exception as e:
-            logger.error(f"Error listing needs: {e}")
-            await update.message.reply_text("خطا در دریافت لیست نیازها.")
-        finally:
-            if conn:
-                conn.close()
-                
-        return ConversationHandler.END
+            ''', (user_id,))
+            needs = cursor.fetchall()
+            
+            if not needs:
+                await update.message.reply_text(
+                    "شما هیچ نیازی ثبت نکرده‌اید.\n"
+                    "برای ثبت نیاز جدید، از گزینه 'ثبت نیاز جدید' استفاده کنید.",
+                    reply_markup=ReplyKeyboardMarkup([
+                        ['ثبت نیاز جدید', 'جستجوی دارو'],
+                        ['لیست داروهای من', 'ساخت کد پرسنل'],
+                        ['تنظیم شاخه‌های دارویی']
+                    ], resize_keyboard=True)
+                )
+                return ConversationHandler.END
+            
+            message = "📋 لیست نیازهای شما:\n\n"
+            for i, need in enumerate(needs, 1):
+                message += (
+                    f"{i}. {need['name']}\n"
+                    f"📝 توضیحات: {need['description'] or 'ندارد'}\n"
+                    f"📦 تعداد: {need['quantity']}\n\n"
+                )
+            
+            keyboard = [
+                [InlineKeyboardButton("✏️ ویرایش نیازها", callback_data="edit_needs")],
+                [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_main")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(message, reply_markup=reply_markup)
+            return ConversationHandler.END
     except Exception as e:
-        logger.error(f"Error in list_my_needs: {e}")
+        logger.error(f"Error in list_my_needs for user {user_id}: {e}", exc_info=True)
+        await update.message.reply_text(
+            "خطا در نمایش لیست نیازها. لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
+        )
         return ConversationHandler.END
+    finally:
+        if conn:
+            conn.close()
 
 async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start needs editing process"""
@@ -4837,43 +4834,43 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Log errors and handle them gracefully"""
     try:
-        logger.error(msg="Exception while handling update:", exc_info=context.error)
+        logger.error(
+            msg="Exception while handling update:",
+            exc_info=context.error,
+            extra={
+                'update': update.to_dict() if update else None,
+                'user_data': context.user_data,
+                'state': context.user_data.get('state', 'unknown')
+            }
+        )
         
-        if update and update.effective_user:
-            error_message = (
-                "⚠️ خطایی در پردازش درخواست شما رخ داد.\n\n"
-                "لطفا دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
+        error_message = (
+            "⚠️ خطایی در پردازش درخواست شما رخ داد.\n"
+            "لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
+        )
+        
+        if update.effective_chat:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=error_message
             )
-            
-            try:
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=error_message
-                )
-                await clear_conversation_state(update, context, silent=True)
-            except:
-                pass
-            
-            # Notify admin
-            tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
-            tb_string = ''.join(tb_list)
-            
-            admin_message = (
-                f"⚠️ خطا برای کاربر {update.effective_user.id}:\n\n"
-                f"{context.error}\n\n"
-                f"Traceback:\n<code>{html.escape(tb_string)}</code>"
-            )
-            
-            try:
-                await context.bot.send_message(
-                    chat_id=ADMIN_CHAT_ID,
-                    text=admin_message,
-                    parse_mode=ParseMode.HTML
-                )
-            except:
-                pass
+            await clear_conversation_state(update, context, silent=True)
+        
+        # Notify admin
+        tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
+        tb_string = ''.join(tb_list)
+        admin_message = (
+            f"⚠️ خطا برای کاربر {update.effective_user.id if update.effective_user else 'unknown'}:\n\n"
+            f"{context.error}\n\n"
+            f"Traceback:\n<code>{html.escape(tb_string)}</code>\n\n"
+            f"User Data: {context.user_data}"
+        )
+        await context.bot.send_message(
+            chat_id=ADMIN_CHAT_ID,
+            text=admin_message,
+            parse_mode=ParseMode.HTML
+        )
     except Exception as e:
         logger.error(f"Error in error handler: {e}")
 async def main_menu_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -4901,14 +4898,12 @@ async def main_menu_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی در بازگشت به منوی اصلی رخ داد.")
         return ConversationHandler.END
 async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت تغییر فاز بین عملیات مختلف بدون نمایش پیام لغو"""
     try:
         text = update.message.text
+        logger.info(f"Handling state change for user {update.effective_user.id}: {text}")
         
-        # ابتدا state فعلی را کاملاً پاک کنید (بی صدا)
         await clear_conversation_state(update, context, silent=True)
         
-        # سپس عملیات جدید را شروع کنید
         if text == 'ساخت کد پرسنل':
             return await generate_personnel_code(update, context)
         elif text == 'جستجوی دارو':
@@ -4924,7 +4919,6 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
         elif text == 'تنظیم شاخه‌های دارویی':
             return await setup_medical_categories(update, context)
         else:
-            # اگر گزینه نامعتبر بود، فقط منو را نشان دهد
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
                 ['لیست داروهای من', 'ثبت نیاز جدید'],
@@ -4937,9 +4931,11 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
                 reply_markup=reply_markup
             )
             return ConversationHandler.END
-            
     except Exception as e:
-        logger.error(f"Error in handle_state_change: {e}")
+        logger.error(f"Error in handle_state_change for user {update.effective_user.id}: {e}", exc_info=True)
+        await update.message.reply_text(
+            "خطایی در تغییر فاز رخ داد. لطفاً دوباره تلاش کنید."
+        )
         return ConversationHandler.END
 def main():
     """Start the bot"""
