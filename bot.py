@@ -3528,7 +3528,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle pharmacy selection and initiate drug selection"""
-    await clear_conversation_state(update, context, silent=True)
+    #await clear_conversation_state(update, context, silent=True)
     try:
         query = update.callback_query
         await query.answer()
@@ -3574,7 +3574,7 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش داروهای کاربر در صفحه اول و داروهای داروخانه هدف در صفحه دوم"""
-    await clear_conversation_state(update, context, silent=True)
+    #await clear_conversation_state(update, context, silent=True)
     
     try:
         # تعیین متغیرهای اولیه
