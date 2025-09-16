@@ -3825,83 +3825,179 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive quantity for selected drug and show updated price difference"""
     await clear_conversation_state(update, context, silent=True)
     try:
-        quantity = update.message.text.strip()
+        quantity_text = update.message.text.strip()
         current_selection = context.user_data.get('current_selection')
         
         if not current_selection:
-            await update.message.reply_text("انتخاب دارو از دست رفته.")
+            logger.error("No current selection found in context")
+            await update.message.reply_text(
+                "انتخاب دارو از دست رفته. لطفا دوباره از لیست انتخاب کنید.",
+                reply_markup=ReplyKeyboardRemove()
+            )
             return await show_two_column_selection(update, context)
         
+        # لاگ برای دیباگ
+        logger.info(f"User {update.effective_user.id} entering quantity: {quantity_text}")
+        logger.info(f"Current selection: {current_selection}")
+        logger.info(f"Offer items before: {context.user_data.get('offer_items', [])}")
+        logger.info(f"Comp items before: {context.user_data.get('comp_items', [])}")
+        
         try:
-            quantity = int(quantity)
-            if quantity <= 0 or quantity > current_selection['quantity']:
+            # تبدیل به عدد فارسی/انگلیسی
+            quantity = int(''.join(filter(str.isdigit, quantity_text)))
+            if quantity <= 0:
                 await update.message.reply_text(
-                    f"لطفا عددی بین 1 و {current_selection['quantity']} وارد کنید."
+                    f"لطفا عددی بزرگتر از صفر وارد کنید. موجودی قابل دسترس: {current_selection['quantity']}"
                 )
                 return States.SELECT_QUANTITY
+                
+            if quantity > current_selection['quantity']:
+                await update.message.reply_text(
+                    f"❌ تعداد وارد شده بیشتر از موجودی است!\n"
+                    f"موجودی قابل دسترس: {current_selection['quantity']}\n\n"
+                    f"لطفا تعداد معتبر وارد کنید (۱ تا {current_selection['quantity']}):"
+                )
+                return States.SELECT_QUANTITY
+                
         except ValueError:
-            await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
+            await update.message.reply_text(
+                "❌ لطفا یک عدد معتبر وارد کنید.\n"
+                f"مثال: ۵ یا 10\n\n"
+                f"موجودی قابل دسترس: {current_selection['quantity']}"
+            )
             return States.SELECT_QUANTITY
         
         # Add to appropriate list
+        list_type = "درخواستی" if current_selection['type'] == 'target' else "جبرانی"
+        
         if current_selection['type'] == 'target':
             if 'offer_items' not in context.user_data:
                 context.user_data['offer_items'] = []
-            context.user_data['offer_items'].append({
-                'drug_id': current_selection['id'],
-                'drug_name': current_selection['name'],
-                'price': current_selection['price'],
-                'quantity': quantity,
-                'pharmacy_id': context.user_data['selected_pharmacy_id']
-            })
-            list_type = "درخواستی"
+            
+            # بررسی تکراری نبودن دارو
+            existing_item = next((item for item in context.user_data['offer_items'] 
+                                if item['drug_id'] == current_selection['id']), None)
+            
+            if existing_item:
+                # به روزرسانی تعداد موجود
+                existing_item['quantity'] = quantity
+            else:
+                # اضافه کردن آیتم جدید
+                context.user_data['offer_items'].append({
+                    'drug_id': current_selection['id'],
+                    'drug_name': current_selection['name'],
+                    'price': current_selection['price'],
+                    'quantity': quantity,
+                    'pharmacy_id': context.user_data.get('selected_pharmacy_id')
+                })
+                
         else:
             if 'comp_items' not in context.user_data:
                 context.user_data['comp_items'] = []
-            context.user_data['comp_items'].append({
-                'id': current_selection['id'],
-                'name': current_selection['name'],
-                'price': current_selection['price'],
-                'quantity': quantity
-            })
-            list_type = "جبرانی"
+            
+            # بررسی تکراری نبودن دارو
+            existing_item = next((item for item in context.user_data['comp_items'] 
+                                if item['id'] == current_selection['id']), None)
+            
+            if existing_item:
+                # به روزرسانی تعداد موجود
+                existing_item['quantity'] = quantity
+            else:
+                # اضافه کردن آیتم جدید
+                context.user_data['comp_items'].append({
+                    'id': current_selection['id'],
+                    'name': current_selection['name'],
+                    'price': current_selection['price'],
+                    'quantity': quantity
+                })
         
         # Calculate updated totals
-        # محاسبه مجموع‌ها
         offer_items = context.user_data.get('offer_items', [])
         comp_items = context.user_data.get('comp_items', [])
-
+        
         offer_total = sum(parse_price(item['price']) * item['quantity'] for item in offer_items)
         comp_total = sum(parse_price(item['price']) * item['quantity'] for item in comp_items)
         price_difference = offer_total - comp_total
-
+        
+        # لاگ پس از اضافه کردن
+        logger.info(f"Offer items after: {context.user_data.get('offer_items', [])}")
+        logger.info(f"Comp items after: {context.user_data.get('comp_items', [])}")
+        logger.info(f"Offer total: {offer_total}, Comp total: {comp_total}, Difference: {price_difference}")
+        
+        # ساخت پیام با جزئیات کامل
+        message = f"✅ {quantity} عدد از {current_selection['name']} به لیست {list_type} اضافه شد.\n\n"
+        
         # نمایش همه داروهای انتخاب شده
-        message = f"✅ {quantity} عدد از {current_selection['name']} به لیست {'درخواستی' if current_selection['type'] == 'target' else 'جبرانی'} اضافه شد.\n\n"
-
         if offer_items:
             message += "📌 داروهای درخواستی:\n"
-            for item in offer_items:
-                message += f"- {item['drug_name']} ({item['quantity']} عدد) - {item['price']}\n"
-
+            for i, item in enumerate(offer_items, 1):
+                item_total = parse_price(item['price']) * item['quantity']
+                message += f"{i}. {item['drug_name']} - {item['quantity']} عدد - {item['price']} = {format_price(item_total)}\n"
+        
         if comp_items:
             message += "\n📌 داروهای جبرانی:\n"
-            for item in comp_items:
-                message += f"- {item['name']} ({item['quantity']} عدد) - {item['price']}\n"
-
-       message += f"\n📊 خلاصه فعلی:\n"
-       message += f"جمع درخواستی: {format_price(offer_total)}\n"
-       message += f"جمع جبرانی: {format_price(comp_total)}\n"
-       message += f"اختلاف قیمت: {format_price(price_difference)}",
-       reply_markup=ReplyKeyboardRemove()
+            for i, item in enumerate(comp_items, 1):
+                item_total = parse_price(item['price']) * item['quantity']
+                message += f"{i}. {item['name']} - {item['quantity']} عدد - {item['price']} = {format_price(item_total)}\n"
+        
+        message += f"\n📊 خلاصه فعلی:\n"
+        message += f"جمع درخواستی: {format_price(offer_total)}\n"
+        message += f"جمع جبرانی: {format_price(comp_total)}\n"
+        message += f"اختلاف قیمت: {format_price(price_difference)}\n"
+        
+        # راهنمای وضعیت اختلاف قیمت
+        if price_difference > 0:
+            message += f"⚠️ شما باید {format_price(price_difference)} دیگر جبران کنید.\n"
+        elif price_difference < 0:
+            message += f"✅ شما {format_price(abs(price_difference))} بیشتر جبران کرده‌اید.\n"
+        else:
+            message += "✅ مبادله متعادل است!\n"
+        
+        # پاک کردن انتخاب جاری
+        context.user_data.pop('current_selection', None)
+        
+        await update.message.reply_text(
+            message,
+            reply_markup=ReplyKeyboardRemove()
         )
         
-        # Return to drug list
+        # Return to drug list with updated information
         return await show_two_column_selection(update, context)
         
     except Exception as e:
-        logger.error(f"Error in enter_quantity: {e}")
-        await update.message.reply_text("خطا در ثبت تعداد")
-    return States.SELECT_QUANTITY
+        logger.error(f"Error in enter_quantity: {e}", exc_info=True)
+        error_message = (
+            "❌ خطا در ثبت تعداد!\n\n"
+            "لطفا دوباره تلاش کنید یا از منوی اصلی شروع نمایید."
+        )
+        
+        try:
+            await update.message.reply_text(
+                error_message,
+                reply_markup=ReplyKeyboardRemove()
+            )
+        except:
+            pass
+        
+        # بازگشت به منوی اصلی در صورت خطای شدید
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="به منوی اصلی بازگشتید. لطفا دوباره شروع کنید:",
+                reply_markup=reply_markup
+            )
+        except:
+            pass
+        
+        return ConversationHandler.END
 
                 
 
