@@ -3883,10 +3883,10 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for item in offer_items:
                 message += f"- {item['drug_name']} ({item['quantity']} عدد) - {item['price']}\n"
 
-       if comp_items:
-           message += "\n📌 داروهای جبرانی:\n"
-           for item in comp_items:
-               message += f"- {item['name']} ({item['quantity']} عدد) - {item['price']}\n"
+        if comp_items:
+            message += "\n📌 داروهای جبرانی:\n"
+            for item in comp_items:
+                message += f"- {item['name']} ({item['quantity']} عدد) - {item['price']}\n"
 
        message += f"\n📊 خلاصه فعلی:\n"
        message += f"جمع درخواستی: {format_price(offer_total)}\n"
