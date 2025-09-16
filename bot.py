@@ -594,7 +594,7 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
         keys_to_remove = [
             # داروها
             'selected_drug', 'expiry_date', 'drug_quantity', 'editing_drug', 
-            'edit_field', 'matched_drugs', 'current_selection',
+            'edit_field', 'matched_drugs',
             
             # نیازها
             'need_name', 'need_desc', 'editing_need',
