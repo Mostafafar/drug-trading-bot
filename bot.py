@@ -584,27 +584,34 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
         if conn:
             conn.close()
 async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT_TYPE, silent: bool = False):
-    """Clear the conversation state without showing cancellation message"""
+    """Clear the conversation state while preserving essential trade data"""
     try:
-        # حفظ pharmacy_id و pharmacy_name قبل از پاک کردن
-        pharmacy_id = context.user_data.get('selected_pharmacy_id')
-        pharmacy_name = context.user_data.get('selected_pharmacy_name')
+        # حفظ اطلاعات ضروری مربوط به مبادله قبل از پاک کردن
+        essential_keys = [
+            'selected_pharmacy_id', 'selected_pharmacy_name',
+            'offer_items', 'comp_items',  # اینها را حفظ می‌کنیم
+            'current_list_type', 'page_target', 'page_mine'
+        ]
         
-        # پاک کردن تمام stateهای مربوط به عملیات مختلف
+        preserved_data = {}
+        for key in essential_keys:
+            if key in context.user_data:
+                preserved_data[key] = context.user_data[key]
+        
+        # پاک کردن تمام stateهای مربوط به عملیات مختلف (به جز اطلاعات ضروری)
         keys_to_remove = [
             # داروها
             'selected_drug', 'expiry_date', 'drug_quantity', 'editing_drug', 
-            'edit_field', 'matched_drugs',
+            'edit_field', 'matched_drugs', 'current_selection',
             
             # نیازها
-            'need_name', 'need_desc', 'editing_need',
+            'need_name', 'need_desc', 'editing_need', 'need_drug',
             
-            # جستجو و مبادله
-            'offer_items', 'comp_items', 'current_list', 
-            'page_target', 'page_mine', 'match_drug', 'match_need',
-            'current_comp_drug', 'target_drugs', 'my_drugs',
+            # جستجو و مبادله (فقط موارد غیر ضروری)
+            'match_drug', 'match_need', 'current_comp_drug', 
+            'target_drugs', 'my_drugs', 'target_drug_buttons', 'my_drug_buttons',
             
-            # سایر
+            # ثبت نام
             'pharmacy_name', 'founder_name', 'national_card',
             'license', 'medical_card', 'phone', 'address',
             'verification_code'
@@ -614,11 +621,9 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
             if key in context.user_data:
                 del context.user_data[key]
         
-        # بازگرداندن pharmacy_id و pharmacy_name اگر وجود داشتند
-        if pharmacy_id is not None:
-            context.user_data['selected_pharmacy_id'] = pharmacy_id
-        if pharmacy_name is not None:
-            context.user_data['selected_pharmacy_name'] = pharmacy_name
+        # بازگرداندن اطلاعات ضروری
+        for key, value in preserved_data.items():
+            context.user_data[key] = value
         
         if silent:
             return ConversationHandler.END
@@ -632,6 +637,42 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
         
+        # بررسی اگر در حال مبادله هستیم، منوی متفاوت نشان دهیم
+        if context.user_data.get('offer_items') or context.user_data.get('comp_items'):
+            trade_keyboard = [
+                ['ادامه مبادله', 'پاک کردن مبادله'],
+                ['بازگشت به منوی اصلی']
+            ]
+            trade_markup = ReplyKeyboardMarkup(trade_keyboard, resize_keyboard=True)
+            
+            if update.callback_query:
+                await update.callback_query.answer()
+                try:
+                    await update.callback_query.edit_message_text(
+                        text="مبادله فعلی ذخیره شد. چه کاری می‌خواهید انجام دهید؟",
+                        reply_markup=trade_markup
+                    )
+                except:
+                    await context.bot.send_message(
+                        chat_id=update.callback_query.message.chat_id,
+                        text="مبادله فعلی ذخیره شد. چه کاری می‌خواهید انجام دهید؟",
+                        reply_markup=trade_markup
+                    )
+            elif update.message:
+                await update.message.reply_text(
+                    text="مبادله فعلی ذخیره شد. چه کاری می‌خواهید انجام دهید؟",
+                    reply_markup=trade_markup
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="مبادله فعلی ذخیره شد. چه کاری می‌خواهید انجام دهید؟",
+                    reply_markup=trade_markup
+                )
+            
+            return States.SELECT_DRUGS
+        
+        # حالت عادی - بازگشت به منوی اصلی
         if update.callback_query:
             await update.callback_query.answer()
             try:
