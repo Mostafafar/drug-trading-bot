@@ -3867,19 +3867,32 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             list_type = "جبرانی"
         
         # Calculate updated totals
+        # محاسبه مجموع‌ها
         offer_items = context.user_data.get('offer_items', [])
         comp_items = context.user_data.get('comp_items', [])
+
         offer_total = sum(parse_price(item['price']) * item['quantity'] for item in offer_items)
         comp_total = sum(parse_price(item['price']) * item['quantity'] for item in comp_items)
         price_difference = offer_total - comp_total
-        
-        await update.message.reply_text(
-            f"✅ {quantity} عدد از {current_selection['name']} به لیست {list_type} اضافه شد.\n\n"
-            f"📊 خلاصه فعلی:\n"
-            f"جمع درخواستی: {format_price(offer_total)}\n"
-            f"جمع جبرانی: {format_price(comp_total)}\n"
-            f"اختلاف قیمت: {format_price(price_difference)}",
-            reply_markup=ReplyKeyboardRemove()
+
+        # نمایش همه داروهای انتخاب شده
+        message = f"✅ {quantity} عدد از {current_selection['name']} به لیست {'درخواستی' if current_selection['type'] == 'target' else 'جبرانی'} اضافه شد.\n\n"
+
+        if offer_items:
+            message += "📌 داروهای درخواستی:\n"
+            for item in offer_items:
+                message += f"- {item['drug_name']} ({item['quantity']} عدد) - {item['price']}\n"
+
+       if comp_items:
+           message += "\n📌 داروهای جبرانی:\n"
+           for item in comp_items:
+               message += f"- {item['name']} ({item['quantity']} عدد) - {item['price']}\n"
+
+       message += f"\n📊 خلاصه فعلی:\n"
+       message += f"جمع درخواستی: {format_price(offer_total)}\n"
+       message += f"جمع جبرانی: {format_price(comp_total)}\n"
+       message += f"اختلاف قیمت: {format_price(price_difference)}",
+       reply_markup=ReplyKeyboardRemove()
         )
         
         # Return to drug list
