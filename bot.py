@@ -586,6 +586,10 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
 async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT_TYPE, silent: bool = False):
     """Clear the conversation state without showing cancellation message"""
     try:
+        # حفظ pharmacy_id و pharmacy_name قبل از پاک کردن
+        pharmacy_id = context.user_data.get('selected_pharmacy_id')
+        pharmacy_name = context.user_data.get('selected_pharmacy_name')
+        
         # پاک کردن تمام stateهای مربوط به عملیات مختلف
         keys_to_remove = [
             # داروها
@@ -596,7 +600,6 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
             'need_name', 'need_desc', 'editing_need',
             
             # جستجو و مبادله
-            'selected_pharmacy_id', 'selected_pharmacy_name', 
             'offer_items', 'comp_items', 'current_list', 
             'page_target', 'page_mine', 'match_drug', 'match_need',
             'current_comp_drug', 'target_drugs', 'my_drugs',
@@ -610,6 +613,12 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
         for key in keys_to_remove:
             if key in context.user_data:
                 del context.user_data[key]
+        
+        # بازگرداندن pharmacy_id و pharmacy_name اگر وجود داشتند
+        if pharmacy_id is not None:
+            context.user_data['selected_pharmacy_id'] = pharmacy_id
+        if pharmacy_name is not None:
+            context.user_data['selected_pharmacy_name'] = pharmacy_name
         
         if silent:
             return ConversationHandler.END
