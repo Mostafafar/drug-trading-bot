@@ -586,123 +586,170 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
 async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT_TYPE, silent: bool = False):
     """Clear the conversation state while preserving essential trade data"""
     try:
-        # حفظ اطلاعات ضروری مربوط به مبادله قبل از پاک کردن
-        essential_keys = [
+        # لاگ وضعیت فعلی برای دیباگ
+        logger.info(f"Clearing conversation state for user {update.effective_user.id}")
+        logger.info(f"Current keys in user_data: {list(context.user_data.keys())}")
+        
+        # حفظ اطلاعات ضروری مربوط به مبادله
+        trade_keys_to_preserve = [
             'selected_pharmacy_id', 'selected_pharmacy_name',
-            'offer_items', 'comp_items',  # اینها را حفظ می‌کنیم
-            'current_list_type', 'page_target', 'page_mine'
+            'offer_items', 'comp_items',
+            'current_list_type', 'page_target', 'page_mine',
+            'target_drugs', 'my_drugs', 'target_drug_buttons', 'my_drug_buttons'
         ]
         
-        preserved_data = {}
-        for key in essential_keys:
+        # ذخیره اطلاعات مبادله
+        preserved_trade_data = {}
+        for key in trade_keys_to_preserve:
             if key in context.user_data:
-                preserved_data[key] = context.user_data[key]
+                preserved_trade_data[key] = context.user_data[key]
+                logger.info(f"Preserving trade key: {key}")
         
-        # پاک کردن تمام stateهای مربوط به عملیات مختلف (به جز اطلاعات ضروری)
+        # پاک کردن فقط stateهای غیر مرتبط با مبادله
         keys_to_remove = [
-            # داروها
-            'selected_drug', 'expiry_date', 'drug_quantity', 'editing_drug', 
-            'edit_field', 'matched_drugs', 'current_selection',
+            # عملیات جاری
+            'current_selection', 'current_comp_drug', 'editing_drug_id',
             
-            # نیازها
-            'need_name', 'need_desc', 'editing_need', 'need_drug',
-            
-            # جستجو و مبادله (فقط موارد غیر ضروری)
-            'match_drug', 'match_need', 'current_comp_drug', 
-            'target_drugs', 'my_drugs', 'target_drug_buttons', 'my_drug_buttons',
-            
-            # ثبت نام
+            # ثبت نام و احراز هویت
             'pharmacy_name', 'founder_name', 'national_card',
             'license', 'medical_card', 'phone', 'address',
-            'verification_code'
+            'verification_code', 'simple_code',
+            
+            # ویرایش
+            'editing_drug', 'editing_need', 'edit_field',
+            
+            # نیازها
+            'need_name', 'need_desc', 'need_drug',
+            
+            # تطابق
+            'match_drug', 'match_need', 'matched_drugs',
+            
+            # سایر
+            'last_selection_info', 'temp_data', 'search_query',
+            'verification_method', 'admin_code'
         ]
         
         for key in keys_to_remove:
             if key in context.user_data:
                 del context.user_data[key]
+                logger.info(f"Removed key: {key}")
         
-        # بازگرداندن اطلاعات ضروری
-        for key, value in preserved_data.items():
+        # بازگرداندن اطلاعات مبادله
+        for key, value in preserved_trade_data.items():
             context.user_data[key] = value
+        
+        logger.info(f"Final keys after clearing: {list(context.user_data.keys())}")
         
         if silent:
             return ConversationHandler.END
             
-        # فقط اگر silent نباشد پیام نشان دهد
-        keyboard = [
-            ['اضافه کردن دارو', 'جستجوی دارو'],
-            ['لیست داروهای من', 'ثبت نیاز جدید'],
-            ['لیست نیازهای من', 'ساخت کد پرسنل'],
-            ['تنظیم شاخه‌های دارویی']
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+        # بررسی اگر در حال مبادله هستیم
+        has_active_trade = any(key in context.user_data for key in ['offer_items', 'comp_items', 'selected_pharmacy_id'])
         
-        # بررسی اگر در حال مبادله هستیم، منوی متفاوت نشان دهیم
-        if context.user_data.get('offer_items') or context.user_data.get('comp_items'):
+        if has_active_trade:
+            # محاسبه مجموع برای نمایش
+            offer_total = 0
+            comp_total = 0
+            if context.user_data.get('offer_items'):
+                offer_total = sum(parse_price(item['price']) * item['quantity'] for item in context.user_data['offer_items'])
+            if context.user_data.get('comp_items'):
+                comp_total = sum(parse_price(item['price']) * item['quantity'] for item in context.user_data['comp_items'])
+            
+            # نمایش منوی مبادله
             trade_keyboard = [
-                ['ادامه مبادله', 'پاک کردن مبادله'],
-                ['بازگشت به منوی اصلی']
+                ['📋 ادامه مبادله', '🗑️ پاک کردن مبادله'],
+                ['🔙 بازگشت به منوی اصلی']
             ]
             trade_markup = ReplyKeyboardMarkup(trade_keyboard, resize_keyboard=True)
             
-            if update.callback_query:
-                await update.callback_query.answer()
-                try:
+            trade_message = "💼 مبادله فعلی ذخیره شد\n\n"
+            
+            if context.user_data.get('offer_items'):
+                trade_message += f"📦 داروهای درخواستی: {len(context.user_data['offer_items'])} مورد\n"
+            if context.user_data.get('comp_items'):
+                trade_message += f"📦 داروهای جبرانی: {len(context.user_data['comp_items'])} مورد\n"
+            
+            trade_message += f"💰 جمع درخواستی: {format_price(offer_total)}\n"
+            trade_message += f"💰 جمع جبرانی: {format_price(comp_total)}\n"
+            trade_message += f"📊 اختلاف: {format_price(offer_total - comp_total)}\n\n"
+            trade_message += "چه کاری می‌خواهید انجام دهید؟"
+            
+            try:
+                if update.callback_query:
+                    await update.callback_query.answer()
                     await update.callback_query.edit_message_text(
-                        text="مبادله فعلی ذخیره شد. چه کاری می‌خواهید انجام دهید؟",
+                        text=trade_message,
                         reply_markup=trade_markup
                     )
-                except:
-                    await context.bot.send_message(
-                        chat_id=update.callback_query.message.chat_id,
-                        text="مبادله فعلی ذخیره شد. چه کاری می‌خواهید انجام دهید؟",
+                else:
+                    await update.message.reply_text(
+                        text=trade_message,
                         reply_markup=trade_markup
                     )
-            elif update.message:
-                await update.message.reply_text(
-                    text="مبادله فعلی ذخیره شد. چه کاری می‌خواهید انجام دهید؟",
-                    reply_markup=trade_markup
-                )
-            else:
+            except Exception as e:
+                logger.error(f"Error sending trade message: {e}")
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
-                    text="مبادله فعلی ذخیره شد. چه کاری می‌خواهید انجام دهید؟",
+                    text=trade_message,
                     reply_markup=trade_markup
                 )
             
             return States.SELECT_DRUGS
         
-        # حالت عادی - بازگشت به منوی اصلی
-        if update.callback_query:
-            await update.callback_query.answer()
-            try:
+        # منوی اصلی
+        main_keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        main_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+        
+        try:
+            if update.callback_query:
+                await update.callback_query.answer()
                 await update.callback_query.edit_message_text(
                     text="به منوی اصلی بازگشتید:",
-                    reply_markup=reply_markup
+                    reply_markup=main_markup
                 )
-            except:
-                await context.bot.send_message(
-                    chat_id=update.callback_query.message.chat_id,
+            else:
+                await update.message.reply_text(
                     text="به منوی اصلی بازگشتید:",
-                    reply_markup=reply_markup
+                    reply_markup=main_markup
                 )
-        elif update.message:
-            await update.message.reply_text(
-                text="به منوی اصلی بازگشتید:",
-                reply_markup=reply_markup
-            )
-        else:
+        except Exception as e:
+            logger.error(f"Error sending main menu: {e}")
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="به منوی اصلی بازگشتید:",
-                reply_markup=reply_markup
+                reply_markup=main_markup
             )
         
         return ConversationHandler.END
         
     except Exception as e:
-        logger.error(f"Error in clear_conversation_state: {e}")
+        logger.error(f"Error in clear_conversation_state: {e}", exc_info=True)
+        
+        # در صورت خطا، حداقل منوی اصلی را نشان دهد
+        try:
+            keyboard = [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['لیست داروهای من', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                ['تنظیم شاخه‌های دارویی']
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="به منوی اصلی بازگشتید:",
+                reply_markup=reply_markup
+            )
+        except Exception as inner_e:
+            logger.error(f"Failed to send error recovery message: {inner_e}")
+        
         return ConversationHandler.END
+
 # Command Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler with both registration options and verification check"""
