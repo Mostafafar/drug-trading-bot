@@ -5192,7 +5192,9 @@ def main():
                     InlineQueryHandler(handle_inline_query),
                     CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"),
                     ChosenInlineResultHandler(handle_chosen_inline_result),
-                    CallbackQueryHandler(add_need, pattern="^back$")
+                    CallbackQueryHandler(add_need, pattern="^back$"),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)  # اضافه کردن این خط برای مدیریت توضیح
+    
                     
                 ],
                 States.ADD_NEED_DESC: [
