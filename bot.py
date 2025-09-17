@@ -3137,85 +3137,50 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """لیست نیازهای کاربر"""
+    logger.info(f"Starting list_my_needs for user {update.effective_user.id}")
+    conn = None
     try:
-        logger.info(f"Listing needs for user {update.effective_user.id}")
-        
-        await ensure_user(update, context)
-        
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                cursor.execute('''
-                SELECT id, name, description, quantity 
-                FROM user_needs 
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+            cursor.execute('''
+                SELECT id, name, description, quantity
+                FROM user_needs
                 WHERE user_id = %s
                 ORDER BY created_at DESC
-                ''', (update.effective_user.id,))
-                needs = cursor.fetchall()
-                
-                if needs:
-                    message = "📝 لیست نیازهای شما:\n\n"
-                    for need in needs:
-                        # کوتاه کردن نام اگر طولانی است
-                        need_name = need['name']
-                        if len(need_name) > 50:
-                            need_name = need_name[:47] + "..."
-                        
-                        desc = need['description'] or 'بدون توضیح'
-                        if len(desc) > 50:
-                            desc = desc[:47] + "..."
-                        
-                        message += (
-                            f"• {need_name}\n"
-                            f"  📄 توضیحات: {desc}\n"
-                            f"  📦 تعداد: {need['quantity']}\n\n"
-                        )
-                    
-                    keyboard = [
-                        [InlineKeyboardButton("✏️ ویرایش نیازها", callback_data="edit_needs")],
-                        [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")]
-                    ]
-                    
-                    # ابتدا keyboard را پاک کنید
-                    await update.message.reply_text(
-                        "در حال بارگذاری لیست نیازها...",
-                        reply_markup=ReplyKeyboardRemove()
-                    )
-                    
-                    # سپس پیام را ارسال کنید
-                    await update.message.reply_text(
-                        message,
-                        reply_markup=InlineKeyboardMarkup(keyboard)
-                    )
-                    
-                    return States.EDIT_NEED
-                else:
-                    await update.message.reply_text(
-                        "شما هنوز هیچ نیازی ثبت نکرده‌اید.",
-                        reply_markup=ReplyKeyboardRemove()
-                    )
-                    
-        except Exception as e:
-            logger.error(f"Error listing needs: {e}", exc_info=True)
-            await update.message.reply_text(
-                "خطا در دریافت لیست نیازها.",
-                reply_markup=ReplyKeyboardRemove()
-            )
-        finally:
-            if conn:
-                conn.close()
-                
-        return ConversationHandler.END
+            ''', (update.effective_user.id,))
+            needs = cursor.fetchall()
         
-    except Exception as e:
-        logger.error(f"Error in list_my_needs: {e}", exc_info=True)
-        await update.message.reply_text(
-            "خطایی در نمایش لیست نیازها رخ داد.",
-            reply_markup=ReplyKeyboardRemove()
-        )
+        if not needs:
+            await update.message.reply_text("شما هیچ نیازی ثبت نکرده‌اید.")
+            logger.info("No needs found for user")
+            return ConversationHandler.END
+        
+        message = "📋 لیست نیازهای شما:\n\n"
+        keyboard = []
+        for i, need in enumerate(needs, 1):
+            message += f"{i}. {need['name']}\n   توضیح: {need['description'] or 'بدون توضیح'}\n   تعداد: {need['quantity']}\n\n"
+            keyboard.append([InlineKeyboardButton(f"ویرایش {i}: {format_button_text(need['name'])}", callback_data=f"edit_need_{need['id']}")])
+        
+        keyboard.append([InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(message, reply_markup=reply_markup)
+        logger.info("Needs list sent successfully")
+        return States.EDIT_NEED  # اگر ویرایش بخوای، иначе END
+    
+    except psycopg2.Error as db_e:
+        logger.error(f"DB error in list_my_needs: {db_e}", exc_info=True)
+        await update.message.reply_text("خطا در اتصال به دیتابیس یا دریافت لیست نیازها. لطفا ادمین چک کنه.")
         return ConversationHandler.END
+    
+    except Exception as e:
+        logger.error(f"Unexpected error in list_my_needs: {e}", exc_info=True)
+        await update.message.reply_text("خطا در نمایش لیست نیازها. لطفا دوباره تلاش کنید.")
+        return ConversationHandler.END
+    
+    finally:
+        if conn:
+            conn.close()
 
 async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start needs editing process"""
