@@ -3558,6 +3558,19 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """جستجوی دارو و نمایش نتایج با دکمه اینلاین برای انتخاب داروخانه"""
     await clear_conversation_state(update, context, silent=True)
     try:
+        # بررسی وجود update.message
+        if not update.message:
+            logger.error("No message in update for handle_search")
+            # تلاش برای ارسال پیام از طریق context
+            try:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="خطا در پردازش درخواست. لطفا دوباره تلاش کنید."
+                )
+            except:
+                pass
+            return ConversationHandler.END
+            
         drug_name = update.message.text.strip()
         user_id = update.effective_user.id
         
@@ -3658,7 +3671,17 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
     except Exception as e:
         logger.error(f"Error in handle_search: {e}")
-        await update.message.reply_text("خطایی در پردازش جستجو رخ داد.")
+        # استفاده از روش ایمن برای ارسال پیام
+        try:
+            if update.message:
+                await update.message.reply_text("خطایی در پردازش جستجو رخ داد.")
+            else:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="خطایی در پردازش جستجو رخ داد."
+                )
+        except Exception as send_error:
+            logger.error(f"Failed to send error message: {send_error}")
         return ConversationHandler.END
 async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle pharmacy selection and initiate drug selection"""
