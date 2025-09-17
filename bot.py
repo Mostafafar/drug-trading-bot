@@ -3121,8 +3121,15 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await clear_conversation_state(update, context, silent=True)
     try:
         context.user_data['need_desc'] = update.message.text
-        await update.message.reply_text("لطفا تعداد مورد نیاز را وارد کنید:")
+        
+        # ارسال پیام برای دریافت تعداد
+        await update.message.reply_text(
+            "📦 لطفا تعداد مورد نیاز را وارد کنید:",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        
         return States.ADD_NEED_QUANTITY
+        
     except Exception as e:
         logger.error(f"Error in save_need_desc: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
@@ -3177,11 +3184,13 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if conn:
                     conn.close()
             
-            return ConversationHandler.END
+            # بازگشت به منوی اصلی
+            return await clear_conversation_state(update, context)
             
         except ValueError:
             await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
             return States.ADD_NEED_QUANTITY
+            
     except Exception as e:
         logger.error(f"Error in save_need: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
