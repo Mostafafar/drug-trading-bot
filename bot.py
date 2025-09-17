@@ -157,188 +157,238 @@ async def initialize_db():
     conn = None
     try:
         conn = get_db_connection()
+        logger.info("Connected to database successfully")
         with conn.cursor() as cursor:
+            # ایجاد جدول users
             cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id BIGINT PRIMARY KEY,
-                first_name TEXT,
-                last_name TEXT,
-                username TEXT,
-                phone TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_verified BOOLEAN DEFAULT FALSE,
-                verification_code TEXT,
-                verification_method TEXT,
-                is_admin BOOLEAN DEFAULT FALSE,
-                is_pharmacy_admin BOOLEAN DEFAULT FALSE,
-                is_personnel BOOLEAN DEFAULT FALSE,
-                simple_code TEXT,
-                creator_id BIGINT
-            )''')
+                CREATE TABLE IF NOT EXISTS users (
+                    id BIGINT PRIMARY KEY,
+                    first_name TEXT,
+                    last_name TEXT,
+                    username TEXT,
+                    phone TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_verified BOOLEAN DEFAULT FALSE,
+                    verification_code TEXT,
+                    verification_method TEXT,
+                    is_admin BOOLEAN DEFAULT FALSE,
+                    is_pharmacy_admin BOOLEAN DEFAULT FALSE,
+                    is_personnel BOOLEAN DEFAULT FALSE,
+                    simple_code TEXT,
+                    creator_id BIGINT
+                )
+            ''')
+            logger.info("Created users table")
+
+            # ایجاد جدول pharmacies
             cursor.execute('''
-            CREATE TABLE IF NOT EXISTS personnel_codes (
-                code TEXT PRIMARY KEY,
-                creator_id BIGINT REFERENCES pharmacies(user_id),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT TRUE
-            )''')
-            cursor.execute("SELECT to_regclass('users')")
-            users_table = cursor.fetchone()[0]
-            logger.info(f"Users table exists: {users_table}")
-            if not users_table:
-                raise Exception("Users table creation failed")
-            
+                CREATE TABLE IF NOT EXISTS pharmacies (
+                    user_id BIGINT PRIMARY KEY REFERENCES users(id),
+                    name TEXT,
+                    founder_name TEXT,
+                    national_card_image TEXT,
+                    license_image TEXT,
+                    medical_card_image TEXT,
+                    phone TEXT,
+                    address TEXT,
+                    admin_code TEXT UNIQUE,
+                    verified BOOLEAN DEFAULT FALSE,
+                    verified_at TIMESTAMP,
+                    admin_id BIGINT REFERENCES users(id)
+                )
+            ''')
+            logger.info("Created pharmacies table")
+
+            # ایجاد جدول personnel_codes
             cursor.execute('''
-            CREATE TABLE IF NOT EXISTS pharmacies (
-                user_id BIGINT PRIMARY KEY REFERENCES users(id),
-                name TEXT,
-                founder_name TEXT,
-                national_card_image TEXT,
-                license_image TEXT,
-                medical_card_image TEXT,
-                phone TEXT,
-                address TEXT,
-                admin_code TEXT UNIQUE,
-                verified BOOLEAN DEFAULT FALSE,
-                verified_at TIMESTAMP,
-                admin_id BIGINT REFERENCES users(id)
-            )''')
-            
+                CREATE TABLE IF NOT EXISTS personnel_codes (
+                    code TEXT PRIMARY KEY,
+                    creator_id BIGINT REFERENCES pharmacies(user_id),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_active BOOLEAN DEFAULT TRUE
+                )
+            ''')
+            logger.info("Created personnel_codes table")
+
+            # ایجاد بقیه جدول‌ها (مثل user_needs, drug_items, و غیره)
             cursor.execute('''
-            CREATE TABLE IF NOT EXISTS drug_items (
-                id SERIAL PRIMARY KEY,
-                user_id BIGINT REFERENCES users(id),
-                name TEXT,
-                price TEXT,
-                date TEXT,
-                quantity INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-            
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS medical_categories (
-                id SERIAL PRIMARY KEY,
-                name TEXT UNIQUE
-            )''')
-            
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_categories (
-                user_id BIGINT REFERENCES users(id),
-                category_id INTEGER REFERENCES medical_categories(id),
-                PRIMARY KEY (user_id, category_id)
-            )''')
-            
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS offers (
-                id SERIAL PRIMARY KEY,
-                pharmacy_id BIGINT REFERENCES pharmacies(user_id),
-                buyer_id BIGINT REFERENCES users(id),
-                status TEXT DEFAULT 'pending',
-                total_price NUMERIC,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-            
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS offer_items (
-                id SERIAL PRIMARY KEY,
-                offer_id INTEGER REFERENCES offers(id),
-                drug_name TEXT,
-                price TEXT,
-                quantity INTEGER,
-                item_type TEXT DEFAULT 'drug'
-            )''')
-            
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS compensation_items (
-                id SERIAL PRIMARY KEY,
-                offer_id INTEGER REFERENCES offers(id),
-                drug_id INTEGER REFERENCES drug_items(id),
-                quantity INTEGER
-            )''')
-            
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_needs (
-                id SERIAL PRIMARY KEY,
-                user_id BIGINT REFERENCES users(id),
-                name TEXT,
-                description TEXT,
-                quantity INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-            
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS match_notifications (
-                id SERIAL PRIMARY KEY,
-                user_id BIGINT REFERENCES users(id),
-                drug_id INTEGER REFERENCES drug_items(id),
-                need_id INTEGER REFERENCES user_needs(id),
-                similarity_score REAL,
-                notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-            
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS admin_settings (
-                id SERIAL PRIMARY KEY,
-                excel_url TEXT,
-                last_updated TIMESTAMP
-            )''')
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS exchanges (
-                id SERIAL PRIMARY KEY,
-                from_pharmacy_id BIGINT REFERENCES pharmacies(user_id),
-                to_pharmacy_id BIGINT REFERENCES pharmacies(user_id),
-                from_total NUMERIC,
-                to_total NUMERIC,
-                difference NUMERIC,
-                status TEXT DEFAULT 'pending',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                accepted_at TIMESTAMP,
-                rejected_at TIMESTAMP
-            )''')
+                CREATE TABLE IF NOT EXISTS drug_items (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT REFERENCES users(id),
+                    name TEXT,
+                    price TEXT,
+                    date TEXT,
+                    quantity INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            logger.info("Created drug_items table")
 
             cursor.execute('''
-            CREATE TABLE IF NOT EXISTS exchange_items (
-               id SERIAL PRIMARY KEY,
-               exchange_id INTEGER REFERENCES exchanges(id),
-               drug_id INTEGER REFERENCES drug_items(id),
-               drug_name TEXT,
-               price TEXT,
-               quantity INTEGER,
-               from_pharmacy BOOLEAN
-            )''')
-            
+                CREATE TABLE IF NOT EXISTS user_needs (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT REFERENCES users(id),
+                    name TEXT,
+                    description TEXT,
+                    quantity INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            logger.info("Created user_needs table")
+
             cursor.execute('''
-            CREATE TABLE IF NOT EXISTS simple_codes (
-                code TEXT PRIMARY KEY,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                used_by BIGINT[] DEFAULT array[]::BIGINT[],
-                max_uses INTEGER DEFAULT 5
-            )''')
+                CREATE TABLE IF NOT EXISTS medical_categories (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE
+                )
+            ''')
+            logger.info("Created medical_categories table")
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_categories (
+                    user_id BIGINT REFERENCES users(id),
+                    category_id INTEGER REFERENCES medical_categories(id),
+                    PRIMARY KEY (user_id, category_id)
+                )
+            ''')
+            logger.info("Created user_categories table")
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS offers (
+                    id SERIAL PRIMARY KEY,
+                    pharmacy_id BIGINT REFERENCES pharmacies(user_id),
+                    buyer_id BIGINT REFERENCES users(id),
+                    status TEXT DEFAULT 'pending',
+                    total_price NUMERIC,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            logger.info("Created offers table")
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS offer_items (
+                    id SERIAL PRIMARY KEY,
+                    offer_id INTEGER REFERENCES offers(id),
+                    drug_name TEXT,
+                    price TEXT,
+                    quantity INTEGER,
+                    item_type TEXT DEFAULT 'drug'
+                )
+            ''')
+            logger.info("Created offer_items table")
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS compensation_items (
+                    id SERIAL PRIMARY KEY,
+                    offer_id INTEGER REFERENCES offers(id),
+                    drug_id INTEGER REFERENCES drug_items(id),
+                    quantity INTEGER
+                )
+            ''')
+            logger.info("Created compensation_items table")
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS match_notifications (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT REFERENCES users(id),
+                    drug_id INTEGER REFERENCES drug_items(id),
+                    need_id INTEGER REFERENCES user_needs(id),
+                    similarity_score REAL,
+                    notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            logger.info("Created match_notifications table")
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS admin_settings (
+                    id SERIAL PRIMARY KEY,
+                    excel_url TEXT,
+                    last_updated TIMESTAMP
+                )
+            ''')
+            logger.info("Created admin_settings table")
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS exchanges (
+                    id SERIAL PRIMARY KEY,
+                    from_pharmacy_id BIGINT REFERENCES pharmacies(user_id),
+                    to_pharmacy_id BIGINT REFERENCES pharmacies(user_id),
+                    from_total NUMERIC,
+                    to_total NUMERIC,
+                    difference NUMERIC,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    accepted_at TIMESTAMP,
+                    rejected_at TIMESTAMP
+                )
+            ''')
+            logger.info("Created exchanges table")
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS exchange_items (
+                    id SERIAL PRIMARY KEY,
+                    exchange_id INTEGER REFERENCES exchanges(id),
+                    drug_id INTEGER REFERENCES drug_items(id),
+                    drug_name TEXT,
+                    price TEXT,
+                    quantity INTEGER,
+                    from_pharmacy BOOLEAN
+                )
+            ''')
+            logger.info("Created exchange_items table")
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS simple_codes (
+                    code TEXT PRIMARY KEY,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    used_by BIGINT[] DEFAULT array[]::BIGINT[],
+                    max_uses INTEGER DEFAULT 5
+                )
+            ''')
+            logger.info("Created simple_codes table")
+
+            # فعال‌سازی pg_trgm
             cursor.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
-            
+            logger.info("Activated pg_trgm extension")
+
+            # افزودن دسته‌بندی‌های پیش‌فرض
             default_categories = ['اعصاب', 'قلب', 'ارتوپد', 'زنان', 'گوارش', 'پوست', 'اطفال']
             for category in default_categories:
                 cursor.execute('''
-                INSERT INTO medical_categories (name)
-                VALUES (%s)
-                ON CONFLICT (name) DO NOTHING
+                    INSERT INTO medical_categories (name)
+                    VALUES (%s)
+                    ON CONFLICT (name) DO NOTHING
                 ''', (category,))
-            
+            logger.info("Inserted default categories")
+
+            # افزودن ادمین
             cursor.execute('''
-            INSERT INTO users (id, is_admin, is_verified)
-            VALUES (%s, TRUE, TRUE)
-            ON CONFLICT (id) DO UPDATE SET is_admin = TRUE
+                INSERT INTO users (id, is_admin, is_verified)
+                VALUES (%s, TRUE, TRUE)
+                ON CONFLICT (id) DO UPDATE SET is_admin = TRUE
             ''', (ADMIN_CHAT_ID,))
-            
+            logger.info("Inserted admin user")
+
+            # تست جدول‌ها
+            cursor.execute("SELECT 1 FROM users LIMIT 1")
+            cursor.execute("SELECT 1 FROM user_needs LIMIT 1")
+            cursor.execute("SELECT 1 FROM pharmacies LIMIT 1")
+            logger.info("All tables tested successfully")
+
             conn.commit()
+            logger.info("Database initialization completed successfully")
+    
     except psycopg2.Error as e:
-        logger.error(f"Database initialization error: {e}")
+        logger.error(f"Database initialization error: {e}", exc_info=True)
         if conn:
             conn.rollback()
+        raise
+    
     finally:
         if conn:
             conn.close()
+            logger.info("DB connection closed")
 def format_button_text(text, max_line_length=25, max_lines=2):
     """
     Format text for Telegram button with proper line breaks
