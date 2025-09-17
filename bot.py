@@ -4922,18 +4922,22 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
         )
         
-        if update.effective_chat:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=error_message
-            )
-            await clear_conversation_state(update, context, silent=True)
+        # ارسال پیام خطا به صورت ایمن
+        try:
+            if update and update.effective_chat:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=error_message
+                )
+                await clear_conversation_state(update, context, silent=True)
+        except Exception as e:
+            logger.error(f"Failed to send error message to user: {e}")
         
         # Notify admin
         tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
         tb_string = ''.join(tb_list)
         admin_message = (
-            f"⚠️ خطا برای کاربر {update.effective_user.id if update.effective_user else 'unknown'}:\n\n"
+            f"⚠️ خطا برای کاربر {update.effective_user.id if update and update.effective_user else 'unknown'}:\n\n"
             f"{context.error}\n\n"
             f"Traceback:\n<code>{html.escape(tb_string)}</code>\n\n"
             f"User Data: {context.user_data}"
