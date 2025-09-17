@@ -5188,6 +5188,7 @@ def main():
                 ],
                 States.ADD_NEED_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
+            
                 ],
                 States.EDIT_NEED: [
                     CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
