@@ -3156,6 +3156,7 @@ async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if not needs:
             await update.message.reply_text("شما هیچ نیازی ثبت نکرده‌اید.")
+            logger.info(f"No needs found for user {user_id}")
             return ConversationHandler.END
         
         message = "📋 لیست نیازهای شما:\n\n"
@@ -3172,16 +3173,16 @@ async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_text(message, reply_markup=reply_markup)
         logger.info(f"Needs list sent to user {user_id}")
-        return States.EDIT_NEED  # اگر ویرایش فعال باشه، иначе ConversationHandler.END
+        return States.EDIT_NEED  # برای ویرایش، یا اگر نمی‌خوای END برگردون
     
     except psycopg2.OperationalError as op_e:
         logger.error(f"Operational DB error in list_my_needs for user {user_id}: {op_e}", exc_info=True)
-        await update.message.reply_text("خطا در اتصال به دیتابیس. لطفا ادمین چک کنه (مثل postgres running?).")
+        await update.message.reply_text("خطا در اتصال به دیتابیس. لطفا بررسی کنید که سرور postgres فعال است.")
         return ConversationHandler.END
     
     except psycopg2.Error as db_e:
         logger.error(f"DB error in list_my_needs for user {user_id}: {db_e}", exc_info=True)
-        await update.message.reply_text("خطا در query دیتابیس برای لیست نیازها. table user_needs رو چک کن.")
+        await update.message.reply_text("خطا در دریافت لیست نیازها از دیتابیس. لطفا جدول user_needs رو چک کنید.")
         return ConversationHandler.END
     
     except Exception as e:
@@ -3192,7 +3193,7 @@ async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         if conn:
             conn.close()
-            logger.info("DB connection closed")
+            logger.info(f"DB connection closed for user {user_id}")
 
 async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start needs editing process"""
