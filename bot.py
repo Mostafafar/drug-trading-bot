@@ -3139,10 +3139,7 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """لیست نیازهای کاربر"""
     try:
-        # حذف stateهای مربوط به داروها که ممکن است تداخل ایجاد کنند
-        drug_keys = ['editing_drug', 'edit_field', 'current_selection', 'matched_drugs']
-        for key in drug_keys:
-            context.user_data.pop(key, None)
+        logger.info(f"Listing needs for user {update.effective_user.id}")
         
         await ensure_user(update, context)
         
@@ -4927,37 +4924,22 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
         text = update.message.text.strip()
         logger.info(f"State change requested: {text}")
 
-        # پاک کردن stateهای قبلی مربوط به عملیات جاری
+        # ابتدا state را کامل پاک کن
+        await clear_conversation_state(update, context, silent=True)
+
         if text == 'لیست داروهای من':
-            # پاک کردن stateهای نیازها اگر وجود دارند
-            context.user_data.pop('editing_need', None)
-            context.user_data.pop('edit_field', None)
             return await list_my_drugs(update, context)
             
         elif text == 'لیست نیازهای من':
-            # پاک کردن stateهای داروها اگر وجود دارند
-            context.user_data.pop('editing_drug', None)
-            context.user_data.pop('edit_field', None)
-            context.user_data.pop('current_selection', None)
             return await list_my_needs(update, context)
             
         elif text == 'اضافه کردن دارو':
-            context.user_data.pop('need_drug', None)
-            context.user_data.pop('need_name', None)
-            context.user_data.pop('need_desc', None)
             return await add_drug_item(update, context)
             
         elif text == 'ثبت نیاز جدید':
-            context.user_data.pop('selected_drug', None)
-            context.user_data.pop('expiry_date', None)
-            context.user_data.pop('drug_quantity', None)
             return await add_need(update, context)
             
         elif text == 'جستجوی دارو':
-            context.user_data.pop('selected_pharmacy_id', None)
-            context.user_data.pop('selected_pharmacy_name', None)
-            context.user_data.pop('offer_items', None)
-            context.user_data.pop('comp_items', None)
             return await search_drug(update, context)
             
         elif text == 'ساخت کد پرسنل':
@@ -4984,6 +4966,7 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"Error in handle_state_change: {e}", exc_info=True)
         await update.message.reply_text("خطایی در تغییر حالت رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 def main():
     """Start the bot"""
     try:
