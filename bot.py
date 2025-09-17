@@ -3109,7 +3109,6 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save need to database with selected drug"""
-    await clear_conversation_state(update, context, silent=True)
     try:
         quantity_text = update.message.text.strip()
         
@@ -3127,23 +3126,21 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         drug_name = need_drug.get('name', '')
         drug_price = need_drug.get('price', '')
         
-        # بررسی وجود اطلاعات دارو
         if not drug_name:
             await update.message.reply_text("خطا: اطلاعات دارو یافت نشد. لطفا دوباره شروع کنید.")
-            return ConversationHandler.END
+            return await clear_conversation_state(update, context)
         
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
                 cursor.execute('''
-                INSERT INTO user_needs (
-                    user_id, name, description, quantity, reference_price
-                ) VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO user_needs (user_id, name, description, quantity, reference_price)
+                VALUES (%s, %s, %s, %s, %s)
                 ''', (
                     update.effective_user.id,
                     drug_name,
-                    "بدون توضیح",  # توضیحات پیش‌فرض
+                    "بدون توضیح",
                     quantity,
                     drug_price
                 ))
@@ -3156,26 +3153,22 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"تعداد: {quantity}"
                 )
                 
-                # پاک کردن اطلاعات دارو از context بعد از ثبت
-                context.user_data.pop('need_drug', None)
-                
-                # Check for matches with other users' drugs
-                context.application.create_task(check_for_matches(update.effective_user.id, context))
-                
         except Exception as e:
             logger.error(f"Error saving need: {e}")
             await update.message.reply_text("خطا در ثبت نیاز. لطفا دوباره تلاش کنید.")
+            return States.ADD_NEED_QUANTITY
         finally:
             if conn:
                 conn.close()
         
-        # بازگشت به منوی اصلی
+        # پاک کردن context و بازگشت به منوی اصلی
+        context.user_data.pop('need_drug', None)
         return await clear_conversation_state(update, context)
             
     except Exception as e:
         logger.error(f"Error in save_need: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+        return await clear_conversation_state(update, context)
 async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"Starting list_my_needs for user {user_id}")
