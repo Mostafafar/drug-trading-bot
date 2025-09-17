@@ -593,9 +593,7 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
         # حفظ اطلاعات ضروری مربوط به مبادله
         trade_keys_to_preserve = [
             'selected_pharmacy_id', 'selected_pharmacy_name',
-            'offer_items', 'comp_items',
-            'current_list_type', 'page_target', 'page_mine',
-            'target_drugs', 'my_drugs', 'target_drug_buttons', 'my_drug_buttons'
+            'offer_items', 'comp_items'
         ]
         
         # ذخیره اطلاعات مبادله
@@ -605,38 +603,11 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
                 preserved_trade_data[key] = context.user_data[key]
                 logger.info(f"Preserving trade key: {key}")
         
-        # پاک کردن فقط stateهای غیر مرتبط با مبادله
-        keys_to_remove = [
-            # عملیات جاری
-            'current_selection', 'current_comp_drug', 'editing_drug_id',
-            
-            # ثبت نام و احراز هویت
-            'pharmacy_name', 'founder_name', 'national_card',
-            'license', 'medical_card', 'phone', 'address',
-            'verification_code', 'simple_code',
-            
-            # ویرایش
-            'editing_drug', 'editing_need', 'edit_field',
-            
-            # نیازها
-            'need_name', 'need_desc', 'need_drug',
-            
-            # تطابق
-            'match_drug', 'match_need', 'matched_drugs',
-            
-            # سایر
-            'last_selection_info', 'temp_data', 'search_query',
-            'verification_method', 'admin_code'
-        ]
-        
-        for key in keys_to_remove:
-            if key in context.user_data:
-                del context.user_data[key]
-                logger.info(f"Removed key: {key}")
+        # پاک کردن کامل همه stateها
+        context.user_data.clear()
         
         # بازگرداندن اطلاعات مبادله
-        for key, value in preserved_trade_data.items():
-            context.user_data[key] = value
+        context.user_data.update(preserved_trade_data)
         
         logger.info(f"Final keys after clearing: {list(context.user_data.keys())}")
         
@@ -749,6 +720,8 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
             logger.error(f"Failed to send error recovery message: {inner_e}")
         
         return ConversationHandler.END
+
+                
 
 # Command Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
