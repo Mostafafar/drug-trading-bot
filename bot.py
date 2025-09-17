@@ -2241,13 +2241,12 @@ async def handle_need_drug_callback(update: Update, context: ContextTypes.DEFAUL
                     'price': selected_drug[1]
                 }
                 
-                # حذف inline keyboard و نمایش پیام جدید
                 await query.edit_message_text(
                     f"✅ داروی مورد نیاز انتخاب شد: {selected_drug[0]}\n💰 قیمت مرجع: {selected_drug[1]}\n\n"
                     "📦 لطفا تعداد مورد نیاز را وارد کنید:",
                     reply_markup=None
                 )
-                return States.ADD_NEED_QUANTITY  # تغییر از ADD_NEED_DESC به ADD_NEED_QUANTITY
+                return States.ADD_NEED_QUANTITY
                 
     except Exception as e:
         logger.error(f"Error handling need drug callback: {e}")
