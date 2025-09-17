@@ -2389,7 +2389,7 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             
             await context.bot.send_message(
                 chat_id=user_id,
-                text=f"✅ داروی مورد نیاز انتخاب شد: {drug_name}\n💰 قیمت مرجع: {drug_price}\n\n📝 لطفا توضیحاتی درباره این نیاز وارد کنید (اختیاری):"
+                text=f"✅ داروی مورد نیاز انتخاب شد: {drug_name}\n💰 قیمت مرجع: {drug_price}\n\n📦 لطفا تعداد مورد نیاز را وارد کنید:"
             )
             
     except Exception as e:
@@ -5205,9 +5205,6 @@ def main():
                     
     
                     
-                ],
-                States.ADD_NEED_DESC: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_desc)
                 ],
                 States.ADD_NEED_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
