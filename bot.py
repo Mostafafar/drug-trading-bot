@@ -4898,26 +4898,50 @@ async def main_menu_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی در بازگشت به منوی اصلی رخ داد.")
         return ConversationHandler.END
 async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت تغییر فاز بین عملیات مختلف"""
     try:
-        text = update.message.text
-        logger.info(f"Handling state change for user {update.effective_user.id}: {text}")
-        
-        await clear_conversation_state(update, context, silent=True)
-        
-        if text == 'ساخت کد پرسنل':
-            return await generate_personnel_code(update, context)
-        elif text == 'جستجوی دارو':
-            return await search_drug(update, context)
-        elif text == 'اضافه کردن دارو':
-            return await add_drug_item(update, context)
-        elif text == 'لیست داروهای من':
+        text = update.message.text.strip()
+        logger.info(f"State change requested: {text}")
+
+        # پاک کردن stateهای قبلی مربوط به عملیات جاری
+        if text == 'لیست داروهای من':
+            # پاک کردن stateهای نیازها اگر وجود دارند
+            context.user_data.pop('editing_need', None)
+            context.user_data.pop('edit_field', None)
             return await list_my_drugs(update, context)
-        elif text == 'ثبت نیاز جدید':
-            return await add_need(update, context)
+            
         elif text == 'لیست نیازهای من':
+            # پاک کردن stateهای داروها اگر وجود دارند
+            context.user_data.pop('editing_drug', None)
+            context.user_data.pop('edit_field', None)
+            context.user_data.pop('current_selection', None)
             return await list_my_needs(update, context)
+            
+        elif text == 'اضافه کردن دارو':
+            context.user_data.pop('need_drug', None)
+            context.user_data.pop('need_name', None)
+            context.user_data.pop('need_desc', None)
+            return await add_drug_item(update, context)
+            
+        elif text == 'ثبت نیاز جدید':
+            context.user_data.pop('selected_drug', None)
+            context.user_data.pop('expiry_date', None)
+            context.user_data.pop('drug_quantity', None)
+            return await add_need(update, context)
+            
+        elif text == 'جستجوی دارو':
+            context.user_data.pop('selected_pharmacy_id', None)
+            context.user_data.pop('selected_pharmacy_name', None)
+            context.user_data.pop('offer_items', None)
+            context.user_data.pop('comp_items', None)
+            return await search_drug(update, context)
+            
+        elif text == 'ساخت کد پرسنل':
+            return await generate_personnel_code(update, context)
+            
         elif text == 'تنظیم شاخه‌های دارویی':
             return await setup_medical_categories(update, context)
+            
         else:
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
@@ -4931,11 +4955,10 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
                 reply_markup=reply_markup
             )
             return ConversationHandler.END
+            
     except Exception as e:
-        logger.error(f"Error in handle_state_change for user {update.effective_user.id}: {e}", exc_info=True)
-        await update.message.reply_text(
-            "خطایی در تغییر فاز رخ داد. لطفاً دوباره تلاش کنید."
-        )
+        logger.error(f"Error in handle_state_change: {e}", exc_info=True)
+        await update.message.reply_text("خطایی در تغییر حالت رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 def main():
     """Start the bot"""
