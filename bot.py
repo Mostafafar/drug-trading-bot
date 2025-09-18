@@ -1587,14 +1587,14 @@ async def register_national_card(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.error(f"Error in register_national_card: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+        return States.REGISTER_FOUNDER_NAME  # بازگشت به مرحله قبل
 
 async def register_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get license photo in registration process"""
     try:
         if update.message.photo:
             photo_file = await update.message.photo[-1].get_file()
-        elif update.message.document:
+        elif update.message.document and update.message.document.mime_type.startswith('image/'):
             photo_file = await update.message.document.get_file()
         else:
             await update.message.reply_text("لطفا یک تصویر ارسال کنید.")
@@ -1604,7 +1604,7 @@ async def register_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['national_card'] = file_path
         
         await update.message.reply_text(
-            "لطفا تصویر پروانه داروخانه را ارسال کنید:",
+            "✅ تصویر کارت ملی دریافت شد.\n\nلطفا تصویر پروانه داروخانه را ارسال کنید:",
             reply_markup=ReplyKeyboardRemove()
         )
         return States.REGISTER_LICENSE
@@ -1618,7 +1618,7 @@ async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         if update.message.photo:
             photo_file = await update.message.photo[-1].get_file()
-        elif update.message.document:
+        elif update.message.document and update.message.document.mime_type.startswith('image/'):
             photo_file = await update.message.document.get_file()
         else:
             await update.message.reply_text("لطفا یک تصویر ارسال کنید.")
@@ -1628,7 +1628,7 @@ async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data['license'] = file_path
         
         await update.message.reply_text(
-            "لطفا تصویر کارت نظام پزشکی را ارسال کنید:",
+            "✅ تصویر پروانه داروخانه دریافت شد.\n\nلطفا تصویر کارت نظام پزشکی را ارسال کنید:",
             reply_markup=ReplyKeyboardRemove()
         )
         return States.REGISTER_MEDICAL_CARD
