@@ -2377,15 +2377,15 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
                 chat_id=user_id,
                 text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
             )
-            # مهم: برگرداندن State تا ConversationHandler به مرحله بعد برود
+            # برگرداندن State برای ConversationHandler
             return States.ADD_DRUG_DATE
 
         elif result_id.startswith('need_'):
-            # پردازش برای ثبت نیاز — now goes straight to quantity
+            # پردازش برای ثبت نیاز - مستقیم به تعداد می‌رود
             idx = int(result_id.split('_')[1])
             drug_name, drug_price = drug_list[idx]
 
-            # Save as need_name / selected_drug_for_need so save_need can use them
+            # ذخیره اطلاعات نیاز
             context.user_data['need_name'] = drug_name.strip()
             context.user_data['selected_drug_for_need'] = {
                 'name': drug_name.strip(),
@@ -2396,7 +2396,7 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
                 chat_id=user_id,
                 text=f"✅ داروی مورد نیاز انتخاب شد: {drug_name}\n💰 قیمت مرجع: {drug_price}\n\n📦 لطفا تعداد مورد نیاز را وارد کنید:"
             )
-            # مهم: بازگرداندن State مربوط به ورود تعداد نیاز
+            # برگرداندن State برای نیاز
             return States.ADD_NEED_QUANTITY
 
     except Exception as e:
@@ -2408,7 +2408,7 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             )
         except Exception:
             pass
-        return ConversationHandler.END
+    return ConversationHandler.END
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع جستجو با اینلاین کوئری"""
     await clear_conversation_state(update, context, silent=True)
