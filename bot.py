@@ -3124,22 +3124,33 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 # --- NEW FUNCTION: add_need_quantity (replace or add into bot.py) ---
 async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save the quantity for a new need"""
     try:
-        if update.message:  # اگر پیام متنی باشد
-            quantity_text = update.message.text.strip()
-        elif update.callback_query:  # اگر CallbackQuery باشد
-            await update.callback_query.answer()
-            await update.callback_query.edit_message_text(
-                "لطفاً تعداد مورد نیاز را وارد کنید:"
-            )
-            return States.ADD_NEED_QUANTITY
-        else:
+        if not update.message and not update.callback_query:
             logger.error("No valid update type provided")
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="خطایی رخ داد. لطفا دوباره تلاش کنید."
             )
+            return ConversationHandler.END
+
+        if update.callback_query:
+            await update.callback_query.answer()
+            chat_id = update.callback_query.message.chat_id
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="لطفاً تعداد مورد نیاز را وارد کنید:"
+            )
+        else:
+            await update.message.reply_text("لطفاً تعداد مورد نیاز را وارد کنید:")
+
+        return States.ADD_NEED_QUANTITY
+    except Exception as e:
+        logger.error(f"Error in add_need_quantity: {e}")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="❌ خطایی رخ داد. به منوی اصلی بازگشتید."
+        )
+        return ConversationHandler.END
             return await clear_conversation_state(update, context, silent=True)
 
         try:
