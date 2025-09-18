@@ -633,9 +633,23 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
         if conn:
             conn.close()
 async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT_TYPE, silent: bool = False):
-    """Clear the conversation state while preserving essential trade data"""
+    """Clear the conversation state while preserving essential data"""
     try:
-        # لاگ وضعیت فعلی برای دیباگ
+        current_state = await context.application.persistence.get_user_data().get(update.effective_user.id, {}).get('state')
+        
+        # اگر در حالتی هستیم که نیاز به حفظ داده داریم، stateها را پاک نکنیم
+        states_to_preserve = [
+            States.ADD_NEED_QUANTITY,
+            States.ADD_DRUG_QUANTITY,
+            States.SELECT_QUANTITY,
+            States.EDIT_DRUG,
+            States.EDIT_NEED
+        ]
+        
+        if current_state in states_to_preserve:
+            logger.info(f"Skipping state clearance for preserved state: {current_state}")
+            return current_state if not silent else ConversationHandler.END
+        
         logger.info(f"Clearing conversation state for user {update.effective_user.id}")
         logger.info(f"Current keys in user_data: {list(context.user_data.keys())}")
         
