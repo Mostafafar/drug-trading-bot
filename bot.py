@@ -5328,48 +5328,42 @@ def main():
         
         # Needs management handler
         needs_handler = ConversationHandler(
-            entry_points=[
-                MessageHandler(filters.Regex('^ثبت نیاز جدید$'), add_need),
-                MessageHandler(filters.Regex('^لیست نیازهای من$'), list_my_needs),
-                CallbackQueryHandler(edit_needs, pattern="^edit_needs$"),
-                CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
-                CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
-                CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$"),
-                CallbackQueryHandler(handle_need_drug_selection, pattern="^need_drug_") 
+             entry_points=[
+                 MessageHandler(filters.Regex('^ثبت نیاز جدید$'), add_need),
+                 MessageHandler(filters.Regex('^لیست نیازهای من$'), list_my_needs),
+                 CallbackQueryHandler(edit_needs, pattern="^edit_needs$"),
+                 CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
+                 CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
+                 CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$"),
+                 CallbackQueryHandler(handle_need_drug_selection, pattern="^need_drug_") 
             ],
             states={
                 States.SEARCH_DRUG_FOR_NEED: [
                     InlineQueryHandler(handle_inline_query),
-                    CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"),
+                    CallbackQueryHandler(handle_need_drug_selection, pattern="^need_drug_"),
                     ChosenInlineResultHandler(handle_chosen_inline_result),
                     CallbackQueryHandler(add_need, pattern="^back$")
-                    
-    
-                    
-                ],
-                States.ADD_NEED_QUANTITY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity),
-                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
-                 
-            
-                ],
-                States.EDIT_NEED: [
-                    CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
-                    CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
-                    CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit),
-                    CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
-                ]
+           ],
+               States.ADD_NEED_QUANTITY: [
+                   MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity),
+                   CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
+           ],
+               States.EDIT_NEED: [
+                  CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
+                  CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
+                  CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
+                  MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit),
+                  CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
+          ]
             },
             fallbacks=[
                 CommandHandler('cancel', lambda u, c: clear_conversation_state(u, c, silent=True)),
                 MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), 
                      handle_state_change),
-                CallbackQueryHandler(lambda u, c: clear_conversation_state(u, c, silent=True), pattern="^back_to_main$")
-            ],      
-            allow_reentry=True
+               CallbackQueryHandler(lambda u, c: clear_conversation_state(u, c, silent=True), pattern="^back_to_main$")
+           ],
+           allow_reentry=True
         )
-        
         # Search and trade handler
         trade_handler = ConversationHandler(
             entry_points=[
