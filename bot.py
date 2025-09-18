@@ -5412,7 +5412,7 @@ def main():
                 ],
                 States.ADD_NEED_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity),
-                    CallbackQueryHandler(search_drug_for_need, pattern="^search_drug_for_adding$")
+                    CallbackQueryHandler(handle_back, pattern="^back$")
             
                 ],
                 States.EDIT_NEED: [
