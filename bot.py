@@ -3033,28 +3033,19 @@ async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
         return ConversationHandler.END
 # Needs Management
 async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start process to add a need with drug search"""
+    """Start the process of adding a new need"""
     await clear_conversation_state(update, context, silent=True)
     try:
-        await ensure_user(update, context)
-        
-        # ایجاد دکمه برای جستجوی اینلاین برای نیاز
-        keyboard = [
-            [InlineKeyboardButton(
-                "🔍 جستجوی دارو برای نیاز", 
-                switch_inline_query_current_chat="need "
-            )],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
-        ]
-        
+        keyboard = [[InlineKeyboardButton("🔍 جستجوی دارو", switch_inline_query_current_chat="")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            "برای ثبت نیاز جدید، روی دکمه جستجو کلیک کنید و داروی مورد نیاز را انتخاب کنید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "لطفاً نام داروی مورد نیاز را جستجو کنید:",
+            reply_markup=reply_markup
         )
         return States.SEARCH_DRUG_FOR_NEED
     except Exception as e:
         logger.error(f"Error in add_need: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        await update.message.reply_text("خطایی رخ داد. لطفاً دوباره تلاش کنید.")
         return ConversationHandler.END
 
 async def handle_need_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
