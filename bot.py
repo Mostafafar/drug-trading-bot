@@ -2380,11 +2380,13 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
             )
             
         elif result_id.startswith('need_'):
-            # پردازش برای ثبت نیاز
+            # پردازش برای ثبت نیاز — now goes straight to quantity
             idx = int(result_id.split('_')[1])
             drug_name, drug_price = drug_list[idx]
             
-            context.user_data['need_drug'] = {
+            # Save as need_name / selected_drug_for_need so save_need can use them
+            context.user_data['need_name'] = drug_name.strip()
+            context.user_data['selected_drug_for_need'] = {
                 'name': drug_name.strip(),
                 'price': drug_price.strip()
             }
@@ -2399,7 +2401,7 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
         await context.bot.send_message(
             chat_id=update.chosen_inline_result.from_user.id,
             text="خطایی در انتخاب دارو رخ داد. لطفا دوباره تلاش کنید."
-            )
+        )
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع جستجو با اینلاین کوئری"""
     await clear_conversation_state(update, context, silent=True)
