@@ -3109,15 +3109,10 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """ذخیره نیاز نهایی بعد از وارد کردن تعداد"""
     try:
         quantity_text = update.message.text.strip()
-        
-        # تبدیل اعداد فارسی به انگلیسی (مشکل رایج!)
         persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
         quantity_text = quantity_text.translate(persian_to_english)
-        
-        # Parse به int
         try:
             quantity = int(''.join(filter(str.isdigit, quantity_text)))
             if quantity <= 0:
@@ -3126,31 +3121,23 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10).")
             return States.ADD_NEED_QUANTITY
-        
-        # اطلاعات قبلی از user_data
         need_name = context.user_data.get('need_name')
         need_desc = context.user_data.get('need_desc')
-        reference_drug = context.user_data.get('selected_drug_for_need')  # از جستجو
-        
+        reference_drug = context.user_data.get('selected_drug_for_need')
+        reference_price = reference_drug.get('price', '') if reference_drug else ''
         if not need_name or not need_desc:
             await update.message.reply_text("❌ اطلاعات نیاز ناقص است. از اول شروع کنید.")
             return await add_need(update, context)
-        
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                # INSERT به user_needs (reference_price رو خالی بذار یا از دارو بگیر)
-                reference_price = reference_drug.get('price', '') if reference_drug else ''
                 cursor.execute('''
                     INSERT INTO user_needs (user_id, name, description, quantity, reference_price)
                     VALUES (%s, %s, %s, %s, %s)
                 ''', (update.effective_user.id, need_name, need_desc, quantity, reference_price))
                 conn.commit()
-            
-            # پاک کردن user_data
             context.user_data.clear()
-            
             await update.message.reply_text(
                 f"✅ نیاز '{need_name}' با تعداد {quantity} ثبت شد!\n"
                 f"توضیحات: {need_desc}\n"
@@ -3158,10 +3145,8 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "حالا می‌تونید نیازهای دیگه ثبت کنید.",
                 reply_markup=ReplyKeyboardRemove()
             )
-            
-            # بازگشت به منوی اصلی
+            # بعد از ثبت، کاربر را به منوی اصلی یا لیست نیازها هدایت کنید
             return await clear_conversation_state(update, context)
-            
         except psycopg2.Error as e:
             logger.error(f"DB error in save_need: {e}")
             if conn:
@@ -3171,7 +3156,6 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         finally:
             if conn:
                 conn.close()
-                
     except Exception as e:
         logger.error(f"Error in save_need: {e}", exc_info=True)
         await update.message.reply_text("❌ خطایی رخ داد. از منوی اصلی شروع کنید.")
