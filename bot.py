@@ -3058,45 +3058,53 @@ async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def handle_need_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle selection of a drug for a need"""
+    logger.info(f"Handling drug selection for user {update.effective_user.id}, callback data: {update.callback_query.data}")
     try:
         query = update.callback_query
         await query.answer()
         
-        drug_id = int(query.data.split("_")[2])
+        if not query.data.startswith("need_drug_"):
+            logger.warning(f"Invalid callback data: {query.data}")
+            await query.edit_message_text("داده نامعتبر. لطفا دوباره تلاش کنید.")
+            return States.SEARCH_DRUG_FOR_NEED
+        
+        try:
+            drug_id = int(query.data.split('_')[2])
+        except (IndexError, ValueError):
+            logger.error(f"Invalid drug_id in callback data: {query.data}")
+            await query.edit_message_text("خطا در پردازش انتخاب دارو.")
+            return States.SEARCH_DRUG_FOR_NEED
         
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
                 cursor.execute('''
-                    SELECT name
-                    FROM drug_items
-                    WHERE id = %s
+                SELECT name, price FROM drug_items WHERE id = %s
                 ''', (drug_id,))
                 drug = cursor.fetchone()
                 
                 if not drug:
+                    logger.warning(f"Drug with id {drug_id} not found")
                     await query.edit_message_text("دارو یافت نشد.")
                     return States.SEARCH_DRUG_FOR_NEED
                 
-                # ذخیره اطلاعات دارو در context
-                context.user_data['selected_need_drug'] = {
+                context.user_data['selected_drug'] = {
                     'id': drug_id,
-                    'name': drug['name']
+                    'name': drug['name'],
+                    'price': drug['price']
                 }
                 
+                logger.info(f"Selected drug: {drug['name']} for user {update.effective_user.id}")
                 await query.edit_message_text(
-                    f"💊 داروی انتخاب شده: {drug['name']}\n\n"
-                    "لطفا تعداد مورد نیاز را وارد کنید:",
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_search")
-                    ]])
+                    f"داروی انتخاب شده: {drug['name']}\n\n"
+                    "لطفاً تعداد مورد نیاز را وارد کنید:"
                 )
+                logger.info(f"Sent quantity request message, transitioning to ADD_NEED_QUANTITY for user {update.effective_user.id}")
                 return States.ADD_NEED_QUANTITY
                 
         except Exception as e:
-            logger.error(f"Error in handle_need_drug_selection: {e}")
+            logger.error(f"Error in handle_need_drug_selection: {e}", exc_info=True)
             await query.edit_message_text("خطا در انتخاب دارو.")
             return States.SEARCH_DRUG_FOR_NEED
         finally:
@@ -3104,7 +3112,7 @@ async def handle_need_drug_selection(update: Update, context: ContextTypes.DEFAU
                 conn.close()
                 
     except Exception as e:
-        logger.error(f"Error in handle_need_drug_selection: {e}")
+        logger.error(f"Error in handle_need_drug_selection: {e}", exc_info=True)
         await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return States.SEARCH_DRUG_FOR_NEED
 
