@@ -3125,23 +3125,26 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- NEW FUNCTION: add_need_quantity (replace or add into bot.py) ---
 async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        if not update.message and not update.callback_query:
-            logger.error("No valid update type provided")
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="خطایی رخ داد. لطفا دوباره تلاش کنید."
-            )
-            return ConversationHandler.END
-
         if update.callback_query:
             await update.callback_query.answer()
             chat_id = update.callback_query.message.chat_id
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="لطفاً تعداد مورد نیاز را وارد کنید:"
+                text="لطفاً تعداد مورد نیاز را وارد کنید:",
+                reply_markup=ReplyKeyboardRemove()
+            )
+        elif update.message:
+            await update.message.reply_text(
+                "لطفاً تعداد مورد نیاز را وارد کنید:",
+                reply_markup=ReplyKeyboardRemove()
             )
         else:
-            await update.message.reply_text("لطفاً تعداد مورد نیاز را وارد کنید:")
+            logger.error("No valid update type provided")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ خطایی رخ داد. به منوی اصلی بازگشتید."
+            )
+            return await clear_conversation_state(update, context, silent=True)
 
         return States.ADD_NEED_QUANTITY
     except Exception as e:
@@ -3150,8 +3153,7 @@ async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=update.effective_chat.id,
             text="❌ خطایی رخ داد. به منوی اصلی بازگشتید."
         )
-        return ConversationHandler.END
-            
+        return await clear_conversation_state(update, context, silent=True)
 
         try:
             # تبدیل اعداد فارسی به انگلیسی
