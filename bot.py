@@ -3109,66 +3109,72 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ذخیره نیاز نهایی بعد از وارد کردن تعداد"""
     try:
         quantity_text = update.message.text.strip()
+        
+        # تبدیل اعداد فارسی به انگلیسی (مشکل رایج!)
+        persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+        quantity_text = quantity_text.translate(persian_to_english)
+        
+        # Parse به int
         try:
-            quantity = int(quantity_text)
+            quantity = int(''.join(filter(str.isdigit, quantity_text)))
             if quantity <= 0:
-                await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
+                await update.message.reply_text("❌ تعداد باید بزرگتر از صفر باشد. دوباره وارد کنید:")
                 return States.ADD_NEED_QUANTITY
         except ValueError:
-            await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
+            await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10).")
             return States.ADD_NEED_QUANTITY
         
-        need_drug = context.user_data.get('need_drug', {})
-        drug_name = need_drug.get('name', '')
+        # اطلاعات قبلی از user_data
+        need_name = context.user_data.get('need_name')
+        need_desc = context.user_data.get('need_desc')
+        reference_drug = context.user_data.get('selected_drug_for_need')  # از جستجو
         
-        logger.info(f"save_need called. drug_name={drug_name}, quantity={quantity}")
-
-        if not drug_name:
-            await update.message.reply_text("خطا: اطلاعات دارو یافت نشد. لطفا دوباره شروع کنید.")
-            return await clear_conversation_state(update, context)
-
+        if not need_name or not need_desc:
+            await update.message.reply_text("❌ اطلاعات نیاز ناقص است. از اول شروع کنید.")
+            return await add_need(update, context)
+        
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
+                # INSERT به user_needs (reference_price رو خالی بذار یا از دارو بگیر)
+                reference_price = reference_drug.get('price', '') if reference_drug else ''
                 cursor.execute('''
-                    INSERT INTO user_needs (user_id, name, description, quantity)
-                    VALUES (%s, %s, %s, %s)
-                    RETURNING id
-                ''', (
-                    update.effective_user.id,
-                    drug_name,
-                    "بدون توضیح",
-                    quantity
-                ))
-                result = cursor.fetchone()
+                    INSERT INTO user_needs (user_id, name, description, quantity, reference_price)
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (update.effective_user.id, need_name, need_desc, quantity, reference_price))
                 conn.commit()
-                
-                if result:
-                    await update.message.reply_text(
-                        f"✅ نیاز شما با موفقیت ثبت شد!\n"
-                        f"نام: {drug_name}\n"
-                        f"تعداد: {quantity}"
-                    )
-                else:
-                    await update.message.reply_text("خطا در ثبت نیاز. لطفا دوباره تلاش کنید.")
-        except Exception as e:
-            logger.error(f"Error saving need: {e}", exc_info=True)
-            await update.message.reply_text("خطا در ثبت نیاز. لطفا دوباره تلاش کنید.")
+            
+            # پاک کردن user_data
+            context.user_data.clear()
+            
+            await update.message.reply_text(
+                f"✅ نیاز '{need_name}' با تعداد {quantity} ثبت شد!\n"
+                f"توضیحات: {need_desc}\n"
+                f"قیمت مرجع: {reference_price}\n\n"
+                "حالا می‌تونید نیازهای دیگه ثبت کنید.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            
+            # بازگشت به منوی اصلی
+            return await clear_conversation_state(update, context)
+            
+        except psycopg2.Error as e:
+            logger.error(f"DB error in save_need: {e}")
             if conn:
                 conn.rollback()
+            await update.message.reply_text("❌ خطا در ذخیره نیاز. دوباره تلاش کنید.")
             return States.ADD_NEED_QUANTITY
         finally:
             if conn:
                 conn.close()
-        
-        context.user_data.pop('need_drug', None)
-        return await clear_conversation_state(update, context)
+                
     except Exception as e:
         logger.error(f"Error in save_need: {e}", exc_info=True)
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        await update.message.reply_text("❌ خطایی رخ داد. از منوی اصلی شروع کنید.")
         return await clear_conversation_state(update, context)
 async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
