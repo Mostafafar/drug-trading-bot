@@ -4529,42 +4529,42 @@ async def handle_finish_selection(update: Update, context: ContextTypes.DEFAULT_
     return States.SELECT_DRUGS
 
 async def safe_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, reply_markup=None):
+    """ارسال ایمن پیام با مدیریت خطاهای مختلف"""
     try:
         if not update:
-            logger.error("No update provided")
+            logger.error("No update provided to safe_reply")
             return
+            
+        chat_id = None
         if update.callback_query:
             await update.callback_query.answer()
             chat_id = update.callback_query.message.chat_id
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                reply_markup=reply_markup
-            )
-            try:
-                await update.callback_query.delete_message()
-            except:
-                try:
-                    await update.callback_query.edit_message_text("✅")
-                except:
-                    pass
         elif update.message:
-            await update.message.reply_text(
-                text,
-                reply_markup=reply_markup
-            )
+            chat_id = update.message.chat_id
+        elif update.effective_chat:
+            chat_id = update.effective_chat.id
         else:
-            logger.error("No valid update type provided")
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="خطایی رخ داد. لطفا دوباره تلاش کنید."
-            )
+            logger.error("No valid chat ID found in update")
+            return
+            
+        # ارسال پیام
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=reply_markup
+        )
+        
     except Exception as e:
         logger.error(f"Error in safe_reply: {e}")
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="خطایی رخ داد. لطفا دوباره تلاش کنید."
-            )
+        # تلاش برای ارسال پیام خطا در صورت امکان
+        try:
+            if chat_id:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="⚠️ خطایی در ارسال پیام رخ داد. لطفا دوباره تلاش کنید."
+                )
+        except Exception as inner_e:
+            logger.error(f"Failed to send error message: {inner_e}")
                 
     
 async def handle_compensation_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
