@@ -3387,7 +3387,7 @@ async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             button_text = f"ویرایش {i}: {format_button_text(need['name'])}"
             keyboard.append([InlineKeyboardButton(button_text, callback_data=f"edit_need_{need['id']}")])
         
-        keyboard.append([InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")])
+        #keyboard.append([InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(message, reply_markup=reply_markup)
