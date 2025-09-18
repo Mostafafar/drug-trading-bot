@@ -3253,6 +3253,10 @@ async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         return ConversationHandler.END
+async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Command detected for user {update.effective_user.id}: {update.message.text}")
+    await update.message.reply_text("ورودی شما به عنوان دستور شناسایی شد. لطفا یک عدد معتبر وارد کنید.")
+    return States.ADD_NEED_QUANTITY
 
 # --- CHANGES TO ConversationHandler: needs_handler ---
 # Replace the existing mapping for States.ADD_NEED_QUANTITY so it uses add_need_quantity.
@@ -5416,6 +5420,7 @@ def main():
            ],
                States.ADD_NEED_QUANTITY: [
                    MessageHandler(filters.Regex(r'^[\d۰-۹]+$'), add_need_quantity),  # برای اعداد
+                   MessageHandler(filters.COMMAND, debug_command),
                    MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity),  # برای سایر ورودی‌های متنی
                    CallbackQueryHandler(handle_back, pattern="^back$")
                    
