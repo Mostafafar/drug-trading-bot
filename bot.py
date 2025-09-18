@@ -3058,34 +3058,59 @@ async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def handle_need_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle drug selection for need from inline query (alternate entrypoint)"""
+    """Handle selection of a drug for a need"""
     await clear_conversation_state(update, context, silent=True)
     try:
         query = update.callback_query
         await query.answer()
-        
-        if query.data.startswith("need_drug_"):
-            idx = int(query.data.split("_")[2])
-            if 0 <= idx < len(drug_list):
-                selected_drug = drug_list[idx]
-                # Store selected drug for the need
-                context.user_data['selected_drug_for_need'] = {
-                    'name': selected_drug[0],
-                    'price': selected_drug[1]
+
+        drug_id = int(query.data.split("_")[2])  # Extract drug ID from callback data (e.g., "need_drug_123")
+
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                cursor.execute('''
+                    SELECT name, price, quantity
+                    FROM drug_items
+                    WHERE id = %s
+                ''', (drug_id,))
+                drug = cursor.fetchone()
+
+                if not drug:
+                    await query.edit_message_text("دارو یافت نشد.")
+                    return States.SEARCH_DRUG_FOR_NEED
+
+                # Store selected drug in context
+                context.user_data['selected_need_drug'] = {
+                    'id': drug_id,
+                    'name': drug['name'],
+                    'price': drug['price'],
+                    'quantity': drug['quantity']
                 }
-                # Also set need_name so we don't require a separate description step
-                context.user_data['need_name'] = selected_drug[0]
-                
+
+                # Prompt for quantity
+                keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_search")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.edit_message_text(
-                    f"✅ داروی مورد نیاز انتخاب شد: {selected_drug[0]}\n💰 قیمت مرجع: {selected_drug[1]}\n\n"
-                    "📦 لطفا تعداد مورد نیاز را وارد کنید:"
+                    f"💊 داروی انتخاب شده: {drug['name']}\n"
+                    f"لطفاً تعداد مورد نیاز را وارد کنید:",
+                    reply_markup=reply_markup
                 )
                 return States.ADD_NEED_QUANTITY
-                
+
+        except Exception as e:
+            logger.error(f"Error in handle_need_drug_selection: {e}")
+            await query.edit_message_text("خطا در انتخاب دارو.")
+            return States.SEARCH_DRUG_FOR_NEED
+        finally:
+            if conn:
+                conn.close()
+
     except Exception as e:
-        logger.error(f"Error handling need drug selection: {e}")
-        await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+        logger.error(f"Error in handle_need_drug_selection: {e}")
+        await query.edit_message_text("خطایی رخ داد. لطفاً دوباره تلاش کنید.")
+        return States.SEARCH_DRUG_FOR_NEED
 
 async def save_need_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save need name"""
@@ -5358,7 +5383,7 @@ def main():
             states={
                 States.SEARCH_DRUG_FOR_NEED: [
                     InlineQueryHandler(handle_inline_query),
-                    CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"),
+                    CallbackQueryHandler(handle_need_drug_selection, pattern="^need_drug_"),  # Updated to use handle_need_drug_selection
                     ChosenInlineResultHandler(handle_chosen_inline_result),
                     CallbackQueryHandler(add_need, pattern="^back$")
                     
