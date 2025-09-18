@@ -2381,11 +2381,28 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
                 text=f"✅ داروی مورد نیاز انتخاب شد: {drug_name}\n💰 قیمت مرجع: {drug_price}\n\n📦 لطفا تعداد مورد نیاز را وارد کنید:"
             )
             
-            # بازگشت به state مناسب برای دریافت تعداد
-            return States.ADD_NEED_QUANTITY
+            # مهم: این خط رو تغییر بده
+            return States.ADD_NEED_QUANTITY  # به جای ConversationHandler.END
+
+        elif result_id.startswith('add_'):
+            # پردازش برای اضافه کردن دارو
+            idx = int(result_id.split('_')[1])
+            drug_name, drug_price = drug_list[idx]
+
+            context.user_data['selected_drug'] = {
+                'name': drug_name.strip(),
+                'price': drug_price.strip()
+            }
+
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
+            )
+            return States.ADD_DRUG_DATE
 
     except Exception as e:
         logger.error(f"Error in handle_chosen_inline_result: {e}")
+        return ConversationHandler.END
 async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع جستجو با اینلاین کوئری"""
     await clear_conversation_state(update, context, silent=True)
