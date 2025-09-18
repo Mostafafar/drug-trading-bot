@@ -3108,10 +3108,8 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save need to database with selected drug"""
     try:
         quantity_text = update.message.text.strip()
-        
         try:
             quantity = int(quantity_text)
             if quantity <= 0:
@@ -3121,48 +3119,40 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("لطفا یک عدد صحیح وارد کنید.")
             return States.ADD_NEED_QUANTITY
         
-        # دریافت اطلاعات دارو از context
         need_drug = context.user_data.get('need_drug', {})
         drug_name = need_drug.get('name', '')
-        drug_price = need_drug.get('price', '')
         
-        logger.info(f"Saving need: {drug_name}, price: {drug_price}, quantity: {quantity}")
-        
+        logger.info(f"save_need called. drug_name={drug_name}, quantity={quantity}")
+
         if not drug_name:
             await update.message.reply_text("خطا: اطلاعات دارو یافت نشد. لطفا دوباره شروع کنید.")
             return await clear_conversation_state(update, context)
-        
+
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
                 cursor.execute('''
-                INSERT INTO user_needs (user_id, name, description, quantity, reference_price)
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING id
+                    INSERT INTO user_needs (user_id, name, description, quantity)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id
                 ''', (
                     update.effective_user.id,
                     drug_name,
                     "بدون توضیح",
-                    quantity,
-                    drug_price
+                    quantity
                 ))
-                
                 result = cursor.fetchone()
                 conn.commit()
                 
                 if result:
                     await update.message.reply_text(
-                        f"✅ نیاز شما با موفقیت ثبت شد!\n\n"
+                        f"✅ نیاز شما با موفقیت ثبت شد!\n"
                         f"نام: {drug_name}\n"
-                        f"قیمت مرجع: {drug_price}\n"
                         f"تعداد: {quantity}"
                     )
-                    logger.info(f"Need saved successfully with ID: {result[0]}")
                 else:
                     await update.message.reply_text("خطا در ثبت نیاز. لطفا دوباره تلاش کنید.")
-                    logger.error("Failed to save need - no ID returned")
-                
         except Exception as e:
             logger.error(f"Error saving need: {e}", exc_info=True)
             await update.message.reply_text("خطا در ثبت نیاز. لطفا دوباره تلاش کنید.")
@@ -3173,10 +3163,8 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if conn:
                 conn.close()
         
-        # پاک کردن context و بازگشت به منوی اصلی
         context.user_data.pop('need_drug', None)
         return await clear_conversation_state(update, context)
-            
     except Exception as e:
         logger.error(f"Error in save_need: {e}", exc_info=True)
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
