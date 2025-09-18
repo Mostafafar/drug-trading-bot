@@ -3055,7 +3055,7 @@ async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def handle_need_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle drug selection for need from inline query"""
+    """Handle drug selection for need from inline query (alternate entrypoint)"""
     await clear_conversation_state(update, context, silent=True)
     try:
         query = update.callback_query
@@ -3065,16 +3065,19 @@ async def handle_need_drug_selection(update: Update, context: ContextTypes.DEFAU
             idx = int(query.data.split("_")[2])
             if 0 <= idx < len(drug_list):
                 selected_drug = drug_list[idx]
-                context.user_data['need_drug'] = {
+                # Store selected drug for the need
+                context.user_data['selected_drug_for_need'] = {
                     'name': selected_drug[0],
                     'price': selected_drug[1]
                 }
+                # Also set need_name so we don't require a separate description step
+                context.user_data['need_name'] = selected_drug[0]
                 
                 await query.edit_message_text(
                     f"✅ داروی مورد نیاز انتخاب شد: {selected_drug[0]}\n💰 قیمت مرجع: {selected_drug[1]}\n\n"
-                    "📝 لطفا توضیحاتی درباره این نیاز وارد کنید (اختیاری):"
+                    "📦 لطفا تعداد مورد نیاز را وارد کنید:"
                 )
-                return States.ADD_NEED_DESC
+                return States.ADD_NEED_QUANTITY
                 
     except Exception as e:
         logger.error(f"Error handling need drug selection: {e}")
@@ -3124,27 +3127,37 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10).")
             return States.ADD_NEED_QUANTITY
+
+        # Determine need name and optional description
         need_name = context.user_data.get('need_name')
-        need_desc = context.user_data.get('need_desc')
-        reference_drug = context.user_data.get('selected_drug_for_need')
-        reference_price = reference_drug.get('price', '') if reference_drug else ''
-        if not need_name or not need_desc:
-            await update.message.reply_text("❌ اطلاعات نیاز ناقص است. از اول شروع کنید.")
-            return await add_need(update, context)
+        # allow legacy 'need_drug' key if present
+        if not need_name and context.user_data.get('need_drug'):
+            need_name = context.user_data['need_drug'].get('name')
+
+        # Use description if provided, otherwise empty string
+        need_desc = context.user_data.get('need_desc', '') or ''
+
+        if not need_name:
+            # If for some reason name is still missing, ask user to provide it
+            await update.message.reply_text("❌ نام دارو مشخص نیست. لطفا نام دارو را وارد کنید:")
+            return States.ADD_NEED_NAME
+
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
+                # Insert only into existing columns (name, description, quantity)
                 cursor.execute('''
-                    INSERT INTO user_needs (user_id, name, description, quantity, reference_price)
-                    VALUES (%s, %s, %s, %s, %s)
-                ''', (update.effective_user.id, need_name, need_desc, quantity, reference_price))
+                    INSERT INTO user_needs (user_id, name, description, quantity)
+                    VALUES (%s, %s, %s, %s)
+                ''', (update.effective_user.id, need_name, need_desc, quantity))
                 conn.commit()
-            context.user_data.clear()
+            # Clear only need-related keys (preserve other user_data if needed)
+            for k in ['need_name', 'need_desc', 'need_drug', 'selected_drug_for_need']:
+                context.user_data.pop(k, None)
             await update.message.reply_text(
                 f"✅ نیاز '{need_name}' با تعداد {quantity} ثبت شد!\n"
-                f"توضیحات: {need_desc}\n"
-                f"قیمت مرجع: {reference_price}\n\n"
+                f"{'توضیحات: ' + need_desc if need_desc else ''}\n\n"
                 "حالا می‌تونید نیازهای دیگه ثبت کنید.",
                 reply_markup=ReplyKeyboardRemove()
             )
