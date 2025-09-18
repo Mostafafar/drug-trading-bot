@@ -3126,6 +3126,8 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         drug_name = need_drug.get('name', '')
         drug_price = need_drug.get('price', '')
         
+        logger.info(f"Saving need: {drug_name}, price: {drug_price}, quantity: {quantity}")
+        
         if not drug_name:
             await update.message.reply_text("خطا: اطلاعات دارو یافت نشد. لطفا دوباره شروع کنید.")
             return await clear_conversation_state(update, context)
@@ -3137,6 +3139,7 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cursor.execute('''
                 INSERT INTO user_needs (user_id, name, description, quantity, reference_price)
                 VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
                 ''', (
                     update.effective_user.id,
                     drug_name,
@@ -3144,18 +3147,27 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     quantity,
                     drug_price
                 ))
+                
+                result = cursor.fetchone()
                 conn.commit()
                 
-                await update.message.reply_text(
-                    f"✅ نیاز شما با موفقیت ثبت شد!\n\n"
-                    f"نام: {drug_name}\n"
-                    f"قیمت مرجع: {drug_price}\n"
-                    f"تعداد: {quantity}"
-                )
+                if result:
+                    await update.message.reply_text(
+                        f"✅ نیاز شما با موفقیت ثبت شد!\n\n"
+                        f"نام: {drug_name}\n"
+                        f"قیمت مرجع: {drug_price}\n"
+                        f"تعداد: {quantity}"
+                    )
+                    logger.info(f"Need saved successfully with ID: {result[0]}")
+                else:
+                    await update.message.reply_text("خطا در ثبت نیاز. لطفا دوباره تلاش کنید.")
+                    logger.error("Failed to save need - no ID returned")
                 
         except Exception as e:
-            logger.error(f"Error saving need: {e}")
+            logger.error(f"Error saving need: {e}", exc_info=True)
             await update.message.reply_text("خطا در ثبت نیاز. لطفا دوباره تلاش کنید.")
+            if conn:
+                conn.rollback()
             return States.ADD_NEED_QUANTITY
         finally:
             if conn:
@@ -3166,7 +3178,7 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await clear_conversation_state(update, context)
             
     except Exception as e:
-        logger.error(f"Error in save_need: {e}")
+        logger.error(f"Error in save_need: {e}", exc_info=True)
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return await clear_conversation_state(update, context)
 async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
