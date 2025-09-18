@@ -5231,6 +5231,7 @@ def main():
         )
         
         # Registration handler (normal registration)
+        # Registration handler (normal registration) - اصلاح شده
         registration_handler = ConversationHandler(
             entry_points=[
                 CallbackQueryHandler(register_pharmacy_name, pattern="^register$")
@@ -5244,31 +5245,31 @@ def main():
                 ],
                 States.REGISTER_NATIONAL_CARD: [
                     MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license),
-                    MessageHandler(filters.ALL & ~(filters.PHOTO | filters.Document.IMAGE), 
-                                 lambda u, c: u.message.reply_text("لطفا تصویر کارت ملی را ارسال کنید."))
-                ],
-                States.REGISTER_LICENSE: [
-                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card),
-                    MessageHandler(filters.ALL & ~(filters.PHOTO | filters.Document.IMAGE), 
-                                 lambda u, c: u.message.reply_text("لطفا تصویر پروانه داروخانه را ارسال کنید."))
-                ],
-                States.REGISTER_MEDICAL_CARD: [
-                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_phone),
-                    MessageHandler(filters.ALL & ~(filters.PHOTO | filters.Document.IMAGE), 
-                                 lambda u, c: u.message.reply_text("لطفا تصویر کارت نظام پزشکی را ارسال کنید."))
-                ],
-                States.REGISTER_PHONE: [
-                    MessageHandler(filters.CONTACT | filters.TEXT, register_address)
-                ],
-                States.REGISTER_ADDRESS: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)
-                ],
-                States.VERIFICATION_CODE: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, complete_registration)
-                ]
-            },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
-            allow_reentry=True
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, 
+                               lambda u, c: u.message.reply_text("لطفا فقط تصویر کارت ملی را ارسال کنید."))
+               ],
+               States.REGISTER_LICENSE: [
+                   MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card),
+                   MessageHandler(filters.TEXT & ~filters.COMMAND, 
+                              lambda u, c: u.message.reply_text("لطفا فقط تصویر پروانه داروخانه را ارسال کنید."))
+              ],
+              States.REGISTER_MEDICAL_CARD: [
+                  MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_phone),
+                  MessageHandler(filters.TEXT & ~filters.COMMAND, 
+                             lambda u, c: u.message.reply_text("لطفا فقط تصویر کارت نظام پزشکی را ارسال کنید."))
+             ],
+             States.REGISTER_PHONE: [
+                 MessageHandler(filters.CONTACT | filters.TEXT, register_address)
+             ],
+             States.REGISTER_ADDRESS: [
+                 MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)
+             ],
+             States.VERIFICATION_CODE: [
+                 MessageHandler(filters.TEXT & ~filters.COMMAND, complete_registration)
+             ]
+           },
+           fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
+           allow_reentry=True
         )
         
         # Simple verification handler
