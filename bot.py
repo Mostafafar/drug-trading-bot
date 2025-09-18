@@ -5415,7 +5415,8 @@ def main():
                     CallbackQueryHandler(add_need, pattern="^back$")
            ],
                States.ADD_NEED_QUANTITY: [
-                   MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity),
+                   MessageHandler(filters.Regex(r'^[\d۰-۹]+$'), add_need_quantity),  # برای اعداد
+                   MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity),  # برای سایر ورودی‌های متنی
                    CallbackQueryHandler(handle_back, pattern="^back$")
                    
            ],
