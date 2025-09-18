@@ -3139,88 +3139,120 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 # --- NEW FUNCTION: add_need_quantity (replace or add into bot.py) ---
 async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save quantity for a new need"""
+    """دریافت تعداد برای نیاز و ذخیره در دیتابیس"""
     try:
+        if not update.message or not update.message.text:
+            await update.message.reply_text("لطفاً تعداد مورد نیاز را وارد کنید:")
+            return States.ADD_NEED_QUANTITY
+
         quantity_text = update.message.text.strip()
-        selected_drug = context.user_data.get('selected_need_drug')
         
-        if not selected_drug:
-            await update.message.reply_text("داروی انتخاب شده یافت نشد. لطفا دوباره شروع کنید.")
-            return await search_drug_for_adding(update, context)
-        
-        # تبدیل اعداد فارسی به انگلیسی
+        # تبدیل ارقام فارسی به انگلیسی
         persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
         quantity_text = quantity_text.translate(persian_to_english)
         
+        # استخراج فقط ارقام
+        digits = ''.join(ch for ch in quantity_text if ch.isdigit())
+        
+        if not digits:
+            await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10).")
+            return States.ADD_NEED_QUANTITY
+
         try:
-            quantity = int(quantity_text)
+            quantity = int(digits)
             if quantity <= 0:
-                await update.message.reply_text("لطفا یک عدد بزرگتر از صفر وارد کنید.")
+                await update.message.reply_text("❌ تعداد باید بزرگتر از صفر باشد. دوباره وارد کنید:")
                 return States.ADD_NEED_QUANTITY
         except ValueError:
-            await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
+            await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10).")
             return States.ADD_NEED_QUANTITY
-        
+
+        # دریافت نام نیاز از context
+        need_name = context.user_data.get('need_name')
+        if not need_name:
+            # اگر از طریق اینلاین انتخاب شده
+            sel = context.user_data.get('selected_drug_for_need')
+            if sel and isinstance(sel, dict):
+                need_name = sel.get('name')
+
+        need_desc = context.user_data.get('need_desc', '') or ''
+
+        if not need_name:
+            await update.message.reply_text("❌ نام دارو مشخص نیست. لطفا دوباره از ابتدا شروع کنید.")
+            # بازگشت به منوی اصلی
+            return await clear_conversation_state(update, context)
+
+        # ذخیره در دیتابیس
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
                 cursor.execute('''
-                    INSERT INTO user_needs (user_id, name, quantity, description)
+                    INSERT INTO user_needs (user_id, name, description, quantity)
                     VALUES (%s, %s, %s, %s)
-                    RETURNING id
-                ''', (
-                    update.effective_user.id,
-                    selected_drug['name'],
-                    quantity,
-                    context.user_data.get('need_desc', '')
-                ))
-                need_id = cursor.fetchone()[0]
+                ''', (update.effective_user.id, need_name, need_desc, quantity))
                 conn.commit()
                 
-                await update.message.reply_text(
-                    f"✅ نیاز جدید ثبت شد:\n"
-                    f"دارو: {selected_drug['name']}\n"
-                    f"تعداد: {quantity}\n\n"
-                    "به منوی اصلی بازگشتید."
-                )
+                logger.info(f"Need saved: {need_name} x{quantity} for user {update.effective_user.id}")
                 
-                # پاک کردن اطلاعات موقت
-                context.user_data.pop('selected_need_drug', None)
-                context.user_data.pop('need_desc', None)
-                
-                # نمایش منوی اصلی
-                keyboard = [
-                    ['اضافه کردن دارو', 'جستجوی دارو'],
-                    ['لیست داروهای من', 'ثبت نیاز جدید'],
-                    ['لیست نیازهای من', 'ساخت کد پرسنل'],
-                    ['تنظیم شاخه‌های دارویی']
-                ]
-                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-                
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text="لطفاً یک گزینه را انتخاب کنید:",
-                    reply_markup=reply_markup
-                )
-                
-                return ConversationHandler.END
-                
-        except Exception as e:
-            logger.error(f"Error in add_need_quantity: {e}")
-            await update.message.reply_text("خطا در ثبت نیاز.")
+        except psycopg2.Error as e:
+            logger.error(f"Database error: {e}")
             if conn:
                 conn.rollback()
+            await update.message.reply_text("❌ خطا در ذخیره نیاز. لطفاً دوباره تلاش کنید.")
             return States.ADD_NEED_QUANTITY
         finally:
             if conn:
                 conn.close()
-                
-    except Exception as e:
-        logger.error(f"Error in add_need_quantity: {e}")
-        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
-        return States.ADD_NEED_QUANTITY
 
+        # پاک‌سازی context
+        for key in ['need_name', 'need_desc', 'selected_drug_for_need']:
+            context.user_data.pop(key, None)
+
+        # پیام موفقیت
+        success_msg = f"✅ نیاز «{need_name}» با تعداد {quantity} با موفقیت ثبت شد!"
+        if need_desc:
+            success_msg += f"\nتوضیحات: {need_desc}"
+        
+        await update.message.reply_text(success_msg)
+
+        # بازگشت به منوی اصلی
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="به منوی اصلی بازگشتید:",
+            reply_markup=reply_markup
+        )
+        
+        return ConversationHandler.END
+
+    except Exception as e:
+        logger.error(f"Error in add_need_quantity: {e}", exc_info=True)
+        await update.message.reply_text("❌ خطایی رخ داد. به منوی اصلی بازگشتید.")
+        
+        # بازگشت به منوی اصلی در صورت خطا
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="به منوی اصلی بازگشتید:",
+            reply_markup=reply_markup
+        )
+        
+        return ConversationHandler.END
 
 # --- CHANGES TO ConversationHandler: needs_handler ---
 # Replace the existing mapping for States.ADD_NEED_QUANTITY so it uses add_need_quantity.
@@ -5384,7 +5416,7 @@ def main():
            ],
                States.ADD_NEED_QUANTITY: [
                    MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity),
-                   CallbackQueryHandler(search_drug_for_need, pattern="^search_drug_for_adding$")
+                   
            ],
                States.EDIT_NEED: [
                   CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
