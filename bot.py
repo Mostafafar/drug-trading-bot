@@ -5421,7 +5421,9 @@ def main():
                      handle_state_change),
                 CallbackQueryHandler(lambda u, c: clear_conversation_state(u, c, silent=True), pattern="^back_to_main$")
             ],      
-            allow_reentry=True
+            allow_reentry=True,
+            per_chat=False,
+            per_user=True
         )
         
         # Search and trade handler
