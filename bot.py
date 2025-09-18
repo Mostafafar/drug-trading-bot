@@ -4527,17 +4527,18 @@ async def handle_finish_selection(update: Update, context: ContextTypes.DEFAULT_
     return States.SELECT_DRUGS
 
 async def safe_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, reply_markup=None):
-    """ارسال پیام به صورت ایمن برای هر دو نوع update"""
-    await clear_conversation_state(update, context, silent=True)
     try:
+        if not update:
+            logger.error("No update provided")
+            return
         if update.callback_query:
-            # برای callback query، پیام جدید ارسال می‌کنیم
+            await update.callback_query.answer()
+            chat_id = update.callback_query.message.chat_id
             await context.bot.send_message(
-                chat_id=update.callback_query.message.chat_id,
+                chat_id=chat_id,
                 text=text,
                 reply_markup=reply_markup
             )
-            # پیام callback را حذف یا edit می‌کنیم
             try:
                 await update.callback_query.delete_message()
             except:
@@ -4545,16 +4546,23 @@ async def safe_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: s
                     await update.callback_query.edit_message_text("✅")
                 except:
                     pass
-        else:
-            # برای message معمولی
+        elif update.message:
             await update.message.reply_text(
                 text,
                 reply_markup=reply_markup
             )
+        else:
+            logger.error("No valid update type provided")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="خطایی رخ داد. لطفا دوباره تلاش کنید."
+            )
     except Exception as e:
         logger.error(f"Error in safe_reply: {e}")
-        
-        
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="خطایی رخ داد. لطفا دوباره تلاش کنید."
+            )
                 
     
 async def handle_compensation_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -5380,7 +5388,8 @@ def main():
                 ],
                 States.ADD_NEED_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity),
-                    CallbackQueryHandler(handle_back, pattern="^back$")
+                    CallbackQueryHandler(handle_back, pattern="^back$"),
+                    CallbackQueryHandler(clear_conversation_state, pattern="^back_to_main$")
             
                 ],
                 States.EDIT_NEED: [
