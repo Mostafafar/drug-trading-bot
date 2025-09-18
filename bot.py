@@ -2226,7 +2226,7 @@ async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT
         return ConversationHandler.END
 
 async def handle_need_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle callback for need drug selection from inline query"""
+    """Handle callback for need drug selection from inline query (now asks for quantity directly)"""
     await clear_conversation_state(update, context, silent=True)
     try:
         query = update.callback_query
@@ -2236,10 +2236,13 @@ async def handle_need_drug_callback(update: Update, context: ContextTypes.DEFAUL
             idx = int(query.data.split("_")[2])
             if 0 <= idx < len(drug_list):
                 selected_drug = drug_list[idx]
-                context.user_data['need_drug'] = {
+                # Store selected drug for the need
+                context.user_data['selected_drug_for_need'] = {
                     'name': selected_drug[0],
                     'price': selected_drug[1]
                 }
+                # Also set need_name so we don't require a separate description step
+                context.user_data['need_name'] = selected_drug[0]
                 
                 await query.edit_message_text(
                     f"✅ داروی مورد نیاز انتخاب شد: {selected_drug[0]}\n💰 قیمت مرجع: {selected_drug[1]}\n\n"
