@@ -5415,7 +5415,7 @@ def main():
                     CallbackQueryHandler(add_need, pattern="^back$")
            ],
                States.ADD_NEED_QUANTITY: [
-                   MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity),
+                   MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity)
                    
            ],
                States.EDIT_NEED: [
