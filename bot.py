@@ -641,7 +641,7 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
         
         # حفظ اطلاعات ضروری مربوط به مبادله
         trade_keys_to_preserve = [
-            'selected_pharmacy_id', 'selected_pharmacy_name',
+            'selected_pharmacy_id', 'selected_pharmacy_name','selected_drug',
             'offer_items', 'comp_items'
         ]
         
