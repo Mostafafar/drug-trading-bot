@@ -99,7 +99,6 @@ class States(Enum):
     SELECT_QUANTITY = auto()
     CONFIRM_OFFER = auto()
     ADD_NEED_NAME = auto()
-    ADD_NEED_DESC = auto()
     ADD_NEED_QUANTITY = auto()
     SEARCH_DRUG_FOR_ADDING = auto()
     SELECT_DRUG_FOR_ADDING = auto()
