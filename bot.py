@@ -3151,7 +3151,7 @@ async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text="❌ خطایی رخ داد. به منوی اصلی بازگشتید."
         )
         return ConversationHandler.END
-            return await clear_conversation_state(update, context, silent=True)
+            
 
         try:
             # تبدیل اعداد فارسی به انگلیسی
