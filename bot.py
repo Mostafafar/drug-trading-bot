@@ -5430,9 +5430,12 @@ def main():
             },
             fallbacks=[
                 CommandHandler('cancel', lambda u, c: clear_conversation_state(u, c, silent=True)),
-                MessageHandler(filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), 
-                     handle_state_change),
-               CallbackQueryHandler(lambda u, c: clear_conversation_state(u, c, silent=True), pattern="^back_to_main$")
+                MessageHandler(
+                    filters.Regex(r'^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$') & ~filters.Regex(r'^[\d۰-۹]+$'), 
+                    handle_state_change
+                ),
+                CallbackQueryHandler(lambda u, c: clear_conversation_state(u, c, silent=True), pattern="^back_to_main$")
+    
            ],
            allow_reentry=True
         )
