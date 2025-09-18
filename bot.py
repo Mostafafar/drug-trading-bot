@@ -3115,6 +3115,170 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in save_need_desc: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+# --- NEW FUNCTION: add_need_quantity (replace or add into bot.py) ---
+async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    دریافت تعداد برای نیاز و ذخیره‌ی نیاز در دیتابیس.
+    این تابع مسیر مستقیمِ زمانی که نام نیاز (need_name) یا selected_drug_for_need
+    قبلاً در context.user_data قرار دارد را پوشش می‌دهد.
+    برای یکپارچگی، باید در ConversationHandler مربوط به نیازها به عنوان handler
+    برای States.ADD_NEED_QUANTITY قرار گیرد.
+    """
+    try:
+        if not update.message or not update.message.text:
+            await update.message.reply_text("ورودی نامعتبر است. لطفاً یک عدد وارد کنید.")
+            return States.ADD_NEED_QUANTITY
+
+        quantity_text = update.message.text.strip()
+
+        # تبدیل ارقام فارسی به انگلیسی
+        persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+        quantity_text = quantity_text.translate(persian_to_english)
+
+        # استخراج فقط ارقام
+        digits = ''.join(ch for ch in quantity_text if ch.isdigit())
+        if not digits:
+            await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10).")
+            return States.ADD_NEED_QUANTITY
+
+        try:
+            quantity = int(digits)
+            if quantity <= 0:
+                await update.message.reply_text("❌ تعداد باید بزرگتر از صفر باشد. دوباره وارد کنید:")
+                return States.ADD_NEED_QUANTITY
+        except ValueError:
+            await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10).")
+            return States.ADD_NEED_QUANTITY
+
+        # تعیین نام نیاز از context (راه‌های مختلف ممکن است نام را ذخیره کنند)
+        need_name = context.user_data.get('need_name')
+        if not need_name:
+            sel = context.user_data.get('selected_drug_for_need') or context.user_data.get('need_drug')
+            if sel and isinstance(sel, dict):
+                need_name = sel.get('name')
+
+        need_desc = context.user_data.get('need_desc', '') or ''
+
+        if not need_name:
+            # اگر نام نیاز مشخص نیست، از کاربر خواسته می‌شود نام را وارد کند
+            await update.message.reply_text("❌ نام دارو مشخص نیست. لطفا نام دارو را وارد کنید:")
+            return States.ADD_NEED_NAME
+
+        # ذخیره در دیتابیس
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                    INSERT INTO user_needs (user_id, name, description, quantity)
+                    VALUES (%s, %s, %s, %s)
+                ''', (update.effective_user.id, need_name, need_desc, quantity))
+                conn.commit()
+                logger.info(f"Saved need for user {update.effective_user.id}: {need_name} x{quantity}")
+        except psycopg2.Error as e:
+            logger.error(f"DB error in add_need_quantity: {e}", exc_info=True)
+            if conn:
+                conn.rollback()
+            await update.message.reply_text("❌ خطا در ذخیره نیاز. دوباره تلاش کنید.")
+            return States.ADD_NEED_QUANTITY
+        finally:
+            if conn:
+                conn.close()
+
+        # پاک‌سازی کلیدهای مرتبط با ثبت نیاز
+        for k in ['need_name', 'need_desc', 'need_drug', 'selected_drug_for_need']:
+            context.user_data.pop(k, None)
+
+        # پیام تأیید به کاربر
+        await update.message.reply_text(
+            f"✅ نیاز «{need_name}» با تعداد {quantity} با موفقیت ثبت شد!\n"
+            f"{'توضیحات: ' + need_desc if need_desc else ''}",
+            reply_markup=ReplyKeyboardRemove()
+        )
+
+        # نمایش منوی اصلی صریح
+        main_keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="به منوی اصلی بازگشتید. لطفاً یک گزینه را انتخاب کنید:",
+            reply_markup=reply_markup
+        )
+
+        return ConversationHandler.END
+
+    except Exception as e:
+        logger.error(f"Error in add_need_quantity: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ خطایی رخ داد. از منوی اصلی شروع کنید.")
+        except Exception:
+            pass
+
+        # تلاش برای بازگشت به منوی اصلی
+        try:
+            main_keyboard = [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['لیست داروهای من', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                ['تنظیم شاخه‌های دارویی']
+            ]
+            reply_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id if update and update.effective_chat else None,
+                text="به منوی اصلی بازگشتید:",
+                reply_markup=reply_markup
+            )
+        except Exception:
+            pass
+
+        return ConversationHandler.END
+
+
+# --- CHANGES TO ConversationHandler: needs_handler ---
+# Replace the existing mapping for States.ADD_NEED_QUANTITY so it uses add_need_quantity.
+# Find the needs_handler declaration and update the states dict entry:
+#
+#   States.ADD_NEED_QUANTITY: [
+#       MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
+#   ],
+#
+# Change it to:
+#
+#   States.ADD_NEED_QUANTITY: [
+#       MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity)
+#   ],
+#
+# (This ensures both inline-search -> select drug -> "enter quantity" flows and
+# the chosen-inline-result flows are handled by the new function.)
+#
+# Note: if you prefer to keep the old save_need for the flow that first asks for
+# name and description (ADD_NEED_NAME -> ADD_NEED_DESC -> ADD_NEED_QUANTITY), you can
+# alternatively register both handlers in the same state with a small wrapper that
+# chooses which implementation to call. The implementation above is self-contained
+# and replaces save_need behavior for the ADD_NEED_QUANTITY step.
+#
+# --- Example replacement snippet for the needs_handler states block ---
+#
+# needs_handler = ConversationHandler(
+#     entry_points=[ ... ],
+#     states={
+#         States.SEARCH_DRUG_FOR_NEED: [ ... ],
+#         States.ADD_NEED_QUANTITY: [
+#             MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity)
+#         ],
+#         States.EDIT_NEED: [ ... ]
+#     },
+#     fallbacks=[ ... ],
+#     allow_reentry=True
+# )
+#
+# Make sure to import/define add_need_quantity above where the needs_handler is constructed.
 
 async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Validate quantity and save a user need reliably, then return to main menu."""
@@ -5240,7 +5404,7 @@ def main():
                     
                 ],
                 States.ADD_NEED_QUANTITY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need)
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, add_need_quantity)
             
                 ],
                 States.EDIT_NEED: [
