@@ -2226,41 +2226,34 @@ async def handle_add_drug_callback(update: Update, context: ContextTypes.DEFAULT
         return ConversationHandler.END
 
 async def handle_need_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت انتخاب دارو برای نیاز"""
+    """Handle callback for need drug selection from inline query (now asks for quantity directly)"""
+    await clear_conversation_state(update, context, silent=True)
     try:
         query = update.callback_query
         await query.answer()
-        drug_id = int(query.data.split("_")[2])
         
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                cursor.execute('''
-                    SELECT name, price FROM drug_list WHERE id = %s
-                ''', (drug_id,))
-                drug = cursor.fetchone()
+        if query.data.startswith("need_drug_"):
+            idx = int(query.data.split("_")[2])
+            if 0 <= idx < len(drug_list):
+                selected_drug = drug_list[idx]
+                # Store selected drug for the need
+                context.user_data['selected_drug_for_need'] = {
+                    'name': selected_drug[0],
+                    'price': selected_drug[1]
+                }
+                # Also set need_name so we don't require a separate description step
+                context.user_data['need_name'] = selected_drug[0]
                 
-                if not drug:
-                    await query.edit_message_text("دارو یافت نشد.")
-                    return ConversationHandler.END
-                
-                context.user_data['selected_drug_for_need'] = dict(drug)
                 await query.edit_message_text(
-                    f"💊 داروی انتخاب‌شده: {drug['name']}\n"
-                    f"💰 قیمت: {drug['price']}\n\n"
-                    "لطفاً تعداد مورد نیاز را وارد کنید:"
+                    f"✅ داروی مورد نیاز انتخاب شد: {selected_drug[0]}\n💰 قیمت مرجع: {selected_drug[1]}\n\n"
+                    "📦 لطفا تعداد مورد نیاز را وارد کنید:",
+                    reply_markup=None
                 )
                 return States.ADD_NEED_QUANTITY
-        except Exception as e:
-            logger.error(f"Error in handle_need_drug_callback: {e}")
-            await query.edit_message_text("خطا در انتخاب دارو.")
-        finally:
-            if conn:
-                conn.close()
+                
     except Exception as e:
-        logger.error(f"Error in handle_need_drug_callback: {e}")
-        await query.edit_message_text("خطایی رخ داد. لطفاً دوباره تلاش کنید.")
+        logger.error(f"Error handling need drug callback: {e}")
+        await query.edit_message_text("خطا در انتخاب دارو. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
 async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
