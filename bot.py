@@ -3101,7 +3101,7 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 # --- NEW FUNCTION: add_need_quantity (replace or add into bot.py) ---
 async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """دریافت تعداد برای نیاز و ذخیره در دیتابیس"""
+    """دریافت تعداد برای نیاز"""
     try:
         quantity_text = update.message.text.strip()
         
@@ -3111,28 +3111,25 @@ async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # استخراج فقط ارقام
         digits = ''.join(ch for ch in quantity_text if ch.isdigit())
+        
         if not digits:
-            await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10).")
+            await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10)")
             return States.ADD_NEED_QUANTITY
 
         try:
             quantity = int(digits)
             if quantity <= 0:
-                await update.message.reply_text("❌ تعداد باید بزرگتر از صفر باشد. دوباره وارد کنید:")
+                await update.message.reply_text("❌ تعداد باید بزرگتر از صفر باشد")
                 return States.ADD_NEED_QUANTITY
+                
         except ValueError:
-            await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10).")
+            await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید")
             return States.ADD_NEED_QUANTITY
 
-        # دریافت نام نیاز از context
+        # ذخیره نیاز در دیتابیس
         need_name = context.user_data.get('need_name')
-        if not need_name:
-            await update.message.reply_text("❌ نام دارو مشخص نیست. لطفا دوباره شروع کنید.")
-            return ConversationHandler.END
-
         need_desc = context.user_data.get('need_desc', '')
-
-        # ذخیره در دیتابیس
+        
         conn = None
         try:
             conn = get_db_connection()
@@ -3142,11 +3139,12 @@ async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     VALUES (%s, %s, %s, %s)
                 ''', (update.effective_user.id, need_name, need_desc, quantity))
                 conn.commit()
+                
         except Exception as e:
             logger.error(f"Error saving need: {e}")
             if conn:
                 conn.rollback()
-            await update.message.reply_text("❌ خطا در ذخیره نیاز. دوباره تلاش کنید.")
+            await update.message.reply_text("❌ خطا در ثبت نیاز")
             return States.ADD_NEED_QUANTITY
         finally:
             if conn:
@@ -3157,16 +3155,15 @@ async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop(key, None)
 
         await update.message.reply_text(
-            f"✅ نیاز «{need_name}» با تعداد {quantity} با موفقیت ثبت شد!",
-            reply_markup=ReplyKeyboardRemove()
+            f"✅ نیاز «{need_name}» با تعداد {quantity} با موفقیت ثبت شد!"
         )
-
+        
         # بازگشت به منوی اصلی
         return await clear_conversation_state(update, context)
         
     except Exception as e:
         logger.error(f"Error in add_need_quantity: {e}")
-        await update.message.reply_text("❌ خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        await update.message.reply_text("❌ خطایی رخ داد")
         return ConversationHandler.END
 
 
