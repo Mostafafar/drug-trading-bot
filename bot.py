@@ -3117,12 +3117,25 @@ async def save_need_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Validate quantity and save a user need reliably, then return to main menu."""
     try:
+        if not update.message or not update.message.text:
+            logger.warning("save_need called without message text")
+            await update.message.reply_text("ورودی نامعتبر است. لطفاً یک عدد وارد کنید.")
+            return States.ADD_NEED_QUANTITY
+
         quantity_text = update.message.text.strip()
+        # تبدیل ارقام فارسی به انگلیسی و حذف فضاها
         persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
         quantity_text = quantity_text.translate(persian_to_english)
+        # استخراج فقط ارقام (در صورت وارد شدن متن به همراه واحد)
+        digits = ''.join(ch for ch in quantity_text if ch.isdigit())
+        if not digits:
+            await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10).")
+            return States.ADD_NEED_QUANTITY
+
         try:
-            quantity = int(''.join(filter(str.isdigit, quantity_text)))
+            quantity = int(digits)
             if quantity <= 0:
                 await update.message.reply_text("❌ تعداد باید بزرگتر از صفر باشد. دوباره وارد کنید:")
                 return States.ADD_NEED_QUANTITY
@@ -3130,17 +3143,18 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (مثال: 10).")
             return States.ADD_NEED_QUANTITY
 
-        # Determine need name and optional description
+        # تعیین نام نیاز (از چند کلید ممکن)
         need_name = context.user_data.get('need_name')
-        # allow legacy 'need_drug' key if present
-        if not need_name and context.user_data.get('need_drug'):
-            need_name = context.user_data['need_drug'].get('name')
+        if not need_name:
+            # بعضی مسیرها از selected_drug_for_need استفاده می‌کنند
+            sel = context.user_data.get('selected_drug_for_need') or context.user_data.get('need_drug')
+            if sel and isinstance(sel, dict):
+                need_name = sel.get('name')
 
-        # Use description if provided, otherwise empty string
         need_desc = context.user_data.get('need_desc', '') or ''
 
         if not need_name:
-            # If for some reason name is still missing, ask user to provide it
+            # اگر هنوز نام مشخص نیست از کاربر بخواهیم
             await update.message.reply_text("❌ نام دارو مشخص نیست. لطفا نام دارو را وارد کنید:")
             return States.ADD_NEED_NAME
 
@@ -3148,25 +3162,14 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                # Insert only into existing columns (name, description, quantity)
                 cursor.execute('''
                     INSERT INTO user_needs (user_id, name, description, quantity)
                     VALUES (%s, %s, %s, %s)
                 ''', (update.effective_user.id, need_name, need_desc, quantity))
                 conn.commit()
-            # Clear only need-related keys (preserve other user_data if needed)
-            for k in ['need_name', 'need_desc', 'need_drug', 'selected_drug_for_need']:
-                context.user_data.pop(k, None)
-            await update.message.reply_text(
-                f"✅ نیاز '{need_name}' با تعداد {quantity} ثبت شد!\n"
-                f"{'توضیحات: ' + need_desc if need_desc else ''}\n\n"
-                "حالا می‌تونید نیازهای دیگه ثبت کنید.",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            # بعد از ثبت، کاربر را به منوی اصلی یا لیست نیازها هدایت کنید
-            return await clear_conversation_state(update, context)
+                logger.info(f"Saved need for user {update.effective_user.id}: {need_name} x{quantity}")
         except psycopg2.Error as e:
-            logger.error(f"DB error in save_need: {e}")
+            logger.error(f"DB error in save_need: {e}", exc_info=True)
             if conn:
                 conn.rollback()
             await update.message.reply_text("❌ خطا در ذخیره نیاز. دوباره تلاش کنید.")
@@ -3174,10 +3177,58 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
         finally:
             if conn:
                 conn.close()
+
+        # پاک‌سازی تنها کلیدهای مرتبط با جریان ثبت نیاز (نه کل context)
+        for k in ['need_name', 'need_desc', 'need_drug', 'selected_drug_for_need']:
+            context.user_data.pop(k, None)
+
+        # پیام تأیید به کاربر
+        await update.message.reply_text(
+            f"✅ نیاز «{need_name}» با تعداد {quantity} با موفقیت ثبت شد!\n"
+            f"{'توضیحات: ' + need_desc if need_desc else ''}",
+            reply_markup=ReplyKeyboardRemove()
+        )
+
+        # نمایش منوی اصلی صریح (بدون استفاده از clear_conversation_state که ممکن است stateهای دیگر را پاک کند)
+        main_keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="به منوی اصلی بازگشتید. لطفاً یک گزینه را انتخاب کنید:",
+            reply_markup=reply_markup
+        )
+
+        return ConversationHandler.END
+
     except Exception as e:
         logger.error(f"Error in save_need: {e}", exc_info=True)
-        await update.message.reply_text("❌ خطایی رخ داد. از منوی اصلی شروع کنید.")
-        return await clear_conversation_state(update, context)
+        try:
+            await update.message.reply_text("❌ خطایی رخ داد. از منوی اصلی شروع کنید.")
+        except Exception as send_e:
+            logger.error(f"Failed to send error message in save_need: {send_e}")
+        # در صورت خطای غیرمنتظره، به منوی اصلی برو
+        main_keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id if update and update.effective_chat else None,
+                text="به منوی اصلی بازگشتید:",
+                reply_markup=reply_markup
+            )
+        except Exception:
+            pass
+        return ConversationHandler.END
 async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"Starting list_my_needs for user {user_id}")
