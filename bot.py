@@ -990,6 +990,29 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning("Empty callback data received")
             return
 
+        # Handle restart after ban
+        if query.data == "restart_after_ban":
+            # پاک کردن پیام قبلی
+            try:
+                await query.delete_message()
+            except:
+                pass
+            
+            # نمایش گزینه‌های ثبت‌نام مجدد
+            keyboard = [
+                [InlineKeyboardButton("ثبت نام با تایید ادمین", callback_data="admin_verify")],
+                [InlineKeyboardButton("ورود با کد پرسنل", callback_data="personnel_login")],
+                [InlineKeyboardButton("ثبت نام با مدارک", callback_data="register")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await context.bot.send_message(
+                chat_id=query.from_user.id,
+                text="❌ حساب شما اخراج شده است.\n\n"
+                     "برای استفاده مجدد از ربات، لطفا یکی از روش‌های زیر را انتخاب کنید:",
+                reply_markup=reply_markup
+            )
+            return States.START
         # Handle different callback patterns
         if query.data.startswith("approve_user_"):
             return await approve_user(update, context)
