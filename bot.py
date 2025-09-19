@@ -5592,6 +5592,9 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
         text = update.message.text.strip()
         logger.info(f"State change requested: {text}")
 
+        # 🔥 پاک‌سازی کامل state قبل از تغییر منو
+        context.user_data.clear()
+
         # بررسی stateهای فعال که نیاز به ورود داده دارند
         input_states = [
             States.ADD_DRUG_DATE,
@@ -5636,25 +5639,8 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return ConversationHandler.END
 
-        # بررسی stateهای فعال مربوط به اضافه کردن دارو
-        active_add_states = [
-            States.ADD_DRUG_DATE,
-            States.ADD_DRUG_QUANTITY,
-            States.SEARCH_DRUG_FOR_ADDING,
-            States.ADD_DRUG_FROM_INLINE
-        ]
-        
-        # اگر در حال اضافه کردن دارو هستیم، اجازه تغییر به جستجو ندهیم
-        if current_state in active_add_states and text == 'جستجوی دارو':
-            await update.message.reply_text(
-                "⚠️ در حال حاضر در حال اضافه کردن دارو هستید.\n"
-                "لطفاً ابتدا فرآیند اضافه کردن دارو را تکمیل یا لغو کنید.",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            return current_state
-
-        # پاک‌سازی state و ادامه
-        await clear_conversation_state(update, context, silent=True)
+        # 🔥 پاک‌سازی state قبل از شروع عملیات جدید
+        context.user_data.clear()
 
         if text == 'لیست داروهای من':
             return await list_my_drugs(update, context)
@@ -5687,6 +5673,22 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         logger.error(f"Error in handle_state_change: {e}", exc_info=True)
         await update.message.reply_text("خطایی در تغییر حالت رخ داد. لطفا دوباره تلاش کنید.")
+        
+        # پاک‌سازی کامل در صورت خطا
+        context.user_data.clear()
+        
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        await update.message.reply_text(
+            "به منوی اصلی بازگشتید:",
+            reply_markup=reply_markup
+        )
         return ConversationHandler.END
 async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """اخراج کاربر توسط ادمین"""
