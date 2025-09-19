@@ -2960,17 +2960,30 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     name_parts = drug['name'].split()
                     first_word = name_parts[0] if name_parts else drug['name']
                     
-                    # پیدا کردن دوز در نام دارو
+                    # پیدا کردن دوز در نام دارو (جستجوی الگوهای رایج دوز)
                     dose_info = ""
-                    for part in name_parts:
-                        if any(char.isdigit() for char in part) and ('میکرو' in part or 'میلی' in part or 'گرم' in part or 'دوز' in part):
+                    for i, part in enumerate(name_parts):
+                        # الگوهای رایج دوز
+                        if ('/' in part or 'میکرو' in part or 'میلی' in part or 
+                            'گرم' in part or 'دوز' in part or 'μg' in part or 
+                            'mg' in part or 'mcg' in part):
                             dose_info = part
+                            # اگر بخش بعدی هم مربوط به دوز است، اضافه کن
+                            if i + 1 < len(name_parts) and ('دوز' in name_parts[i+1] or 'قرص' in name_parts[i+1]):
+                                dose_info += " " + name_parts[i+1]
                             break
+                    
+                    # اگر دوز پیدا نشد، کل نام را بررسی کن
+                    if not dose_info:
+                        for part in name_parts:
+                            if any(char.isdigit() for char in part):
+                                dose_info = part
+                                break
                     
                     # ساخت متن دکمه
                     button_text = f"{first_word}"
                     if dose_info:
-                        button_text += f" ({dose_info})"
+                        button_text += f" - {dose_info}"
                     
                     keyboard.append([InlineKeyboardButton(
                         button_text,
