@@ -1573,97 +1573,151 @@ async def register_founder_name(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
+
 async def register_national_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get national card photo in registration process"""
+    """دریافت تصویر کارت ملی - فقط عکس قبول می‌شود"""
     try:
-        founder_name = update.message.text
-        context.user_data['founder_name'] = founder_name
-        
-        await update.message.reply_text(
-            "لطفا تصویر کارت ملی را ارسال کنید:",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return States.REGISTER_NATIONAL_CARD
+        if update.message.photo or update.message.document:
+            file = await update.message.photo[-1].get_file() if update.message.photo else await update.message.document.get_file()
+            national_card_path = await download_file(file, "national_card", update.effective_user.id)
+            context.user_data['national_card_image'] = national_card_path
+            await update.message.reply_text("تصویر کارت ملی دریافت شد. لطفا تصویر پروانه داروخانه را ارسال کنید.")
+            return States.REGISTER_LICENSE
+        else:
+            await update.message.reply_text("لطفا فقط تصویر کارت ملی را ارسال کنید.")
+            return States.REGISTER_NATIONAL_CARD  # برنمی‌گرده جلو، منتظر عکس می‌مونه
     except Exception as e:
         logger.error(f"Error in register_national_card: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return States.REGISTER_FOUNDER_NAME  # بازگشت به مرحله قبل
-
-async def register_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get license photo in registration process"""
-    try:
-        if update.message.photo:
-            photo_file = await update.message.photo[-1].get_file()
-        elif update.message.document and update.message.document.mime_type.startswith('image/'):
-            photo_file = await update.message.document.get_file()
-        else:
-            await update.message.reply_text("لطفا یک تصویر ارسال کنید.")
-            return States.REGISTER_NATIONAL_CARD
-        
-        file_path = await download_file(photo_file, "national_card", update.effective_user.id)
-        context.user_data['national_card'] = file_path
-        
-        await update.message.reply_text(
-            "✅ تصویر کارت ملی دریافت شد.\n\nلطفا تصویر پروانه داروخانه را ارسال کنید:",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return States.REGISTER_LICENSE
-    except Exception as e:
-        logger.error(f"Error in register_license: {e}")
-        await update.message.reply_text("خطایی در دریافت تصویر رخ داد. لطفا دوباره تلاش کنید.")
+        await update.message.reply_text("خطا در دریافت تصویر. لطفا دوباره ارسال کنید.")
         return States.REGISTER_NATIONAL_CARD
 
-async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get medical card photo in registration process"""
+async def register_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """دریافت تصویر پروانه داروخانه - فقط عکس قبول می‌شود"""
     try:
-        if update.message.photo:
-            photo_file = await update.message.photo[-1].get_file()
-        elif update.message.document and update.message.document.mime_type.startswith('image/'):
-            photo_file = await update.message.document.get_file()
+        if update.message.photo or update.message.document:
+            file = await update.message.photo[-1].get_file() if update.message.photo else await update.message.document.get_file()
+            license_path = await download_file(file, "license", update.effective_user.id)
+            context.user_data['license_image'] = license_path
+            await update.message.reply_text("تصویر پروانه داروخانه دریافت شد. لطفا تصویر کارت نظام پزشکی را ارسال کنید.")
+            return States.REGISTER_MEDICAL_CARD
         else:
-            await update.message.reply_text("لطفا یک تصویر ارسال کنید.")
-            return States.REGISTER_LICENSE
-        
-        file_path = await download_file(photo_file, "license", update.effective_user.id)
-        context.user_data['license'] = file_path
-        
-        await update.message.reply_text(
-            "✅ تصویر پروانه داروخانه دریافت شد.\n\nلطفا تصویر کارت نظام پزشکی را ارسال کنید:",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return States.REGISTER_MEDICAL_CARD
+            await update.message.reply_text("لطفا فقط تصویر پروانه داروخانه را ارسال کنید.")
+            return States.REGISTER_LICENSE  # منتظر عکس می‌مونه
     except Exception as e:
-        logger.error(f"Error in register_medical_card: {e}")
-        await update.message.reply_text("خطایی در دریافت تصویر رخ داد. لطفا دوباره تلاش کنید.")
+        logger.error(f"Error in register_license: {e}")
+        await update.message.reply_text("خطا در دریافت تصویر. لطفا دوباره ارسال کنید.")
         return States.REGISTER_LICENSE
 
-async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get phone number in registration process"""
+async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """دریافت تصویر کارت نظام پزشکی - فقط عکس قبول می‌شود"""
     try:
-        if update.message.photo:
-            photo_file = await update.message.photo[-1].get_file()
-        elif update.message.document:
-            photo_file = await update.message.document.get_file()
+        if update.message.photo or update.message.document:
+            file = await update.message.photo[-1].get_file() if update.message.photo else await update.message.document.get_file()
+            medical_card_path = await download_file(file, "medical_card", update.effective_user.id)
+            context.user_data['medical_card_image'] = medical_card_path
+            await update.message.reply_text("تصویر کارت نظام پزشکی دریافت شد. لطفا شماره تلفن خود را به اشتراک بگذارید.")
+            # دکمه اشتراک تلفن (مثل کد اصلی)
+            keyboard = [[KeyboardButton("اشتراک گذاری شماره تلفن", request_contact=True)]]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+            await update.message.reply_text("لطفا شماره تلفن خود را به اشتراک بگذارید:", reply_markup=reply_markup)
+            return States.REGISTER_PHONE
         else:
-            await update.message.reply_text("لطفا یک تصویر ارسال کنید.")
-            return States.REGISTER_MEDICAL_CARD
-        
-        file_path = await download_file(photo_file, "medical_card", update.effective_user.id)
-        context.user_data['medical_card'] = file_path
-        
-        keyboard = [[KeyboardButton("اشتراک گذاری شماره تلفن", request_contact=True)]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-        
-        await update.message.reply_text(
-            "لطفا شماره تلفن خود را با استفاده از دکمه زیر ارسال کنید:",
-            reply_markup=reply_markup
-        )
-        return States.REGISTER_PHONE
+            await update.message.reply_text("لطفا فقط تصویر کارت نظام پزشکی را ارسال کنید.")
+            return States.REGISTER_MEDICAL_CARD  # منتظر عکس می‌مونه
     except Exception as e:
-        logger.error(f"Error in register_phone: {e}")
-        await update.message.reply_text("خطایی در دریافت تصویر رخ داد. لطفا دوباره تلاش کنید.")
+        logger.error(f"Error in register_medical_card: {e}")
+        await update.message.reply_text("خطا در دریافت تصویر. لطفا دوباره ارسال کنید.")
         return States.REGISTER_MEDICAL_CARD
 
+async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """دریافت شماره تلفن - فقط از دکمه CONTACT"""
+    try:
+        if update.message.contact:
+            phone_number = update.message.contact.phone_number
+            context.user_data['phone'] = phone_number
+            # ذخیره در دیتابیس (مثل کد اصلی)
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('UPDATE users SET phone = %s WHERE id = %s', (phone_number, update.effective_user.id))
+                conn.commit()
+            conn.close()
+            await update.message.reply_text("شماره تلفن دریافت شد. لطفا آدرس داروخانه را وارد کنید:", reply_markup=ReplyKeyboardRemove())
+            return States.REGISTER_ADDRESS
+        else:
+            await update.message.reply_text("لطفا از دکمه اشتراک گذاری شماره تلفن استفاده کنید.")
+            return States.REGISTER_PHONE  # منتظر CONTACT می‌مونه
+    except Exception as e:
+        logger.error(f"Error in register_phone: {e}")
+        await update.message.reply_text("خطا در دریافت شماره تلفن. لطفا دوباره تلاش کنید.")
+        return States.REGISTER_PHONE
+
+async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ارسال همه اطلاعات به ادمین پس از گرفتن آدرس"""
+    try:
+        address = update.message.text
+        context.user_data['address'] = address
+        user = update.effective_user
+
+        # جمع‌آوری اطلاعات
+        pharmacy_name = context.user_data.get('pharmacy_name')
+        founder_name = context.user_data.get('founder_name')
+        national_card_image = context.user_data.get('national_card_image')
+        license_image = context.user_data.get('license_image')
+        medical_card_image = context.user_data.get('medical_card_image')
+        phone = context.user_data.get('phone')
+
+        # ارسال پیام متنی به ادمین
+        admin_message = (
+            f"📌 درخواست ثبت نام جدید:\n\n"
+            f"👤 نام: {user.full_name}\n"
+            f"🆔 آیدی: {user.id}\n"
+            f"📌 یوزرنیم: @{user.username or 'ندارد'}\n"
+            f"🏥 نام داروخانه: {pharmacy_name}\n"
+            f"👨‍⚕️ نام موسس: {founder_name}\n"
+            f"📞 تلفن: {phone}\n"
+            f"📍 آدرس: {address}\n\n"
+            f"لطفا این کاربر را تایید یا رد کنید:"
+        )
+
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ تایید کاربر", callback_data=f"approve_user_{user.id}"),
+                InlineKeyboardButton("❌ رد کاربر", callback_data=f"reject_user_{user.id}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_message, reply_markup=reply_markup)
+
+        # ارسال عکس‌ها به ادمین (یکی یکی)
+        if national_card_image:
+            await context.bot.send_photo(chat_id=ADMIN_CHAT_ID, photo=open(national_card_image, 'rb'), caption="تصویر کارت ملی")
+        if license_image:
+            await context.bot.send_photo(chat_id=ADMIN_CHAT_ID, photo=open(license_image, 'rb'), caption="تصویر پروانه داروخانه")
+        if medical_card_image:
+            await context.bot.send_photo(chat_id=ADMIN_CHAT_ID, photo=open(medical_card_image, 'rb'), caption="تصویر کارت نظام پزشکی")
+
+        # ذخیره اطلاعات داروخانه در دیتابیس (در وضعیت pending)
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute('''
+            INSERT INTO pharmacies (user_id, name, founder_name, national_card_image, license_image, medical_card_image, phone, address, verified)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE)
+            ON CONFLICT (user_id) DO UPDATE SET 
+                name = EXCLUDED.name, founder_name = EXCLUDED.founder_name, national_card_image = EXCLUDED.national_card_image,
+                license_image = EXCLUDED.license_image, medical_card_image = EXCLUDED.medical_card_image,
+                phone = EXCLUDED.phone, address = EXCLUDED.address, verified = FALSE
+            ''', (user.id, pharmacy_name, founder_name, national_card_image, license_image, medical_card_image, phone, address))
+            conn.commit()
+        conn.close()
+
+        await update.message.reply_text("اطلاعات شما برای تایید به ادمین ارسال شد. پس از تایید می‌توانید از ربات استفاده کنید.", reply_markup=ReplyKeyboardRemove())
+        context.user_data.clear()  # پاک کردن داده‌ها
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error in send_to_admin: {e}")
+        await update.message.reply_text("خطا در ارسال اطلاعات به ادمین. لطفا دوباره تلاش کنید.")
+        return States.REGISTER_ADDRESS
 async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get address in registration process"""
     try:
@@ -5231,7 +5285,6 @@ def main():
         )
         
         # Registration handler (normal registration)
-        # Registration handler (normal registration) - اصلاح شده
         registration_handler = ConversationHandler(
             entry_points=[
                 CallbackQueryHandler(register_pharmacy_name, pattern="^register$")
@@ -5246,27 +5299,26 @@ def main():
                 States.REGISTER_NATIONAL_CARD: [
                     MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, 
-                               lambda u, c: u.message.reply_text("لطفا فقط تصویر کارت ملی را ارسال کنید."))
-               ],
-               States.REGISTER_LICENSE: [
-                   MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card),
-                   MessageHandler(filters.TEXT & ~filters.COMMAND, 
-                              lambda u, c: u.message.reply_text("لطفا فقط تصویر پروانه داروخانه را ارسال کنید."))
-              ],
-              States.REGISTER_MEDICAL_CARD: [
-                  MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_phone),
-                  MessageHandler(filters.TEXT & ~filters.COMMAND, 
-                             lambda u, c: u.message.reply_text("لطفا فقط تصویر کارت نظام پزشکی را ارسال کنید."))
-             ],
-             States.REGISTER_PHONE: [
-                 MessageHandler(filters.CONTACT | filters.TEXT, register_address)
-             ],
-             States.REGISTER_ADDRESS: [
-                 MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code)
-             ],
-             States.VERIFICATION_CODE: [
-                 MessageHandler(filters.TEXT & ~filters.COMMAND, complete_registration)
-             ]
+                                   lambda u, c: u.message.reply_text("لطفا فقط تصویر کارت ملی را ارسال کنید."))
+                ],
+                States.REGISTER_LICENSE: [
+                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, 
+                                   lambda u, c: u.message.reply_text("لطفا فقط تصویر پروانه داروخانه را ارسال کنید."))
+                ],
+                States.REGISTER_MEDICAL_CARD: [
+                    MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_phone),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, 
+                                   lambda u, c: u.message.reply_text("لطفا فقط تصویر کارت نظام پزشکی را ارسال کنید."))
+                ],
+                States.REGISTER_PHONE: [
+                    MessageHandler(filters.CONTACT, register_address),  # فقط CONTACT
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, 
+                                   lambda u, c: u.message.reply_text("لطفا از دکمه اشتراک گذاری شماره تلفن استفاده کنید."))
+                ],
+                States.REGISTER_ADDRESS: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, send_to_admin)  # تابع جدید برای ارسال به ادمین
+                ]
            },
            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
            allow_reentry=True
