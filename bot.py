@@ -5381,6 +5381,11 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """اخراج کاربر توسط ادمین"""
     try:
+        # بررسی اینکه update دارای message است
+        if not update.message:
+            logger.error("No message in update for ban_user")
+            return
+        
         # بررسی اینکه کاربر ادمین است
         conn = None
         try:
@@ -5487,7 +5492,17 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
     except Exception as e:
         logger.error(f"Error in ban_user: {e}")
-        await update.message.reply_text("خطایی در پردازش درخواست رخ داد.")
+        # استفاده از روش ایمن برای ارسال پیام خطا
+        try:
+            if update and update.message:
+                await update.message.reply_text("خطایی در پردازش درخواست رخ داد.")
+            elif update and update.effective_chat:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="خطایی در پردازش درخواست رخ داد."
+                )
+        except Exception as send_error:
+            logger.error(f"Failed to send error message: {send_error}")
 def main():
     """Start the bot"""
     try:
@@ -5868,8 +5883,8 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"))
         application.add_handler(CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"))
         # Add ban user command
-        application.add_handler(CommandHandler('ban_user', ban_user))
-
+        # Add ban user command - فقط برای messageها
+        application.add_handler(CommandHandler('ban_user', ban_user, filters=filters.ChatType.PRIVATE))
 
         # Add error handler
         application.add_error_handler(error_handler)
