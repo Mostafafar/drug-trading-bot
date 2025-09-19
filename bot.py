@@ -1572,35 +1572,11 @@ async def register_founder_name(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
-
-
-async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Get address in registration process"""
-    try:
-        if update.message.contact:
-            phone = update.message.contact.phone_number
-        else:
-            phone = update.message.text
-        
-        context.user_data['phone'] = phone
-        
-        await update.message.reply_text(
-            "لطفا آدرس داروخانه را وارد کنید:",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return States.REGISTER_ADDRESS
-    except Exception as e:
-        logger.error(f"Error in register_address: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
-
-
 async def register_national_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get national card photo in registration process - فقط عکس قبول کند"""
     try:
         if not (update.message.photo or (update.message.document and update.message.document.mime_type.startswith('image/'))):
             await update.message.reply_text("❌ لطفا فقط تصویر کارت ملی را ارسال کنید.")
-            # باقی ماندن در همین state برای دریافت مجدد عکس
             return States.REGISTER_NATIONAL_CARD
         
         if update.message.photo:
@@ -1620,13 +1596,13 @@ async def register_national_card(update: Update, context: ContextTypes.DEFAULT_T
         logger.error(f"Error in register_national_card: {e}")
         await update.message.reply_text("خطایی در دریافت تصویر رخ داد. لطفا دوباره تلاش کنید.")
         return States.REGISTER_NATIONAL_CARD
+
 async def register_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get license photo in registration process - فقط عکس قبول کند"""
     try:
         if not (update.message.photo or (update.message.document and update.message.document.mime_type.startswith('image/'))):
             await update.message.reply_text("❌ لطفا فقط تصویر پروانه داروخانه را ارسال کنید.")
-            # برگشت به state قبلی برای دریافت مجدد عکس
-            return States.REGISTER_NATIONAL_CARD
+            return States.REGISTER_LICENSE
         
         if update.message.photo:
             photo_file = await update.message.photo[-1].get_file()
@@ -1644,15 +1620,14 @@ async def register_license(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in register_license: {e}")
         await update.message.reply_text("خطایی در دریافت تصویر رخ داد. لطفا دوباره تلاش کنید.")
-        return States.REGISTER_NATIONAL_CARD
+        return States.REGISTER_LICENSE
 
 async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get medical card photo in registration process - فقط عکس قبول کند"""
     try:
         if not (update.message.photo or (update.message.document and update.message.document.mime_type.startswith('image/'))):
             await update.message.reply_text("❌ لطفا فقط تصویر کارت نظام پزشکی را ارسال کنید.")
-            # برگشت به state قبلی برای دریافت مجدد عکس
-            return States.REGISTER_LICENSE
+            return States.REGISTER_MEDICAL_CARD
         
         if update.message.photo:
             photo_file = await update.message.photo[-1].get_file()
@@ -1673,7 +1648,7 @@ async def register_medical_card(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         logger.error(f"Error in register_medical_card: {e}")
         await update.message.reply_text("خطایی در دریافت تصویر رخ داد. لطفا دوباره تلاش کنید.")
-        return States.REGISTER_LICENSE
+        return States.REGISTER_MEDICAL_CARD
 
 async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get phone number using share contact button"""
@@ -1687,12 +1662,48 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     one_time_keyboard=True
                 )
             )
-            return States.REGISTER_ADDRESS
+            return States.REGISTER_PHONE
         
         phone_number = update.message.contact.phone_number
         context.user_data['phone'] = phone_number
         
-        # ارسال اطلاعات به ادمین
+        # ذخیره شماره تلفن در دیتابیس
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                UPDATE users SET phone = %s 
+                WHERE id = %s
+                ''', (phone_number, update.effective_user.id))
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Error saving phone: {e}")
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
+        
+        # درخواست آدرس
+        await update.message.reply_text(
+            "✅ شماره تلفن دریافت شد.\n\nلطفا آدرس داروخانه را وارد کنید:",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return States.REGISTER_ADDRESS
+        
+    except Exception as e:
+        logger.error(f"Error in register_phone: {e}")
+        await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+        return States.REGISTER_MEDICAL_CARD
+
+async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get address in registration process"""
+    try:
+        address = update.message.text
+        context.user_data['address'] = address
+        
+        # ارسال اطلاعات کامل به ادمین
         await send_complete_registration_to_admin(update, context)
         
         await update.message.reply_text(
@@ -1704,46 +1715,8 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
         
     except Exception as e:
-        logger.error(f"Error in register_phone: {e}")
+        logger.error(f"Error in register_address: {e}")
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
-        return States.REGISTER_MEDICAL_CARD
-
-async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Complete registration and send all data to admin"""
-    try:
-        if update.message.contact:
-            phone_number = update.message.contact.phone_number
-            context.user_data['phone_number'] = phone_number
-            
-            # ذخیره اطلاعات کاربر
-            user_data = context.user_data
-            user_id = update.effective_user.id
-            
-            # ارسال اطلاعات کامل به ادمین
-            await send_complete_registration_to_admin(update, context)
-            
-            await update.message.reply_text(
-                "✅ اطلاعات شما با موفقیت ثبت شد.\n\nدر حال حاضر در انتظار تایید ادمین هستید. پس از تایید، دسترسی کامل به ربات خواهید داشت.",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            
-            # بازگشت به حالت اولیه
-            return ConversationHandler.END
-            
-        else:
-            await update.message.reply_text(
-                "لطفا از دکمه اشتراک تلفن استفاده کنید:",
-                reply_markup=ReplyKeyboardMarkup(
-                    [[KeyboardButton("📞 اشتراک تلفن", request_contact=True)]],
-                    resize_keyboard=True,
-                    one_time_keyboard=True
-                )
-            )
-            return States.REGISTER_PHONE
-            
-    except Exception as e:
-        logger.error(f"Error in complete_registration: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return States.REGISTER_PHONE
 
 async def send_registration_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1786,7 +1759,8 @@ async def send_complete_registration_to_admin(update: Update, context: ContextTy
         message += f"🆔 ID: {user.id}\n"
         message += f"🏢 نام داروخانه: {user_data.get('pharmacy_name', 'نامشخص')}\n"
         message += f"👨‍💼 نام مسئول: {user_data.get('founder_name', 'نامشخص')}\n"
-        message += f"📞 شماره تلفن: {user_data.get('phone_number', 'نامشخص')}\n\n"
+        message += f"📞 شماره تلفن: {user_data.get('phone', 'نامشخص')}\n"
+        message += f"📍 آدرس: {user_data.get('address', 'نامشخص')}\n\n"
         message += f"📸 تصاویر ارسال شده:"
         
         # ارسال پیام و تصاویر به ادمین‌ها
@@ -1822,6 +1796,45 @@ async def send_complete_registration_to_admin(update: Update, context: ContextTy
                 
     except Exception as e:
         logger.error(f"Error in send_complete_registration_to_admin: {e}")
+
+async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Complete registration and send all data to admin"""
+    try:
+        if update.message.contact:
+            phone_number = update.message.contact.phone_number
+            context.user_data['phone'] = phone_number
+            
+            # ذخیره اطلاعات کاربر
+            user_data = context.user_data
+            user_id = update.effective_user.id
+            
+            # ارسال اطلاعات کامل به ادمین
+            await send_complete_registration_to_admin(update, context)
+            
+            await update.message.reply_text(
+                "✅ اطلاعات شما با موفقیت ثبت شد.\n\nدر حال حاضر در انتظار تایید ادمین هستید. پس از تایید، دسترسی کامل به ربات خواهید داشت.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            
+            # بازگشت به حالت اولیه
+            return ConversationHandler.END
+            
+        else:
+            await update.message.reply_text(
+                "لطفا از دکمه اشتراک تلفن استفاده کنید:",
+                reply_markup=ReplyKeyboardMarkup(
+                    [[KeyboardButton("📞 اشتراک تلفن", request_contact=True)]],
+                    resize_keyboard=True,
+                    one_time_keyboard=True
+                )
+            )
+            return States.REGISTER_PHONE
+            
+    except Exception as e:
+        logger.error(f"Error in complete_registration: {e}")
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        return States.REGISTER_PHONE
+
 
 
 
@@ -5258,22 +5271,22 @@ def main():
                 ],
                 States.REGISTER_NATIONAL_CARD: [
                     MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license),
-                    MessageHandler(filters.ALL, 
+                    MessageHandler(filters.ALL & ~filters.COMMAND, 
                                lambda u, c: u.message.reply_text("❌ لطفا فقط تصویر کارت ملی را ارسال کنید."))
                 ],
                 States.REGISTER_LICENSE: [
                     MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card),
-                    MessageHandler(filters.ALL, 
+                    MessageHandler(filters.ALL & ~filters.COMMAND, 
                                lambda u, c: u.message.reply_text("❌ لطفا فقط تصویر پروانه داروخانه را ارسال کنید."))
                 ],
                 States.REGISTER_MEDICAL_CARD: [
                     MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_phone),
-                    MessageHandler(filters.ALL, 
+                    MessageHandler(filters.ALL & ~filters.COMMAND, 
                                lambda u, c: u.message.reply_text("❌ لطفا فقط تصویر کارت نظام پزشکی را ارسال کنید."))
                 ],
                 States.REGISTER_PHONE: [
-                    MessageHandler(filters.CONTACT, send_complete_registration_to_admin),
-                    MessageHandler(filters.ALL, 
+                    MessageHandler(filters.CONTACT, register_address),
+                    MessageHandler(filters.ALL & ~filters.COMMAND, 
                                lambda u, c: u.message.reply_text(
                                    "❌ لطفا از دکمه اشتراک گذاری شماره تلفن استفاده کنید:",
                                    reply_markup=ReplyKeyboardMarkup(
@@ -5282,12 +5295,14 @@ def main():
                                        one_time_keyboard=True
                                    )
                                ))
+                ],
+                States.REGISTER_ADDRESS: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, register_address)
                 ]
            },
            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
            allow_reentry=True
         )
-        
         # Simple verification handler
         simple_verify_handler = ConversationHandler(
             entry_points=[
