@@ -2667,8 +2667,6 @@ async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
 
 
 
-# ... (بقیه importها و کدهای قبلی بدون تغییر)
-
 async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if update.message and update.message.text:
@@ -2701,7 +2699,7 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=update.effective_user.id,
                 text="لطفا تاریخ انقضا را به فرمت 2026/01/23 وارد کنید:"
             )
-            return States.ADD_DRUG_DATE
+            return States.ADD_DRUG_QUANTITY  # به state صحیح برگرد
             
     except Exception as e:
         logger.error(f"Error in add_drug_date for user {update.effective_user.id}: {e}")
@@ -5806,15 +5804,21 @@ def main():
                     InlineQueryHandler(handle_inline_query),
                     CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"),
                     ChosenInlineResultHandler(handle_chosen_inline_result),
-                    CallbackQueryHandler(add_drug_item, pattern="^back$")
+                    CallbackQueryHandler(add_drug_item, pattern="^back$"),
+                    MessageHandler(filters.Regex('^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), 
+                     handle_state_change)
                 ],
                 States.ADD_DRUG_DATE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, add_drug_date),
-                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$")
+                    CallbackQueryHandler(search_drug_for_adding, pattern="^back_to_search$"),
+                    MessageHandler(filters.Regex('^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), 
+                     handle_state_change)
                 ],
                 States.ADD_DRUG_QUANTITY: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_item),
-                    CallbackQueryHandler(handle_back, pattern="^back$")
+                    CallbackQueryHandler(handle_back, pattern="^back$"),
+                    MessageHandler(filters.Regex('^(جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), 
+                     handle_state_change)
                 ],
                 States.EDIT_DRUG: [
                     CallbackQueryHandler(edit_drugs, pattern="^back_to_list$"),
