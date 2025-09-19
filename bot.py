@@ -2953,16 +2953,13 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text("هیچ دارویی برای ویرایش وجود ندارد.")
                     return ConversationHandler.END
                 
-                # ساخت کیبورد - نمایش 20 کاراکتر اول نام
+                # ساخت کیبورد - نمایش نام کامل داروها
                 keyboard = []
                 for drug in drugs:
-                    # نمایش 20 کاراکتر اول از نام دارو
-                    display_name = drug['name'][:20]
-                    if len(drug['name']) > 20:
-                        display_name += "..."
-                    
+                    # نمایش نام کامل دارو به همراه موجودی
+                    display_text = f"{drug['name']}\nموجودی: {drug['quantity']}"
                     keyboard.append([InlineKeyboardButton(
-                        display_name,
+                        display_text,
                         callback_data=f"edit_drug_{drug['id']}"
                     )])
                 
@@ -2985,7 +2982,6 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in edit_drugs: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Edit specific drug item"""
     await clear_conversation_state(update, context, silent=True)
