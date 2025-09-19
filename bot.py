@@ -2790,8 +2790,10 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Clear context
                 context.user_data.pop('selected_drug', None)
                 context.user_data.pop('expiry_date', None)
+                context.user_data.pop('drug_quantity', None)
                 
-                return await start(update, context)  # Return to main menu
+                # Return to main menu
+                return await clear_conversation_state(update, context)
                 
         except Exception as e:
             logger.error(f"Error saving drug item for user {update.effective_user.id}: {e}")
