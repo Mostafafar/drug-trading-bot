@@ -2909,9 +2909,8 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if drugs:
                     message = "💊 لیست داروهای شما:\n\n"
                     for drug in drugs:
+                        # نمایش کامل نام دارو بدون کوتاه کردن
                         drug_name = drug['name']
-                        if len(drug_name) > 50:
-                            drug_name = drug_name[:47] + "..."
                         
                         message += (
                             f"• {drug_name}\n"
@@ -2921,8 +2920,8 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                     
                     keyboard = [
-                        [InlineKeyboardButton("✏️ ویرایش داروها", callback_data="edit_drugs")],
-                        [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")]
+                        [InlineKeyboardButton("✏️ ویرایش داروها", callback_data="edit_drugs")]
+                        # دکمه بازگشت به منوی اصلی حذف شد
                     ]
                     
                     # بررسی نوع update و ارسال پیام مناسب
