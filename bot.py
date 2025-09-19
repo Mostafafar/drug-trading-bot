@@ -1038,8 +1038,9 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await approve_user(update, context)
         elif query.data.startswith("reject_user_"):
             return await reject_user(update, context)
+        elif query.data.startswith("add_drug_"):
         # بقیه هندلرهای موجود...
-          return await handle_add_drug_callback(update, context)
+            return await handle_add_drug_callback(update, context)
         # بقیه هندلرهای موجود...
         # ...
 
