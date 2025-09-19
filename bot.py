@@ -1294,7 +1294,13 @@ async def receive_phone_for_admin_verify(update: Update, context: ContextTypes.D
         if update.message.contact:
             phone_number = update.message.contact.phone_number
         else:
-            phone_number = update.message.text
+            keyboard = [[KeyboardButton("📞 اشتراک گذاری شماره تلفن", request_contact=True)]]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+            await update.message.reply_text(
+                "❌ لطفا فقط از دکمه اشتراک گذاری استفاده کنید:",
+                reply_markup=reply_markup
+            )
+            return States.REGISTER_PHONE
         
         user = update.effective_user
         context.user_data['phone'] = phone_number
@@ -5638,7 +5644,8 @@ def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_pharmacy_name)
                 ],
                 States.REGISTER_PHONE: [
-                    MessageHandler(filters.CONTACT | filters.TEXT, receive_phone_for_admin_verify)
+                    MessageHandler(filters.ALL & ~filters.COMMAND, receive_phone_for_admin_verify)
+                
                 ]
             },
             fallbacks=[CommandHandler('cancel', clear_conversation_state)],
