@@ -3064,7 +3064,14 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await query.edit_message_text("دارو یافت نشد.")
                         return ConversationHandler.END
                     
-                    context.user_data['editing_drug'] = dict(drug)
+                    # ذخیره اطلاعات دارو در context
+                    context.user_data['editing_drug'] = {
+                        'id': drug['id'],
+                        'name': drug['name'],
+                        'price': drug['price'],
+                        'date': drug['date'],
+                        'quantity': drug['quantity']
+                    }
                     
                     keyboard = [
                         [InlineKeyboardButton("✏️ ویرایش تاریخ", callback_data="edit_date")],
@@ -3094,7 +3101,6 @@ async def edit_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in edit_drug_item: {e}")
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug edit action selection"""
     await clear_conversation_state(update, context, silent=True)
