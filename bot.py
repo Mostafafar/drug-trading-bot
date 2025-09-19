@@ -5928,6 +5928,7 @@ def main():
         application.add_handler(CommandHandler('ban_user', ban_user, filters=filters.ChatType.PRIVATE))
         # Add restart handler for banned users
         application.add_handler(CommandHandler('start', handle_restart_after_ban))
+        application.add_handler(CallbackQueryHandler(handle_restart_after_ban, pattern="^restart_after_ban$"))
 
         # Add error handler
         application.add_error_handler(error_handler)
