@@ -78,6 +78,7 @@ Path(PHOTO_STORAGE).mkdir(exist_ok=True)
 
 # Admin Configuration
 ADMIN_CHAT_ID = 6680287530
+ADMINS = [ADMIN_CHAT_ID]  
 
 # States Enum
 # States Enum
