@@ -3376,6 +3376,9 @@ async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await ensure_user(update, context)
         
+        # 🔥 تنظیم state برای تشخیص در اینلاین کوئری
+        context.user_data['_conversation_state'] = States.SEARCH_DRUG_FOR_NEED
+        
         # ایجاد دکمه برای جستجوی اینلاین برای نیاز
         keyboard = [
             [InlineKeyboardButton(
