@@ -2673,16 +2673,22 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
             expiry_date = update.message.text.strip()
             logger.info(f"User {update.effective_user.id} entered expiry date: {expiry_date}")
             
-            # Validate date format (simple validation)
+            # تبدیل اعداد فارسی به انگلیسی
+            persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+            expiry_date = expiry_date.translate(persian_to_english)
+            
+            # Validate date format
             if not re.match(r'^\d{4}/\d{2}/\d{2}$', expiry_date):
-                await update.message.reply_text("فرمت تاریخ نامعتبر است. لطفا تاریخ را به فرمت 2026/01/23 وارد کنید:")
+                await update.message.reply_text(
+                    "فرمت تاریخ نامعتبر است. لطفا تاریخ را به فرمت 2026/01/23 وارد کنید:"
+                )
                 return States.ADD_DRUG_DATE
             
             context.user_data['expiry_date'] = expiry_date
             logger.info(f"Stored expiry_date: {expiry_date} for user {update.effective_user.id}")
             
             await update.message.reply_text("📦 لطفا تعداد موجودی را وارد کنید:")
-            return States.ADD_DRUG_QUANTITY
+            return States.ADD_DRUG_QUANTITY  # این خط مهم است
             
         elif update.callback_query:
             query = update.callback_query
@@ -2699,7 +2705,7 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=update.effective_user.id,
                 text="لطفا تاریخ انقضا را به فرمت 2026/01/23 وارد کنید:"
             )
-            return States.ADD_DRUG_QUANTITY  # به state صحیح برگرد
+            return States.ADD_DRUG_DATE
             
     except Exception as e:
         logger.error(f"Error in add_drug_date for user {update.effective_user.id}: {e}")
@@ -2734,11 +2740,22 @@ async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ذخیره دارو بعد از وارد کردن تعداد"""
     try:
+        # فقط اگر در state صحیح هستیم پردازش کنیم
+        current_state = context.user_data.get('_conversation_state')
+        if current_state != States.ADD_DRUG_QUANTITY:
+            # اگر در state اشتباه هستیم، کاربر را به مسیر صحیح هدایت کنیم
+            await update.message.reply_text(
+                "لطفا ابتدا فرآیند اضافه کردن دارو را از منوی اصلی شروع کنید.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return await clear_conversation_state(update, context)
+
         # Get all required data from context
         selected_drug = context.user_data.get('selected_drug', {})
         expiry_date = context.user_data.get('expiry_date')
-        quantity = update.message.text.strip()
+        quantity_text = update.message.text.strip()
 
         # Validate all required fields
         if not selected_drug or not expiry_date:
@@ -2748,11 +2765,20 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "2. دارو را از لیست انتخاب کنید\n"
                 "3. تاریخ انقضا و تعداد را وارد کنید"
             )
-            return ConversationHandler.END
+            return await clear_conversation_state(update, context)
 
-        # Validate quantity
+        # Validate quantity - تبدیل اعداد فارسی به انگلیسی
         try:
-            quantity = int(quantity)
+            persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+            quantity_text = quantity_text.translate(persian_to_english)
+            
+            # استخراج فقط ارقام
+            digits = ''.join(filter(str.isdigit, quantity_text))
+            if not digits:
+                await update.message.reply_text("لطفا یک عدد معتبر وارد کنید:")
+                return States.ADD_DRUG_QUANTITY
+                
+            quantity = int(digits)
             if quantity <= 0:
                 await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید:")
                 return States.ADD_DRUG_QUANTITY
@@ -2785,28 +2811,26 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"📦 تعداد: {quantity}"
                 )
                 
-                # Clear context
-                context.user_data.pop('selected_drug', None)
-                context.user_data.pop('expiry_date', None)
-                context.user_data.pop('drug_quantity', None)
-                
-                # Return to main menu
-                return await clear_conversation_state(update, context)
-                
         except Exception as e:
             logger.error(f"Error saving drug item for user {update.effective_user.id}: {e}")
             if conn:
                 conn.rollback()
             await update.message.reply_text("خطا در ثبت دارو. لطفا دوباره تلاش کنید.")
-            return ConversationHandler.END
         finally:
             if conn:
                 conn.close()
                 
+        # پاک‌سازی context و بازگشت به منوی اصلی
+        context.user_data.pop('selected_drug', None)
+        context.user_data.pop('expiry_date', None)
+        context.user_data.pop('drug_quantity', None)
+        
+        return await clear_conversation_state(update, context)
+                
     except Exception as e:
         logger.error(f"Error in save_drug_item for user {update.effective_user.id}: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        return ConversationHandler.END
+        return await clear_conversation_state(update, context)
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """لیست داروهای کاربر بدون پیام لغو"""
     try:
