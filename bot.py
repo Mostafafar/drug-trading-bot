@@ -1053,6 +1053,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await edit_drug_item(update, context)
         elif query.data in ["edit_date", "edit_quantity", "delete_drug"]:
             return await handle_drug_edit_action(update, context)
+        elif query.data == "back_to_drugs_list":
+            return await list_my_drugs(update, context)
         elif query.data == "confirm_delete":
             return await handle_drug_deletion(update, context)
         elif query.data == "cancel_delete":
