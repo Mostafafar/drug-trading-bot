@@ -1014,12 +1014,31 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
             return States.START
+
+        # Handle back button - بازگشت مستقیم به لیست داروها
+        elif query.data == "back":
+            try:
+                await query.delete_message()
+            except:
+                pass
+            # ایجاد یک پیام جدید برای فراخوانی list_my_drugs
+            fake_update = Update(
+                update_id=update.update_id,
+                message=Message(
+                    message_id=update.update_id,
+                    date=datetime.now(),
+                    chat=query.message.chat,
+                    text="/list_drugs"
+                )
+            )
+            return await list_my_drugs(fake_update, context)
+            
         # Handle different callback patterns
-        if query.data.startswith("approve_user_"):
+        elif query.data.startswith("approve_user_"):
             return await approve_user(update, context)
         elif query.data.startswith("reject_user_"):
             return await reject_user(update, context)
-        if query.data.startswith("add_drug_"):
+        # بقیه هندلرهای موجود...
           return await handle_add_drug_callback(update, context)
         # بقیه هندلرهای موجود...
         # ...
