@@ -1346,12 +1346,22 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 conn.commit()
                 logger.info(f"کاربر {user_id} با موفقیت تایید شد")
                 
-                # ارسال پیام به کاربر
+                # ارسال پیام به کاربر با کیبورد مدیریت
                 try:
+                    # کیبورد مدیریت برای داروخانه
+                    keyboard = [
+                        ['اضافه کردن دارو', 'جستجوی دارو'],
+                        ['لیست داروهای من', 'ثبت نیاز جدید'],
+                        ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                        ['تنظیم شاخه‌های دارویی']
+                    ]
+                    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                    
                     await context.bot.send_message(
                         chat_id=user_id,
                         text="✅ حساب شما توسط ادمین تایید شد!\n\n"
-                             "شما اکنون می‌توانید از تمام امکانات مدیریت داروخانه استفاده کنید."
+                             "شما اکنون می‌توانید از تمام امکانات مدیریت داروخانه استفاده کنید.",
+                        reply_markup=reply_markup
                     )
                 except Exception as e:
                     logger.error(f"خطا در ارسال پیام به کاربر {user_id}: {str(e)}")
