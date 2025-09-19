@@ -5919,7 +5919,8 @@ def main():
                     CallbackQueryHandler(edit_drug_item, pattern="^edit_drug_"),
                     CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
-                    CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$")
+                    CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$"),
+                    CallbackQueryHandler(list_my_drugs, pattern="^back$")
                 ]
             },
             fallbacks=[
