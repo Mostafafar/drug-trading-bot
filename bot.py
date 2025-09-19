@@ -5503,6 +5503,47 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         except Exception as send_error:
             logger.error(f"Failed to send error message: {send_error}")
+async def handle_restart_after_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle restart for banned users"""
+    try:
+        user_id = update.effective_user.id
+        
+        # بررسی اینکه کاربر واقعاً اخراج شده است
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('SELECT is_verified FROM users WHERE id = %s', (user_id,))
+                result = cursor.fetchone()
+                
+                if result and result[0]:  # اگر کاربر تایید شده باشد
+                    return await start(update, context)
+                    
+        except Exception as e:
+            logger.error(f"Error checking user status: {e}")
+        finally:
+            if conn:
+                conn.close()
+        
+        # نمایش گزینه‌های ثبت‌نام برای کاربر اخراج شده
+        keyboard = [
+            [InlineKeyboardButton("ثبت نام با تایید ادمین", callback_data="admin_verify")],
+            [InlineKeyboardButton("ورود با کد پرسنل", callback_data="personnel_login")],
+            [InlineKeyboardButton("ثبت نام با مدارک", callback_data="register")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "❌ حساب شما اخراج شده است.\n\n"
+            "برای استفاده مجدد از ربات، لطفا یکی از روش‌های زیر را انتخاب کنید:",
+            reply_markup=reply_markup
+        )
+        return States.START
+        
+    except Exception as e:
+        logger.error(f"Error in handle_restart_after_ban: {e}")
+        await update.message.reply_text("خطایی در پردازش درخواست رخ داد.")
+        return ConversationHandler.END
 def main():
     """Start the bot"""
     try:
@@ -5885,6 +5926,8 @@ def main():
         # Add ban user command
         # Add ban user command - فقط برای messageها
         application.add_handler(CommandHandler('ban_user', ban_user, filters=filters.ChatType.PRIVATE))
+        # Add restart handler for banned users
+        application.add_handler(CommandHandler('start', handle_restart_after_ban))
 
         # Add error handler
         application.add_error_handler(error_handler)
