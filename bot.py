@@ -115,7 +115,8 @@ class States(Enum):
     COMPENSATION_QUANTITY = auto()
     CONFIRM_TOTALS = auto()  
     ADMIN_VERIFY_PHARMACY_NAME = auto()
-    SEARCH_DRUG_FOR_NEED = auto()  # اضافه کردن این خط
+    SEARCH_DRUG_FOR_NEED = auto()
+    ADD_DRUG_FROM_INLINE = auto() # اضافه کردن این خط
 
 def get_db_connection(max_retries=3, retry_delay=1.0):
     """Get a database connection with retry logic"""
@@ -2483,27 +2484,27 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     await clear_conversation_state(update, context, silent=True)
     query = update.inline_query.query
     
-    # تشخیص نوع جستجو (اضافه کردن دارو یا نیاز)
-    search_type = "add"
+    # تشخیص نوع جستجو از context
+    current_state = context.user_data.get('_conversation_state')
+    search_type = "add" if current_state == States.SEARCH_DRUG_FOR_ADDING else "search"
+    
     if query.startswith("need "):
         search_type = "need"
-        query = query[5:].strip()  # حذف "need " از ابتدای کوئری
+        query = query[5:].strip()
     elif query.startswith("add "):
-        query = query[4:].strip()  # حذف "add " از ابتدای کوئری
+        search_type = "add"
+        query = query[4:].strip()
     
     if not query:
-        # اگر کوئری خالی است، همه داروها را نشان بده
         query = ""
     
     results = []
     for idx, (name, price) in enumerate(drug_list):
         if query.lower() in name.lower():
-            # جدا کردن نام و توضیحات
             title_part = name.split()[0] if name.split() else name
             desc_part = ' '.join(name.split()[1:]) if len(name.split()) > 1 else name
             
             if search_type == "add":
-                # فقط گزینه اضافه کردن دارو
                 results.append(
                     InlineQueryResultArticle(
                         id=f"add_{idx}",
@@ -2521,19 +2522,18 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                     )
                 )
             else:
-                # فقط گزینه ثبت نیاز
                 results.append(
                     InlineQueryResultArticle(
-                        id=f"need_{idx}",
-                        title=f"📝 {title_part}",
+                        id=f"search_{idx}",
+                        title=f"🔍 {title_part}",
                         description=f"{desc_part} - قیمت: {price}",
                         input_message_content=InputTextMessageContent(
                             f"💊 {name}\n💰 قیمت: {price}"
                         ),
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(
-                                "📝 ثبت به عنوان نیاز",
-                                callback_data=f"need_drug_{idx}"
+                                "🏥 مشاهده داروخانه‌ها",
+                                callback_data=f"search_drug_{idx}"
                             )]
                         ])
                     )
@@ -2559,19 +2559,20 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
                 'price': drug_price.strip()
             }
 
+            # state را به ADD_DRUG_FROM_INLINE تغییر دهید
+            context.user_data['_conversation_state'] = States.ADD_DRUG_FROM_INLINE
+
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"✅ دارو انتخاب شده: {drug_name}\n💰 قیمت: {drug_price}\n\n📅 لطفا تاریخ انقضا را وارد کنید (مثال: 2026/01/23):"
             )
-            # مهم: برگرداندن State تا ConversationHandler به مرحله بعد برود
-            return States.ADD_DRUG_DATE
+            return States.ADD_DRUG_DATE  # به state تاریخ بروید
 
         elif result_id.startswith('need_'):
-            # پردازش برای ثبت نیاز — now goes straight to quantity
+            # پردازش برای ثبت نیاز
             idx = int(result_id.split('_')[1])
             drug_name, drug_price = drug_list[idx]
 
-            # Save as need_name / selected_drug_for_need so save_need can use them
             context.user_data['need_name'] = drug_name.strip()
             context.user_data['selected_drug_for_need'] = {
                 'name': drug_name.strip(),
@@ -2582,7 +2583,6 @@ async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFA
                 chat_id=user_id,
                 text=f"✅ داروی مورد نیاز انتخاب شد: {drug_name}\n💰 قیمت مرجع: {drug_price}\n\n📦 لطفا تعداد مورد نیاز را وارد کنید:"
             )
-            # مهم: بازگرداندن State مربوط به ورود تعداد نیاز
             return States.ADD_NEED_QUANTITY
 
     except Exception as e:
@@ -5412,47 +5412,41 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.info(f"State change requested: {text}")
 
         # بررسی stateهای فعال مربوط به اضافه کردن دارو
-        active_states = [
+        active_add_states = [
             States.ADD_DRUG_DATE,
             States.ADD_DRUG_QUANTITY,
-            States.SEARCH_DRUG_FOR_ADDING
+            States.SEARCH_DRUG_FOR_ADDING,
+            States.ADD_DRUG_FROM_INLINE
         ]
         
         current_state = context.user_data.get('_conversation_state')
         
-        # اگر در حال اضافه کردن دارو هستیم، اجازه تغییر state ندهیم
-        if current_state in active_states and text == 'جستجوی دارو':
+        # اگر در حال اضافه کردن دارو هستیم، اجازه تغییر به جستجو ندهیم
+        if current_state in active_add_states and text == 'جستجوی دارو':
             await update.message.reply_text(
                 "⚠️ در حال حاضر در حال اضافه کردن دارو هستید.\n"
                 "لطفاً ابتدا فرآیند اضافه کردن دارو را تکمیل یا لغو کنید.",
                 reply_markup=ReplyKeyboardRemove()
             )
-            return current_state  # در همان state بمان
+            return current_state
 
-        # در غیر این صورت state را عوض کن
+        # پاک‌سازی state و ادامه
         await clear_conversation_state(update, context, silent=True)
 
         if text == 'لیست داروهای من':
             return await list_my_drugs(update, context)
-            
         elif text == 'لیست نیازهای من':
             return await list_my_needs(update, context)
-            
         elif text == 'اضافه کردن دارو':
             return await add_drug_item(update, context)
-            
         elif text == 'ثبت نیاز جدید':
             return await add_need(update, context)
-            
         elif text == 'جستجوی دارو':
             return await search_drug(update, context)
-            
         elif text == 'ساخت کد پرسنل':
             return await generate_personnel_code(update, context)
-            
         elif text == 'تنظیم شاخه‌های دارویی':
             return await setup_medical_categories(update, context)
-            
         else:
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
