@@ -5512,6 +5512,50 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
         text = update.message.text.strip()
         logger.info(f"State change requested: {text}")
 
+        # بررسی stateهای فعال که نیاز به ورود داده دارند
+        input_states = [
+            States.ADD_DRUG_DATE,
+            States.ADD_DRUG_QUANTITY,
+            States.ADD_NEED_QUANTITY,
+            States.SELECT_QUANTITY,
+            States.EDIT_DRUG,
+            States.EDIT_NEED,
+            States.SEARCH_DRUG_FOR_ADDING,
+            States.ADD_DRUG_FROM_INLINE,
+            States.SEARCH_DRUG_FOR_NEED,
+            States.REGISTER_PHARMACY_NAME,
+            States.REGISTER_FOUNDER_NAME,
+            States.REGISTER_NATIONAL_CARD,
+            States.REGISTER_LICENSE,
+            States.REGISTER_MEDICAL_CARD,
+            States.REGISTER_PHONE,
+            States.REGISTER_ADDRESS,
+            States.SIMPLE_VERIFICATION,
+            States.PERSONNEL_LOGIN,
+            States.SEARCH_DRUG
+        ]
+        
+        current_state = context.user_data.get('_conversation_state')
+        
+        # اگر در حالتی هستیم که نیاز به ورود داده دارد، state را کاملاً پاک کنیم
+        if current_state in input_states:
+            # پاک کردن کامل state و بازگشت به منوی اصلی
+            context.user_data.clear()
+            
+            keyboard = [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['لیست داروهای من', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                ['تنظیم شاخه‌های دارویی']
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            
+            await update.message.reply_text(
+                "⚠️ عملیات قبلی لغو شد.\n\nبه منوی اصلی بازگشتید. لطفاً یک گزینه را انتخاب کنید:",
+                reply_markup=reply_markup
+            )
+            return ConversationHandler.END
+
         # بررسی stateهای فعال مربوط به اضافه کردن دارو
         active_add_states = [
             States.ADD_DRUG_DATE,
@@ -5519,8 +5563,6 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
             States.SEARCH_DRUG_FOR_ADDING,
             States.ADD_DRUG_FROM_INLINE
         ]
-        
-        current_state = context.user_data.get('_conversation_state')
         
         # اگر در حال اضافه کردن دارو هستیم، اجازه تغییر به جستجو ندهیم
         if current_state in active_add_states and text == 'جستجوی دارو':
