@@ -2865,9 +2865,9 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # بازگشت به منوی اصلی در صورت خطا
         return await clear_conversation_state(update, context)
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """لیست داروهای کاربر بدون پیام لغو"""
+    """لیست داروهای کاربر با نمایش کامل نام و بدون دکمه اینلاین"""
     try:
-        # پاک کردن stateهای قبلی (بی صدا)
+        # پاک کردن stateهای قبلی
         await clear_conversation_state(update, context, silent=True)
         
         await ensure_user(update, context)
@@ -2887,20 +2887,24 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if drugs:
                     message = "💊 لیست داروهای شما:\n\n"
                     for drug in drugs:
+                        # نمایش کامل نام دارو بدون کوتاه کردن
                         drug_name = drug['name']
-                        if len(drug_name) > 50:
-                            drug_name = drug_name[:47] + "..."
+                        
+                        # تبدیل تاریخ به انگلیسی اگر فارسی است
+                        expiry_date = drug['date']
+                        persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+                        expiry_date = expiry_date.translate(persian_to_english)
                         
                         message += (
                             f"• {drug_name}\n"
-                            f"  قیمت: {drug['price']}\n"
-                            f"  تاریخ انقضا: {drug['date']}\n"
-                            f"  موجودی: {drug['quantity']}\n\n"
+                            f"  💰 قیمت: {drug['price']}\n"
+                            f"  📅 تاریخ انقضا: {expiry_date}\n"
+                            f"  📦 موجودی: {drug['quantity']}\n\n"
                         )
                     
+                    # فقط دکمه ویرایش (بدون دکمه بازگشت اینلاین)
                     keyboard = [
-                        [InlineKeyboardButton("✏️ ویرایش داروها", callback_data="edit_drugs")],
-                        [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")]
+                        [InlineKeyboardButton("✏️ ویرایش داروها", callback_data="edit_drugs")]
                     ]
                     
                     await update.message.reply_text(
@@ -2910,12 +2914,12 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return States.EDIT_DRUG
                 else:
                     await update.message.reply_text(
-                        "شما هنوز هیچ دارویی اضافه نکرده‌اید."
+                        "📭 شما هنوز هیچ دارویی اضافه نکرده‌اید."
                     )
                     
         except Exception as e:
             logger.error(f"Error listing drugs: {e}")
-            await update.message.reply_text("خطا در دریافت لیست داروها.")
+            await update.message.reply_text("❌ خطا در دریافت لیست داروها.")
         finally:
             if conn:
                 conn.close()
