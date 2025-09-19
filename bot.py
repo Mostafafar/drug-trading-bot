@@ -5109,7 +5109,7 @@ async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.append([InlineKeyboardButton("➕ افزودن داروی جبرانی", callback_data="add_more")])
         keyboard.append([InlineKeyboardButton("✅ تأیید و ارسال", callback_data="confirm_offer")])
         keyboard.append([InlineKeyboardButton("✏️ ویرایش انتخاب‌ها", callback_data="edit_selection")])
-        keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_selection")])
+        #keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_selection")])
         
         if price_difference > 0:
             conn = None
