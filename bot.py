@@ -5308,6 +5308,102 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"Error in handle_state_change: {e}", exc_info=True)
         await update.message.reply_text("خطایی در تغییر حالت رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """اخراج کاربر توسط ادمین"""
+    try:
+        # بررسی اینکه کاربر ادمین است
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('SELECT is_admin FROM users WHERE id = %s', (update.effective_user.id,))
+                result = cursor.fetchone()
+                
+                if not result or not result[0]:
+                    await update.message.reply_text("❌ شما مجوز انجام این کار را ندارید.")
+                    return
+        except Exception as e:
+            logger.error(f"Error checking admin status: {e}")
+            await update.message.reply_text("خطا در بررسی مجوزها.")
+            return
+        finally:
+            if conn:
+                conn.close()
+        
+        # بررسی اینکه آیدی کاربر وارد شده است
+        if not context.args:
+            await update.message.reply_text("❌ لطفا آیدی کاربر را وارد کنید:\n/ban_user <user_id>")
+            return
+        
+        try:
+            user_id = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("❌ آیدی کاربر باید عدد باشد.")
+            return
+        
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                # بررسی وجود کاربر
+                cursor.execute('SELECT id, is_verified FROM users WHERE id = %s', (user_id,))
+                user_data = cursor.fetchone()
+                
+                if not user_data:
+                    await update.message.reply_text(f"❌ کاربر با آیدی {user_id} یافت نشد.")
+                    return
+                
+                # غیرفعال کردن کاربر (حذف وضعیت تایید و نقش‌ها)
+                cursor.execute('''
+                UPDATE users 
+                SET is_verified = FALSE,
+                    is_pharmacy_admin = FALSE,
+                    is_personnel = FALSE,
+                    verification_method = NULL,
+                    simple_code = NULL,
+                    creator_id = NULL
+                WHERE id = %s
+                RETURNING id
+                ''', (user_id,))
+                
+                # همچنین وضعیت داروخانه را غیرفعال کنیم (اما اطلاعاتش باقی بماند)
+                cursor.execute('''
+                UPDATE pharmacies 
+                SET verified = FALSE,
+                    verified_at = NULL,
+                    admin_id = NULL
+                WHERE user_id = %s
+                ''', (user_id,))
+                
+                conn.commit()
+                
+                # ارسال پیام به کاربر مبنی بر اخراج
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text="❌ حساب شما توسط ادمین اخراج شد.\n\n"
+                             "برای استفاده مجدد از ربات، لطفا دوباره ثبت‌نام کنید."
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify banned user: {e}")
+                
+                await update.message.reply_text(
+                    f"✅ کاربر {user_id} با موفقیت اخراج شد.\n"
+                    f"اطلاعات کاربر در سیستم باقی مانده و می‌تواند دوباره ثبت‌نام کند."
+                )
+                
+        except Exception as e:
+            logger.error(f"Error banning user {user_id}: {e}")
+            if conn:
+                conn.rollback()
+            await update.message.reply_text("خطا در اخراج کاربر.")
+        finally:
+            if conn:
+                conn.close()
+                
+    except Exception as e:
+        logger.error(f"Error in ban_user: {e}")
+        await update.message.reply_text("خطایی در پردازش درخواست رخ داد.")
 def main():
     """Start the bot"""
     try:
@@ -5687,6 +5783,9 @@ def main():
         ))
         application.add_handler(CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"))
         application.add_handler(CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"))
+        # Add ban user command
+        application.add_handler(CommandHandler('ban_user', ban_user))
+
 
         # Add error handler
         application.add_error_handler(error_handler)
