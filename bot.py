@@ -2953,12 +2953,26 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text("هیچ دارویی برای ویرایش وجود ندارد.")
                     return ConversationHandler.END
                 
-                # ساخت کیبورد - فقط نام کامل داروها
+                # ساخت کیبورد - اولین کلمه + بخشی از نام
                 keyboard = []
                 for drug in drugs:
-                    # فقط نام کامل دارو نمایش داده شود
+                    # جدا کردن کلمات
+                    words = drug['name'].split()
+                    if len(words) > 0:
+                        first_word = words[0]
+                        # اضافه کردن 2-3 کلمه بعدی اگر وجود داشته باشد
+                        if len(words) > 1:
+                            additional_text = ' '.join(words[1:3])  # 2 کلمه بعدی
+                            if len(words) > 3:
+                                additional_text += '...'
+                            display_text = f"{first_word} {additional_text}"
+                        else:
+                            display_text = first_word
+                    else:
+                        display_text = drug['name'][:30]  # اگر کلمه ای نبود، 30 کاراکتر اول
+                    
                     keyboard.append([InlineKeyboardButton(
-                        drug['name'],
+                        display_text,
                         callback_data=f"edit_drug_{drug['id']}"
                     )])
                 
