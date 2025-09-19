@@ -1532,6 +1532,25 @@ async def verify_personnel_code(update: Update, context: ContextTypes.DEFAULT_TY
         logger.error(f"Error in verify_personnel_code: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return States.PERSONNEL_LOGIN
+async def approve_user_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """تایید کاربر از طریق callback"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        if query.data.startswith("approve_"):
+            user_id = int(query.data.split("_")[1])
+            await approve_user(update, context)
+        elif query.data.startswith("reject_"):
+            user_id = int(query.data.split("_")[1])
+            await reject_user(update, context)
+            
+    except Exception as e:
+        logger.error(f"Error in approve_user_callback: {e}")
+        try:
+            await query.edit_message_text("خطا در پردازش درخواست")
+        except:
+            pass
 # Registration Handlers
 async def register_pharmacy_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start pharmacy registration - get pharmacy name"""
@@ -1688,7 +1707,7 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # درخواست آدرس
         await update.message.reply_text(
-            "✅ شماره تلفن دریافت شد.\n\nلطفا آدرس داروخانه را وارد کنید:",
+            "✅ شماره تلفن دریافت شد.\n\nلطفا آدرس کامل داروخانه را وارد کنید:",
             reply_markup=ReplyKeyboardRemove()
         )
         return States.REGISTER_ADDRESS
@@ -1697,12 +1716,40 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in register_phone: {e}")
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return States.REGISTER_MEDICAL_CARD
-
 async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get address in registration process"""
     try:
         address = update.message.text
         context.user_data['address'] = address
+        
+        # ذخیره آدرس در دیتابیس
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                INSERT INTO pharmacies (user_id, name, founder_name, address, phone)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    founder_name = EXCLUDED.founder_name,
+                    address = EXCLUDED.address,
+                    phone = EXCLUDED.phone
+                ''', (
+                    update.effective_user.id,
+                    context.user_data.get('pharmacy_name'),
+                    context.user_data.get('founder_name'),
+                    address,
+                    context.user_data.get('phone')
+                ))
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Error saving address: {e}")
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
         
         # ارسال اطلاعات کامل به ادمین
         await send_complete_registration_to_admin(update, context)
@@ -1719,7 +1766,6 @@ async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in register_address: {e}")
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return States.REGISTER_PHONE
-
 async def send_registration_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send registration data to admin"""
     try:
@@ -1749,6 +1795,7 @@ async def send_registration_to_admin(update: Update, context: ContextTypes.DEFAU
     except Exception as e:
         logger.error(f"Error in send_registration_to_admin: {e}")
 
+
 async def send_complete_registration_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send complete registration data to admin with inline buttons"""
     try:
@@ -1756,44 +1803,42 @@ async def send_complete_registration_to_admin(update: Update, context: ContextTy
         user = update.effective_user
         
         message = f"✅ درخواست ثبت نام کامل شد\n\n"
-        message += f"👤 کاربر: {user.full_name} (@{user.username})\n"
+        message += f"👤 کاربر: {user.full_name} (@{user.username or 'ندارد'})\n"
         message += f"🆔 ID: {user.id}\n"
         message += f"🏢 نام داروخانه: {user_data.get('pharmacy_name', 'نامشخص')}\n"
         message += f"👨‍💼 نام مسئول: {user_data.get('founder_name', 'نامشخص')}\n"
         message += f"📞 شماره تلفن: {user_data.get('phone', 'نامشخص')}\n"
         message += f"📍 آدرس: {user_data.get('address', 'نامشخص')}\n\n"
-        message += f"📸 تصاویر ارسال شده:"
+        message += "لطفا این کاربر را تایید یا رد کنید:"
         
-        # ارسال پیام و تصاویر به ادمین‌ها
-        for admin_id in ADMINS:
-            try:
-                # ارسال پیام اصلی
-                await context.bot.send_message(
-                    chat_id=admin_id,
-                    text=message,
-                    reply_markup=InlineKeyboardMarkup([
-                        [
-                            InlineKeyboardButton("✅ تایید", callback_data=f"approve_{user.id}"),
-                            InlineKeyboardButton("❌ رد", callback_data=f"reject_{user.id}")
-                        ]
-                    ])
-                )
-                
-                # ارسال تصاویر
-                for file_type in ['national_card', 'license', 'medical_card']:
-                    if file_type in user_data:
-                        try:
-                            with open(user_data[file_type], 'rb') as photo:
-                                await context.bot.send_photo(
-                                    chat_id=admin_id,
-                                    photo=photo,
-                                    caption=f"📄 {file_type.replace('_', ' ').title()}"
-                                )
-                        except Exception as e:
-                            logger.error(f"Error sending {file_type} to admin: {e}")
-                            
-            except Exception as e:
-                logger.error(f"Error sending complete registration to admin {admin_id}: {e}")
+        try:
+            # ارسال پیام اصلی
+            await context.bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                text=message,
+                reply_markup=InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("✅ تایید کاربر", callback_data=f"approve_user_{user.id}"),
+                        InlineKeyboardButton("❌ رد کاربر", callback_data=f"reject_user_{user.id}")
+                    ]
+                ])
+            )
+            
+            # ارسال تصاویر
+            for file_type in ['national_card', 'license', 'medical_card']:
+                if file_type in user_data:
+                    try:
+                        with open(user_data[file_type], 'rb') as photo:
+                            await context.bot.send_photo(
+                                chat_id=ADMIN_CHAT_ID,
+                                photo=photo,
+                                caption=f"📄 {file_type.replace('_', ' ').title()}"
+                            )
+                    except Exception as e:
+                        logger.error(f"Error sending {file_type} to admin: {e}")
+                        
+        except Exception as e:
+            logger.error(f"Error sending complete registration to admin: {e}")
                 
     except Exception as e:
         logger.error(f"Error in send_complete_registration_to_admin: {e}")
@@ -5559,6 +5604,11 @@ def main():
         application.add_handler(InlineQueryHandler(handle_inline_query))
         application.add_handler(ChosenInlineResultHandler(handle_chosen_inline_result))
         application.add_handler(MessageHandler(filters.Regex('^ساخت کد پرسنل$'), generate_personnel_code))
+        application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
+        application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_user_"))
+        
+        application.add_handler(CallbackQueryHandler(approve_user_callback, pattern="^approve_"))
+        application.add_handler(CallbackQueryHandler(approve_user_callback, pattern="^reject_"))
         application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
         application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_user_"))
         application.add_handler(CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"))
