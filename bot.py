@@ -778,21 +778,62 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await ensure_user(update, context)
         
-        # Check verification status
-        is_verified = False
-        is_pharmacy_admin = False
+        # Check if user is banned
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
                 cursor.execute('''
-                SELECT u.is_verified, u.is_pharmacy_admin
+                SELECT is_verified, is_pharmacy_admin, is_personnel
+                FROM users 
+                WHERE id = %s
+                ''', (update.effective_user.id,))
+                result = cursor.fetchone()
+                
+                if result and not result[0]:  # اگر کاربر اخراج شده باشد
+                    # پاک کردن کیبورد قبلی
+                    await update.message.reply_text(
+                        "❌ حساب شما اخراج شده است.\n\n"
+                        "برای استفاده مجدد از ربات، لطفا دوباره ثبت‌نام کنید.",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                    
+                    # نمایش گزینه‌های ثبت‌نام مجدد
+                    keyboard = [
+                        [InlineKeyboardButton("ثبت نام با تایید ادمین", callback_data="admin_verify")],
+                        [InlineKeyboardButton("ورود با کد پرسنل", callback_data="personnel_login")],
+                        [InlineKeyboardButton("ثبت نام با مدارک", callback_data="register")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    await update.message.reply_text(
+                        "لطفاً روش ورود را انتخاب کنید:",
+                        reply_markup=reply_markup
+                    )
+                    return States.START
+                    
+        except Exception as e:
+            logger.error(f"Error checking user status: {e}")
+        finally:
+            if conn:
+                conn.close()
+
+        # Check verification status
+        is_verified = False
+        is_pharmacy_admin = False
+        is_personnel = False
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                SELECT u.is_verified, u.is_pharmacy_admin, u.is_personnel
                 FROM users u
                 WHERE u.id = %s
                 ''', (update.effective_user.id,))
                 result = cursor.fetchone()
                 if result:
-                    is_verified, is_pharmacy_admin = result
+                    is_verified, is_pharmacy_admin, is_personnel = result
         except Exception as e:
             logger.error(f"Database error in start: {e}")
         finally:
@@ -818,7 +859,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # For verified users - show appropriate main menu
         context.application.create_task(check_for_matches(update.effective_user.id, context))
         
-        # Different menu for pharmacy admin vs regular users
+        # Different menu for pharmacy admin vs regular users vs personnel
         if is_pharmacy_admin:
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
@@ -827,6 +868,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ['تنظیم شاخه‌های دارویی']
             ]
             welcome_msg = "به پنل مدیریت داروخانه خوش آمدید."
+        elif is_personnel:
+            keyboard = [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['لیست داروهای من', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من']
+            ]
+            welcome_msg = "به پنل پرسنل خوش آمدید."
         else:
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
@@ -846,8 +894,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
         return ConversationHandler.END
-    # بقیه کد...
-    
+        
     except Exception as e:
         logger.error(f"Error in start handler: {e}")
         await update.message.reply_text(
@@ -5377,13 +5424,27 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 conn.commit()
                 
-                # ارسال پیام به کاربر مبنی بر اخراج
+                # ارسال پیام به کاربر مبنی بر اخراج با حذف کیبورد
                 try:
                     await context.bot.send_message(
                         chat_id=user_id,
                         text="❌ حساب شما توسط ادمین اخراج شد.\n\n"
-                             "برای استفاده مجدد از ربات، لطفا دوباره ثبت‌نام کنید."
+                             "برای استفاده مجدد از ربات، لطفا دوباره ثبت‌نام کنید.",
+                        reply_markup=ReplyKeyboardRemove()
                     )
+                    
+                    # همچنین یک پیام با کیبورد شروع برای راهنمایی کاربر
+                    keyboard = [
+                        [InlineKeyboardButton("شروع مجدد", callback_data="start")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text="برای شروع مجدد روی دکمه زیر کلیک کنید:",
+                        reply_markup=reply_markup
+                    )
+                    
                 except Exception as e:
                     logger.error(f"Failed to notify banned user: {e}")
                 
