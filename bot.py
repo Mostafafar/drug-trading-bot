@@ -5433,15 +5433,15 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         reply_markup=ReplyKeyboardRemove()
                     )
                     
-                    # همچنین یک پیام با کیبورد شروع برای راهنمایی کاربر
+                    # ارسال دکمه شروع مجدد
                     keyboard = [
-                        [InlineKeyboardButton("شروع مجدد", callback_data="start")]
+                        [InlineKeyboardButton("🔄 شروع مجدد", callback_data="restart_after_ban")]
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
                     await context.bot.send_message(
                         chat_id=user_id,
-                        text="برای شروع مجدد روی دکمه زیر کلیک کنید:",
+                        text="برای شروع مجدد و ثبت‌نام دوباره روی دکمه زیر کلیک کنید:",
                         reply_markup=reply_markup
                     )
                     
