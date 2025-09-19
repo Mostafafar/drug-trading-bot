@@ -5384,12 +5384,30 @@ async def main_menu_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("خطایی در بازگشت به منوی اصلی رخ داد.")
         return ConversationHandler.END
 async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت تغییر فاز بین عملیات مختلف"""
+    """مدیریت تغییر فاز بین عملیات مختلف با تشخیص stateهای فعال"""
     try:
         text = update.message.text.strip()
         logger.info(f"State change requested: {text}")
 
-        # ابتدا state را کامل پاک کن
+        # بررسی stateهای فعال مربوط به اضافه کردن دارو
+        active_states = [
+            States.ADD_DRUG_DATE,
+            States.ADD_DRUG_QUANTITY,
+            States.SEARCH_DRUG_FOR_ADDING
+        ]
+        
+        current_state = context.user_data.get('_conversation_state')
+        
+        # اگر در حال اضافه کردن دارو هستیم، اجازه تغییر state ندهیم
+        if current_state in active_states and text == 'جستجوی دارو':
+            await update.message.reply_text(
+                "⚠️ در حال حاضر در حال اضافه کردن دارو هستید.\n"
+                "لطفاً ابتدا فرآیند اضافه کردن دارو را تکمیل یا لغو کنید.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return current_state  # در همان state بمان
+
+        # در غیر این صورت state را عوض کن
         await clear_conversation_state(update, context, silent=True)
 
         if text == 'لیست داروهای من':
