@@ -2471,6 +2471,9 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await ensure_user(update, context)
         
+        # 🔥 تنظیم state برای تشخیص در اینلاین کوئری
+        context.user_data['_conversation_state'] = States.SEARCH_DRUG_FOR_ADDING
+        
         # ایجاد دکمه برای جستجوی اینلاین برای اضافه کردن دارو
         keyboard = [
             [InlineKeyboardButton(
@@ -2507,16 +2510,18 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     await clear_conversation_state(update, context, silent=True)
     query = update.inline_query.query
     
-    # تشخیص نوع جستجو از context
+    # 🔥 تشخیص نوع جستجو از context - بهبود یافته
     current_state = context.user_data.get('_conversation_state')
-    search_type = "add" if current_state == States.SEARCH_DRUG_FOR_ADDING else "search"
     
-    if query.startswith("need "):
+    # تشخیص بر اساس state و query
+    if query.startswith("need ") or current_state == States.SEARCH_DRUG_FOR_NEED:
         search_type = "need"
-        query = query[5:].strip()
-    elif query.startswith("add "):
+        query = query[5:].strip() if query.startswith("need ") else query
+    elif query.startswith("add ") or current_state == States.SEARCH_DRUG_FOR_ADDING:
         search_type = "add"
-        query = query[4:].strip()
+        query = query[4:].strip() if query.startswith("add ") else query
+    else:
+        search_type = "search"  # پیش‌فرض
     
     if not query:
         query = ""
@@ -2544,6 +2549,23 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                         ])
                     )
                 )
+            elif search_type == "need":
+                results.append(
+                    InlineQueryResultArticle(
+                        id=f"need_{idx}",
+                        title=f"📋 {title_part}",
+                        description=f"{desc_part} - قیمت: {price}",
+                        input_message_content=InputTextMessageContent(
+                            f"💊 {name}\n💰 قیمت: {price}"
+                        ),
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(
+                                "📋 ثبت نیاز",
+                                callback_data=f"need_drug_{idx}"
+                            )]
+                        ])
+                    )
+                )
             else:
                 results.append(
                     InlineQueryResultArticle(
@@ -2566,7 +2588,6 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             break
     
     await update.inline_query.answer(results)
-
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result_id = update.chosen_inline_result.result_id
