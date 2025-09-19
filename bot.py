@@ -645,7 +645,7 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
             States.SEARCH_DRUG_FOR_NEED, 
             States.ADD_NEED_QUANTITY,
             States.ADD_NEED_NAME,
-            States.ADD_NEED_DESC
+           # States.ADD_NEED_DESC
         ]
         
         if is_in_need_process:
