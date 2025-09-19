@@ -3441,7 +3441,19 @@ async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("Invalid update in add_need_quantity")
             return States.ADD_NEED_QUANTITY
             
-        quantity_text = update.message.text.strip()
+        text = update.message.text.strip()
+        
+        # بررسی اگر کاربر منوی دیگری انتخاب کرده باشد
+        menu_options = ['اضافه کردن دارو', 'جستجوی دارو', 'لیست داروهای من', 
+                       'ثبت نیاز جدید', 'لیست نیازهای من', 'ساخت کد پرسنل', 
+                       'تنظیم شاخه‌های دارویی']
+        
+        if text in menu_options:
+            # کاربر منوی دیگری انتخاب کرده، state را پاک کرده و به منوی اصلی برو
+            context.user_data.clear()
+            return await handle_state_change(update, context)
+        
+        quantity_text = text
         
         # بررسی وجود اطلاعات لازم
         if 'need_name' not in context.user_data:
@@ -3513,7 +3525,6 @@ async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in add_need_quantity: {e}")
         await update.message.reply_text("❌ خطایی رخ داد. به منوی اصلی بازگشتید.")
         return await clear_conversation_state(update, context)
-
 # --- CHANGES TO ConversationHandler: needs_handler ---
 # Replace the existing mapping for States.ADD_NEED_QUANTITY so it uses add_need_quantity.
 # Find the needs_handler declaration and update the states dict entry:
