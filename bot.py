@@ -639,26 +639,42 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
         logger.info(f"Clearing conversation state for user {update.effective_user.id}")
         logger.info(f"Current keys in user_data: {list(context.user_data.keys())}")
         
-        # حفظ اطلاعات ضروری مربوط به مبادله
-        trade_keys_to_preserve = [
-                        'selected_pharmacy_id', 'selected_pharmacy_name', 'selected_drug',
-                        'offer_items', 'comp_items', 'need_name', 'need_desc',
-                        'selected_drug_for_need', 'editing_need', 'edit_field',
-                        'editing_drug'  
+        # 🔥 بررسی اینکه آیا کاربر در حال ثبت نیاز است یا مبادله
+        current_state = context.user_data.get('_conversation_state')
+        is_in_need_process = current_state in [
+            States.SEARCH_DRUG_FOR_NEED, 
+            States.ADD_NEED_QUANTITY,
+            States.ADD_NEED_NAME,
+            States.ADD_NEED_DESC
         ]
         
-        # ذخیره اطلاعات مبادله
-        preserved_trade_data = {}
-        for key in trade_keys_to_preserve:
-            if key in context.user_data:
-                preserved_trade_data[key] = context.user_data[key]
-                logger.info(f"Preserving trade key: {key}")
+        if is_in_need_process:
+            # اگر در حال ثبت نیاز است، همه چیز را پاک کن
+            context.user_data.clear()
+            logger.info("Cleared all data for need registration process")
+        else:
+            # حفظ اطلاعات ضروری مربوط به مبادله
+            trade_keys_to_preserve = [
+                'selected_pharmacy_id', 'selected_pharmacy_name', 'selected_drug',
+                'offer_items', 'comp_items', 'need_name', 'need_desc',
+                'selected_drug_for_need', 'editing_need', 'edit_field',
+                'editing_drug'  
+            ]
+            
+            # ذخیره اطلاعات مبادله
+            preserved_trade_data = {}
+            for key in trade_keys_to_preserve:
+                if key in context.user_data:
+                    preserved_trade_data[key] = context.user_data[key]
+                    logger.info(f"Preserving trade key: {key}")
+            
+            # پاک کردن کامل همه stateها
+            context.user_data.clear()
+            
+            # بازگرداندن اطلاعات مبادله
+            context.user_data.update(preserved_trade_data)
         
-        # پاک کردن کامل همه stateها
-        context.user_data.clear()
-        
-        # بازگرداندن اطلاعات مبادله
-        context.user_data.update(preserved_trade_data)
+        # بقیه کد بدون تغییر...
         
         logger.info(f"Final keys after clearing: {list(context.user_data.keys())}")
         
