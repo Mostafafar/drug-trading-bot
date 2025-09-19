@@ -5506,24 +5506,36 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_restart_after_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle restart for banned users"""
     try:
-        user_id = update.effective_user.id
+        query = update.callback_query
+        if query:
+            await query.answer()
+            user_id = query.from_user.id
+            chat_id = query.message.chat_id
+        else:
+            user_id = update.effective_user.id
+            chat_id = update.effective_chat.id
         
         # بررسی اینکه کاربر واقعاً اخراج شده است
         conn = None
+        is_banned = False
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
                 cursor.execute('SELECT is_verified FROM users WHERE id = %s', (user_id,))
                 result = cursor.fetchone()
                 
-                if result and result[0]:  # اگر کاربر تایید شده باشد
-                    return await start(update, context)
+                if result and not result[0]:  # اگر کاربر تایید نشده باشد (اخراج شده)
+                    is_banned = True
                     
         except Exception as e:
             logger.error(f"Error checking user status: {e}")
         finally:
             if conn:
                 conn.close()
+        
+        if not is_banned:
+            # اگر کاربر اخراج نشده، به منوی اصلی برود
+            return await start(update, context)
         
         # نمایش گزینه‌های ثبت‌نام برای کاربر اخراج شده
         keyboard = [
@@ -5533,16 +5545,41 @@ async def handle_restart_after_ban(update: Update, context: ContextTypes.DEFAULT
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(
+        message_text = (
             "❌ حساب شما اخراج شده است.\n\n"
-            "برای استفاده مجدد از ربات، لطفا یکی از روش‌های زیر را انتخاب کنید:",
-            reply_markup=reply_markup
+            "برای استفاده مجدد از ربات، لطفا یکی از روش‌های زیر را انتخاب کنید:"
         )
+        
+        if query:
+            try:
+                await query.edit_message_text(
+                    message_text,
+                    reply_markup=reply_markup
+                )
+            except:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=message_text,
+                    reply_markup=reply_markup
+                )
+        else:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message_text,
+                reply_markup=reply_markup
+            )
+        
         return States.START
         
     except Exception as e:
         logger.error(f"Error in handle_restart_after_ban: {e}")
-        await update.message.reply_text("خطایی در پردازش درخواست رخ داد.")
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="خطایی در پردازش درخواست رخ داد."
+            )
+        except:
+            pass
         return ConversationHandler.END
 def main():
     """Start the bot"""
@@ -5927,7 +5964,7 @@ def main():
         # Add ban user command - فقط برای messageها
         application.add_handler(CommandHandler('ban_user', ban_user, filters=filters.ChatType.PRIVATE))
         # Add restart handler for banned users
-        application.add_handler(CommandHandler('start', handle_restart_after_ban))
+        
         application.add_handler(CallbackQueryHandler(handle_restart_after_ban, pattern="^restart_after_ban$"))
 
         # Add error handler
