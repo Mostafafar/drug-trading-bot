@@ -2976,7 +2976,8 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         callback_data=f"edit_drug_{drug['id']}"
                     )])
                 
-                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
+                # بازگشت مستقیم به لیست داروها
+                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_drugs_list")])
                 
                 await query.edit_message_text(
                     "لطفا دارویی که می‌خواهید ویرایش کنید را انتخاب کنید:",
