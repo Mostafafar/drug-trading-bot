@@ -3963,14 +3963,19 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 results = cursor.fetchall()
 
                 if not results:
-                    # ایجاد کیبورد با دکمه بازگشت
-                    keyboard = [
-                        [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")]
+                    # ایجاد کیبورد اصلی برای ادامه کار
+                    main_keyboard = [
+                        ['اضافه کردن دارو', 'جستجوی دارو'],
+                        ['لیست داروهای من', 'ثبت نیاز جدید'],
+                        ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                        ['تنظیم شاخه‌های دارویی']
                     ]
+                    reply_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
                     
                     await update.message.reply_text(
-                        "⚠️ هیچ داروخانه‌ای با این دارو پیدا نشد.",
-                        reply_markup=InlineKeyboardMarkup(keyboard)
+                        "⚠️ هیچ داروخانه‌ای با این دارو پیدا نشد.\n\n"
+                        "لطفاً نام داروی دیگری را جستجو کنید یا از منوی زیر اقدام کنید:",
+                        reply_markup=reply_markup
                     )
                     return States.SEARCH_DRUG
 
@@ -4009,17 +4014,45 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                     ])
 
-                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
-
+                # اضافه کردن کیبورد اصلی برای ادامه کار
+                main_keyboard = [
+                    ['اضافه کردن دارو', 'جستجوی دارو'],
+                    ['لیست داروهای من', 'ثبت نیاز جدید'],
+                    ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                    ['تنظیم شاخه‌های دارویی']
+                ]
+                reply_markup_main = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+                
+                # ارسال پیام با دکمه‌های اینلاین
                 await update.message.reply_text(
                     message,
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
+                
+                # ارسال کیبورد اصلی به صورت جداگانه
+                await update.message.reply_text(
+                    "برای ادامه از منوی زیر استفاده کنید:",
+                    reply_markup=reply_markup_main
+                )
+                
                 return States.SELECT_PHARMACY
                 
         except Exception as e:
             logger.error(f"Database error in handle_search: {e}")
-            await update.message.reply_text("خطا در جستجو.")
+            
+            # در صورت خطا هم کیبورد اصلی را نشان بده
+            main_keyboard = [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['لیست داروهای من', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                ['تنظیم شاخه‌های دارویی']
+            ]
+            reply_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+            
+            await update.message.reply_text(
+                "خطا در جستجو. لطفاً دوباره تلاش کنید.",
+                reply_markup=reply_markup
+            )
         finally:
             if conn:
                 conn.close()
@@ -4029,7 +4062,19 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # استفاده از روش ایمن برای ارسال پیام
         try:
             if update.message:
-                await update.message.reply_text("خطایی در پردازش جستجو رخ داد.")
+                # نمایش کیبورد اصلی در صورت خطا
+                main_keyboard = [
+                    ['اضافه کردن دارو', 'جستجوی دارو'],
+                    ['لیست داروهای من', 'ثبت نیاز جدید'],
+                    ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                    ['تنظیم شاخه‌های دارویی']
+                ]
+                reply_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+                
+                await update.message.reply_text(
+                    "خطایی در پردازش جستجو رخ داد. لطفاً دوباره تلاش کنید.",
+                    reply_markup=reply_markup
+                )
             else:
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
