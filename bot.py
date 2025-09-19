@@ -1766,6 +1766,33 @@ async def register_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in register_address: {e}")
         await update.message.reply_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return States.REGISTER_PHONE
+async def ask_for_national_card_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """درخواست مجدد عکس کارت ملی"""
+    await update.message.reply_text("❌ لطفا فقط تصویر کارت ملی را ارسال کنید.")
+    return States.REGISTER_NATIONAL_CARD
+
+async def ask_for_license_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """درخواست مجدد عکس پروانه داروخانه"""
+    await update.message.reply_text("❌ لطفا فقط تصویر پروانه داروخانه را ارسال کنید.")
+    return States.REGISTER_LICENSE
+
+async def ask_for_medical_card_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """درخواست مجدد عکس کارت نظام پزشکی"""
+    await update.message.reply_text("❌ لطفا فقط تصویر کارت نظام پزشکی را ارسال کنید.")
+    return States.REGISTER_MEDICAL_CARD
+
+async def ask_for_phone_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """درخواست مجدد شماره تلفن"""
+    keyboard = ReplyKeyboardMarkup(
+        [[KeyboardButton("📞 اشتراک گذاری شماره تلفن", request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    await update.message.reply_text(
+        "❌ لطفا از دکمه اشتراک گذاری شماره تلفن استفاده کنید:",
+        reply_markup=keyboard
+    )
+    return States.REGISTER_PHONE
 async def send_registration_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send registration data to admin"""
     try:
@@ -5271,7 +5298,6 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"Error in handle_state_change: {e}", exc_info=True)
         await update.message.reply_text("خطایی در تغییر حالت رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 def main():
     """Start the bot"""
     try:
@@ -5286,6 +5312,39 @@ def main():
         persistence = PicklePersistence(filepath='bot_data.pickle')
         application = ApplicationBuilder().token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY").persistence(persistence).build()
         
+        # تعریف توابع کمکی برای نمایش خطا
+        async def ask_for_national_card_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            """درخواست مجدد عکس کارت ملی"""
+            await update.message.reply_text("❌ لطفا فقط تصویر کارت ملی را ارسال کنید.")
+            return States.REGISTER_NATIONAL_CARD
+
+        async def ask_for_license_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            """درخواست مجدد عکس پروانه داروخانه"""
+            await update.message.reply_text("❌ لطفا فقط تصویر پروانه داروخانه را ارسال کنید.")
+            return States.REGISTER_LICENSE
+
+        async def ask_for_medical_card_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            """درخواست مجدد عکس کارت نظام پزشکی"""
+            await update.message.reply_text("❌ لطفا فقط تصویر کارت نظام پزشکی را ارسال کنید.")
+            return States.REGISTER_MEDICAL_CARD
+
+        async def ask_for_phone_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            """درخواست مجدد شماره تلفن"""
+            keyboard = ReplyKeyboardMarkup(
+                [[KeyboardButton("📞 اشتراک گذاری شماره تلفن", request_contact=True)]],
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
+            await update.message.reply_text(
+                "❌ لطفا از دکمه اشتراک گذاری شماره تلفن استفاده کنید:",
+                reply_markup=keyboard
+            )
+            return States.REGISTER_PHONE
+
+        # فیلترهای دقیق‌تر برای تشخیص پیام‌های غیرمجاز
+        non_photo_filter = filters.ALL & ~filters.COMMAND & ~filters.PHOTO & ~filters.Document.IMAGE
+        non_contact_filter = filters.ALL & ~filters.COMMAND & ~filters.CONTACT
+
         # Admin verification handler
         admin_verify_handler = ConversationHandler(
             entry_points=[
@@ -5317,30 +5376,19 @@ def main():
                 ],
                 States.REGISTER_NATIONAL_CARD: [
                     MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_license),
-                    MessageHandler(filters.ALL & ~filters.COMMAND, 
-                               lambda u, c: u.message.reply_text("❌ لطفا فقط تصویر کارت ملی را ارسال کنید."))
+                    MessageHandler(non_photo_filter, ask_for_national_card_photo)
                 ],
                 States.REGISTER_LICENSE: [
                     MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_medical_card),
-                    MessageHandler(filters.ALL & ~filters.COMMAND, 
-                               lambda u, c: u.message.reply_text("❌ لطفا فقط تصویر پروانه داروخانه را ارسال کنید."))
+                    MessageHandler(non_photo_filter, ask_for_license_photo)
                 ],
                 States.REGISTER_MEDICAL_CARD: [
                     MessageHandler(filters.PHOTO | filters.Document.IMAGE, register_phone),
-                    MessageHandler(filters.ALL & ~filters.COMMAND, 
-                               lambda u, c: u.message.reply_text("❌ لطفا فقط تصویر کارت نظام پزشکی را ارسال کنید."))
+                    MessageHandler(non_photo_filter, ask_for_medical_card_photo)
                 ],
                 States.REGISTER_PHONE: [
                     MessageHandler(filters.CONTACT, register_phone),
-                    MessageHandler(filters.ALL & ~filters.COMMAND, 
-                               lambda u, c: u.message.reply_text(
-                                   "❌ لطفا از دکمه اشتراک گذاری شماره تلفن استفاده کنید:",
-                                   reply_markup=ReplyKeyboardMarkup(
-                                       [[KeyboardButton("📞 اشتراک گذاری شماره تلفن", request_contact=True)]],
-                                       resize_keyboard=True,
-                                       one_time_keyboard=True
-                                   )
-                               ))
+                    MessageHandler(non_contact_filter, ask_for_phone_contact)
                 ],
                 States.REGISTER_ADDRESS: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, register_address)
@@ -5348,7 +5396,8 @@ def main():
            },
            fallbacks=[CommandHandler('cancel', clear_conversation_state)], 
            allow_reentry=True
-        )
+)
+
         # Simple verification handler
         simple_verify_handler = ConversationHandler(
             entry_points=[
