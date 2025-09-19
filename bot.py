@@ -5303,7 +5303,7 @@ def main():
             allow_reentry=True
         )
         
-        # Registration handler (normal registration) - اصلاح شده
+        # Registration handler (normal registration) - کاملا اصلاح شده
         registration_handler = ConversationHandler(
             entry_points=[
                 CallbackQueryHandler(register_pharmacy_name, pattern="^register$")
@@ -5331,7 +5331,7 @@ def main():
                                lambda u, c: u.message.reply_text("❌ لطفا فقط تصویر کارت نظام پزشکی را ارسال کنید."))
                 ],
                 States.REGISTER_PHONE: [
-                    MessageHandler(filters.CONTACT, register_address),
+                    MessageHandler(filters.CONTACT, register_phone),
                     MessageHandler(filters.ALL & ~filters.COMMAND, 
                                lambda u, c: u.message.reply_text(
                                    "❌ لطفا از دکمه اشتراک گذاری شماره تلفن استفاده کنید:",
