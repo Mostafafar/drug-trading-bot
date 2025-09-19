@@ -3539,16 +3539,45 @@ async def add_need_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if conn:
                 conn.close()
                 
-        # پاک‌سازی و بازگشت به منوی اصلی
-        context.user_data.pop('need_name', None)
-        context.user_data.pop('selected_drug_for_need', None)
+        # 🔥 پاک‌سازی کامل - حذف همه اطلاعات از جمله اطلاعات مبادله
+        context.user_data.clear()
         
-        return await clear_conversation_state(update, context)
+        # نمایش منوی اصلی
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        await update.message.reply_text(
+            "به منوی اصلی بازگشتید. لطفاً یک گزینه را انتخاب کنید:",
+            reply_markup=reply_markup
+        )
+        
+        return ConversationHandler.END
         
     except Exception as e:
         logger.error(f"Error in add_need_quantity: {e}")
         await update.message.reply_text("❌ خطایی رخ داد. به منوی اصلی بازگشتید.")
-        return await clear_conversation_state(update, context)
+        
+        # پاک‌سازی کامل در صورت خطا
+        context.user_data.clear()
+        
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        await update.message.reply_text(
+            "به منوی اصلی بازگشتید:",
+            reply_markup=reply_markup
+        )
+        return ConversationHandler.END
 # --- CHANGES TO ConversationHandler: needs_handler ---
 # Replace the existing mapping for States.ADD_NEED_QUANTITY so it uses add_need_quantity.
 # Find the needs_handler declaration and update the states dict entry:
