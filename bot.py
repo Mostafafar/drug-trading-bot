@@ -2953,18 +2953,36 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text("هیچ دارویی برای ویرایش وجود ندارد.")
                     return ConversationHandler.END
                 
-                # در تابع edit_drugs:
+                # ساخت کیبورد با نام اول دارو و دوز
                 keyboard = []
                 for drug in drugs:
-                    display_text = f"{format_button_text(drug['name'])}\nموجودی: {drug['quantity']}"
+                    # استخراج کلمه اول و دوز از نام دارو
+                    name_parts = drug['name'].split()
+                    first_word = name_parts[0] if name_parts else drug['name']
+                    
+                    # پیدا کردن دوز در نام دارو
+                    dose_info = ""
+                    for part in name_parts:
+                        if any(char.isdigit() for char in part) and ('میکرو' in part or 'میلی' in part or 'گرم' in part or 'دوز' in part):
+                            dose_info = part
+                            break
+                    
+                    # ساخت متن دکمه
+                    button_text = f"{first_word}"
+                    if dose_info:
+                        button_text += f" ({dose_info})"
+                    
                     keyboard.append([InlineKeyboardButton(
-                        display_text,
+                        button_text,
                         callback_data=f"edit_drug_{drug['id']}"
                     )])
+                
                 keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
+                
                 await query.edit_message_text(
                     "لطفا دارویی که می‌خواهید ویرایش کنید را انتخاب کنید:",
-                    reply_markup=InlineKeyboardMarkup(keyboard))
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
                 return States.EDIT_DRUG
                 
         except Exception as e:
