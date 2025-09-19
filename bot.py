@@ -1687,7 +1687,7 @@ async def register_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     one_time_keyboard=True
                 )
             )
-            return States.REGISTER_PHONE
+            return States.REGISTER_ADDRESS
         
         phone_number = update.message.contact.phone_number
         context.user_data['phone'] = phone_number
