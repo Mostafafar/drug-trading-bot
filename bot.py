@@ -4102,7 +4102,7 @@ async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
 # Drug Trading Functions
 async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start drug search process"""
-    await clear_conversation_state(update, context, silent=True)
+    logger.info(f"search_drug called by user {update.effective_user.id}")
     try:
         await update.message.reply_text(
             "لطفا نام داروی مورد نظر را وارد کنید:",
