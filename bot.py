@@ -6069,7 +6069,11 @@ def main():
                     CallbackQueryHandler(handle_drug_edit_action, pattern="^(edit_date|edit_quantity|delete_drug)$"),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_drug_edit),
                     CallbackQueryHandler(handle_drug_deletion, pattern="^(confirm_delete|cancel_delete)$"),
-                    CallbackQueryHandler(list_my_drugs, pattern="^back$")
+                    CallbackQueryHandler(list_my_drugs, pattern="^back$"),
+                    MessageHandler(
+                    filters.Regex(r'^(اضافه کردن دارو|جستجوی دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'),
+                     handle_state_change
+               )
                 ]
             },
             fallbacks=[
