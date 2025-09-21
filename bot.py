@@ -4335,9 +4335,7 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نمایش داروهای کاربر در صفحه اول و داروهای داروخانه هدف در صفحه دوم"""
-    #await clear_conversation_state(update, context, silent=True)
-    
+    """نمایش داروهای کاربر در صفحه اول و داروهای داروخانه هدف در صفحه دوم با دکمه‌های عمودی"""
     try:
         # تعیین متغیرهای اولیه
         chat_id = None
@@ -4351,6 +4349,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
             chat_id = update.callback_query.message.chat_id
             reply_method = context.bot.send_message
             use_chat_id = True
+            await update.callback_query.answer()
         else:
             logger.error("Invalid update type in show_two_column_selection")
             return States.SELECT_DRUGS
@@ -4369,7 +4368,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         # تعیین نوع لیست فعلی (کاربر یا هدف)
         current_list_type = context.user_data.get('current_list_type', 'mine')  # پیش‌فرض: داروهای کاربر
         page = context.user_data.get(f'page_{current_list_type}', 0)
-        items_per_page = 5  # تعداد آیتم‌ها در هر صفحه
+        items_per_page = 8  # افزایش تعداد آیتم‌ها در هر صفحه برای نمایش عمودی
         
         conn = None
         try:
@@ -4398,6 +4397,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                     ''', (user_id,))
                     total_items = cursor.fetchone()['count']
                     list_title = "داروهای شما"
+                    prefix = "💊"
                 else:
                     # داروهای داروخانه هدف
                     cursor.execute('''
@@ -4415,6 +4415,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                     ''', (pharmacy_id,))
                     total_items = cursor.fetchone()['count']
                     list_title = f"داروهای {pharmacy_name}"
+                    prefix = "📌"
                 
                 # محاسبه مجموع‌ها
                 offer_items = context.user_data.get('offer_items', [])
@@ -4427,8 +4428,6 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 # ساخت پیام
                 message = f"💊 انتخاب دارو برای مبادله با {pharmacy_name}\n\n"
                 message += f"📌 {list_title} (صفحه {page + 1} از {max(1, (total_items + items_per_page - 1) // items_per_page)}):\n"
-                for i, drug in enumerate(drugs, 1):
-                    message += f"{i}. {drug['name']} - {drug['price']} - {drug['quantity']} عدد\n"
                 
                 # نمایش خلاصه انتخاب‌ها
                 if offer_items or comp_items:
@@ -4437,37 +4436,40 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                         message += f"درخواستی: {len(offer_items)} دارو - {format_price(offer_total)}\n"
                     if comp_items:
                         message += f"جبرانی: {len(comp_items)} دارو - {format_price(comp_total)}\n"
-                    message += f"اختلاف: {format_price(price_difference)}\n"
+                    message += f"اختلاف: {format_price(price_difference)}\n\n"
                 
                 # ذخیره داروها برای انتخاب
                 context.user_data[f'{current_list_type}_drugs'] = drugs
                 
-                # ساخت کیبورد
+                # ساخت کیبورد - دکمه‌های عمودی
                 keyboard = []
                 
-                # دکمه‌های انتخاب دارو
-                drug_buttons = []
-                prefix = '💊' if current_list_type == 'mine' else '📌'
+                # دکمه‌های انتخاب دارو (عمودی - هر دکمه در یک ردیف)
                 for i, drug in enumerate(drugs, 1):
-                    drug_buttons.append(KeyboardButton(f"{prefix} {i} - {drug['name']}"))
-                if drug_buttons:
-                    keyboard.append(drug_buttons)
+                    # کوتاه کردن نام دارو برای نمایش بهتر
+                    drug_name = drug['name']
+                    if len(drug_name) > 20:
+                        drug_name = drug_name[:17] + "..."
+                    
+                    # فقط نام و تعداد نمایش داده شود
+                    button_text = f"{prefix} {drug_name} ({drug['quantity']} عدد)"
+                    keyboard.append([KeyboardButton(button_text)])
                 
-                # دکمه‌های صفحه‌بندی
-                pagination_row = []
+                # دکمه‌های صفحه‌بندی و ناوبری
+                navigation_row = []
                 if page > 0:
-                    pagination_row.append(KeyboardButton(f"{prefix} صفحه قبل"))
+                    navigation_row.append(KeyboardButton(f"◀️ صفحه قبل"))
                 if (page + 1) * items_per_page < total_items:
-                    pagination_row.append(KeyboardButton(f"{prefix} صفحه بعد"))
+                    navigation_row.append(KeyboardButton(f"▶️ صفحه بعد"))
+                
+                if navigation_row:
+                    keyboard.append(navigation_row)
                 
                 # دکمه‌های جابجایی بین لیست‌ها
                 if current_list_type == 'mine':
-                    pagination_row.append(KeyboardButton("📌 داروهای داروخانه هدف"))
+                    keyboard.append([KeyboardButton("📌 داروهای داروخانه هدف")])
                 else:
-                    pagination_row.append(KeyboardButton("💊 داروهای شما"))
-                
-                if pagination_row:
-                    keyboard.append(pagination_row)
+                    keyboard.append([KeyboardButton("💊 داروهای شما")])
                 
                 # دکمه‌های عملیاتی
                 action_buttons = []
