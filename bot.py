@@ -4334,10 +4334,10 @@ async def select_pharmacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return States.SELECT_DRUGS
 
 
+
+                
 async def show_two_column_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش داروهای کاربر در صفحه اول و داروهای داروخانه هدف در صفحه دوم"""
-    #await clear_conversation_state(update, context, silent=True)
-    
     try:
         # تعیین متغیرهای اولیه
         chat_id = None
@@ -4351,6 +4351,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
             chat_id = update.callback_query.message.chat_id
             reply_method = context.bot.send_message
             use_chat_id = True
+            await update.callback_query.answer()
         else:
             logger.error("Invalid update type in show_two_column_selection")
             return States.SELECT_DRUGS
@@ -4367,9 +4368,9 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
             return States.SELECT_PHARMACY
         
         # تعیین نوع لیست فعلی (کاربر یا هدف)
-        current_list_type = context.user_data.get('current_list_type', 'mine')  # پیش‌فرض: داروهای کاربر
+        current_list_type = context.user_data.get('current_list_type', 'mine')
         page = context.user_data.get(f'page_{current_list_type}', 0)
-        items_per_page = 5  # تعداد آیتم‌ها در هر صفحه
+        items_per_page = 8  # افزایش تعداد آیتم‌ها در هر صفحه
         
         conn = None
         try:
@@ -4382,7 +4383,6 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 
                 # دریافت داروها بر اساس نوع لیست
                 if current_list_type == 'mine':
-                    # داروهای کاربر
                     cursor.execute('''
                     SELECT id, name, price, quantity, date
                     FROM drug_items
@@ -4399,7 +4399,6 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                     total_items = cursor.fetchone()['count']
                     list_title = "داروهای شما"
                 else:
-                    # داروهای داروخانه هدف
                     cursor.execute('''
                     SELECT id, name, price, quantity, date
                     FROM drug_items
@@ -4427,8 +4426,6 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 # ساخت پیام
                 message = f"💊 انتخاب دارو برای مبادله با {pharmacy_name}\n\n"
                 message += f"📌 {list_title} (صفحه {page + 1} از {max(1, (total_items + items_per_page - 1) // items_per_page)}):\n"
-                for i, drug in enumerate(drugs, 1):
-                    message += f"{i}. {drug['name']} - {drug['price']} - {drug['quantity']} عدد\n"
                 
                 # نمایش خلاصه انتخاب‌ها
                 if offer_items or comp_items:
@@ -4442,38 +4439,43 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 # ذخیره داروها برای انتخاب
                 context.user_data[f'{current_list_type}_drugs'] = drugs
                 
-                # ساخت کیبورد
+                # ساخت کیبورد - فقط نام و تعداد به صورت عمودی
                 keyboard = []
                 
-                # دکمه‌های انتخاب دارو
-                drug_buttons = []
+                # دکمه‌های انتخاب دارو (هر دکمه در یک ردیف جداگانه)
                 prefix = '💊' if current_list_type == 'mine' else '📌'
                 for i, drug in enumerate(drugs, 1):
-                    drug_buttons.append(KeyboardButton(f"{prefix} {i} - {drug['name']}"))
-                if drug_buttons:
-                    keyboard.append(drug_buttons)
+                    # کوتاه کردن نام دارو برای نمایش بهتر
+                    drug_name = drug['name']
+                    if len(drug_name) > 20:
+                        drug_name = drug_name[:17] + "..."
+                    
+                    # ایجاد دکمه با فرمت: نام دارو (تعداد)
+                    button_text = f"{drug_name} ({drug['quantity']})"
+                    keyboard.append([KeyboardButton(button_text)])
                 
-                # دکمه‌های صفحه‌بندی
-                pagination_row = []
+                # دکمه‌های صفحه‌بندی و ناوبری
+                navigation_buttons = []
+                
                 if page > 0:
-                    pagination_row.append(KeyboardButton(f"{prefix} صفحه قبل"))
+                    navigation_buttons.append(KeyboardButton("◀️ صفحه قبل"))
                 if (page + 1) * items_per_page < total_items:
-                    pagination_row.append(KeyboardButton(f"{prefix} صفحه بعد"))
+                    navigation_buttons.append(KeyboardButton("▶️ صفحه بعد"))
                 
-                # دکمه‌های جابجایی بین لیست‌ها
+                # دکمه جابجایی بین لیست‌ها
                 if current_list_type == 'mine':
-                    pagination_row.append(KeyboardButton("📌 داروهای داروخانه هدف"))
+                    navigation_buttons.append(KeyboardButton("📌 داروهای هدف"))
                 else:
-                    pagination_row.append(KeyboardButton("💊 داروهای شما"))
+                    navigation_buttons.append(KeyboardButton("💊 داروهای من"))
                 
-                if pagination_row:
-                    keyboard.append(pagination_row)
+                if navigation_buttons:
+                    keyboard.append(navigation_buttons)
                 
                 # دکمه‌های عملیاتی
                 action_buttons = []
                 if offer_items or comp_items:
                     action_buttons.append(KeyboardButton("✅ اتمام انتخاب"))
-                action_buttons.append(KeyboardButton("🔙 بازگشت به داروخانه‌ها"))
+                action_buttons.append(KeyboardButton("🔙 بازگشت"))
                 
                 if action_buttons:
                     keyboard.append(action_buttons)
@@ -4512,6 +4514,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
             await update.message.reply_text(error_text)
         elif update.callback_query:
             await context.bot.send_message(chat_id=chat_id, text=error_text)
+    
     return States.SELECT_DRUGS
 async def handle_drug_selection_from_keyboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """پردازش انتخاب دارو از کیبورد"""
