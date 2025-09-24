@@ -4442,41 +4442,31 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 # ذخیره داروها برای انتخاب
                 context.user_data[f'{current_list_type}_drugs'] = drugs
                 
-                # ساخت کیبورد
+                # ساخت کیبورد - به صورت عمودی
                 keyboard = []
                 
-                # دکمه‌های انتخاب دارو
-                drug_buttons = []
+                # دکمه‌های انتخاب دارو - به صورت عمودی
                 prefix = '💊' if current_list_type == 'mine' else '📌'
                 for i, drug in enumerate(drugs, 1):
-                    drug_buttons.append(KeyboardButton(f"{prefix} {i} - {drug['name']}"))
-                if drug_buttons:
-                    keyboard.append(drug_buttons)
+                    # هر دارو در یک سطر جداگانه
+                    keyboard.append([KeyboardButton(f"{prefix} {i} - {drug['name']}")])
                 
-                # دکمه‌های صفحه‌بندی
-                pagination_row = []
+                # دکمه‌های صفحه‌بندی - به صورت عمودی
                 if page > 0:
-                    pagination_row.append(KeyboardButton(f"{prefix} صفحه قبل"))
+                    keyboard.append([KeyboardButton(f"{prefix} صفحه قبل")])
                 if (page + 1) * items_per_page < total_items:
-                    pagination_row.append(KeyboardButton(f"{prefix} صفحه بعد"))
+                    keyboard.append([KeyboardButton(f"{prefix} صفحه بعد")])
                 
-                # دکمه‌های جابجایی بین لیست‌ها
+                # دکمه‌های جابجایی بین لیست‌ها - به صورت عمودی
                 if current_list_type == 'mine':
-                    pagination_row.append(KeyboardButton("📌 داروهای داروخانه هدف"))
+                    keyboard.append([KeyboardButton("📌 داروهای داروخانه هدف")])
                 else:
-                    pagination_row.append(KeyboardButton("💊 داروهای شما"))
+                    keyboard.append([KeyboardButton("💊 داروهای شما")])
                 
-                if pagination_row:
-                    keyboard.append(pagination_row)
-                
-                # دکمه‌های عملیاتی
-                action_buttons = []
+                # دکمه‌های عملیاتی - به صورت عمودی
                 if offer_items or comp_items:
-                    action_buttons.append(KeyboardButton("✅ اتمام انتخاب"))
-                action_buttons.append(KeyboardButton("🔙 بازگشت به داروخانه‌ها"))
-                
-                if action_buttons:
-                    keyboard.append(action_buttons)
+                    keyboard.append([KeyboardButton("✅ اتمام انتخاب")])
+                keyboard.append([KeyboardButton("🔙 بازگشت به داروخانه‌ها")])
                 
                 reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
                 
