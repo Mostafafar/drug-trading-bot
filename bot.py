@@ -633,6 +633,7 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     finally:
         if conn:
             conn.close()
+
 async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT_TYPE, silent: bool = False):
     """Clear the conversation state while preserving essential trade and need data"""
     try:
@@ -645,7 +646,6 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
             States.SEARCH_DRUG_FOR_NEED, 
             States.ADD_NEED_QUANTITY,
             States.ADD_NEED_NAME,
-           # States.ADD_NEED_DESC
         ]
         
         if is_in_need_process:
@@ -674,66 +674,14 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
             # بازگرداندن اطلاعات مبادله
             context.user_data.update(preserved_trade_data)
         
-        # بقیه کد بدون تغییر...
+        # حذف state مکالمه
+        context.user_data.pop('_conversation_state', None)
         
         logger.info(f"Final keys after clearing: {list(context.user_data.keys())}")
         
         if silent:
             return ConversationHandler.END
             
-        # بررسی اگر در حال مبادله هستیم
-        has_active_trade = any(key in context.user_data for key in ['offer_items', 'comp_items', 'selected_pharmacy_id'])
-        
-        if has_active_trade:
-            # محاسبه مجموع برای نمایش
-            offer_total = 0
-            comp_total = 0
-            if context.user_data.get('offer_items'):
-                offer_total = sum(parse_price(item['price']) * item['quantity'] for item in context.user_data['offer_items'])
-            if context.user_data.get('comp_items'):
-                comp_total = sum(parse_price(item['price']) * item['quantity'] for item in context.user_data['comp_items'])
-            
-            # نمایش منوی مبادله
-            trade_keyboard = [
-                ['📋 ادامه مبادله', '🗑️ پاک کردن مبادله'],
-                ['🔙 بازگشت به منوی اصلی']
-            ]
-            trade_markup = ReplyKeyboardMarkup(trade_keyboard, resize_keyboard=True)
-            
-            trade_message = "💼 مبادله فعلی ذخیره شد\n\n"
-            
-            if context.user_data.get('offer_items'):
-                trade_message += f"📦 داروهای درخواستی: {len(context.user_data['offer_items'])} مورد\n"
-            if context.user_data.get('comp_items'):
-                trade_message += f"📦 داروهای جبرانی: {len(context.user_data['comp_items'])} مورد\n"
-            
-            trade_message += f"💰 جمع درخواستی: {format_price(offer_total)}\n"
-            trade_message += f"💰 جمع جبرانی: {format_price(comp_total)}\n"
-            trade_message += f"📊 اختلاف: {format_price(offer_total - comp_total)}\n\n"
-            trade_message += "چه کاری می‌خواهید انجام دهید؟"
-            
-            try:
-                if update.callback_query:
-                    await update.callback_query.answer()
-                    await update.callback_query.edit_message_text(
-                        text=trade_message,
-                        reply_markup=trade_markup
-                    )
-                else:
-                    await update.message.reply_text(
-                        text=trade_message,
-                        reply_markup=trade_markup
-                    )
-            except Exception as e:
-                logger.error(f"Error sending trade message: {e}")
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=trade_message,
-                    reply_markup=trade_markup
-                )
-            
-            return States.SELECT_DRUGS
-        
         # منوی اصلی
         main_keyboard = [
             ['اضافه کردن دارو', 'جستجوی دارو'],
