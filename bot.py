@@ -4116,12 +4116,21 @@ async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
         return ConversationHandler.END
 # Drug Trading Functions
 async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start drug search process"""
+    """Start drug search process with main menu access"""
     logger.info(f"search_drug called by user {update.effective_user.id}")
     try:
+        # نمایش منوی اصلی همراه با درخواست جستجو
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
         await update.message.reply_text(
-            "لطفا نام داروی مورد نظر را وارد کنید:",
-            reply_markup=ReplyKeyboardRemove()
+            "لطفا نام داروی مورد نظر را وارد کنید:\n\n",
+            reply_markup=reply_markup
         )
         return States.SEARCH_DRUG
     except Exception as e:
