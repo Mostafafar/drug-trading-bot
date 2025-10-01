@@ -4117,6 +4117,7 @@ async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYP
 # Drug Trading Functions
 async def search_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start drug search process with main menu access"""
+    await clear_conversation_state(update, context, silent=True)
     logger.info(f"search_drug called by user {update.effective_user.id}")
     try:
         # نمایش منوی اصلی همراه با درخواست جستجو
@@ -6208,6 +6209,9 @@ def main():
             states={
                 States.SEARCH_DRUG: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
+                    MessageHandler(
+                    filters.Regex(r'^(اضافه کردن دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), 
+                    handle_state_change
                 ],
                 States.SELECT_PHARMACY: [
                     CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_\d+$'),
