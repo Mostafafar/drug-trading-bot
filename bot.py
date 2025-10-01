@@ -3748,6 +3748,8 @@ async def save_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return ConversationHandler.END
 async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """لیست نیازهای کاربر با دکمه ویرایش در کیبورد معمولی"""
     user_id = update.effective_user.id
     logger.info(f"Starting list_my_needs for user {user_id}")
     conn = None
@@ -3770,21 +3772,26 @@ async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
         
         message = "📋 لیست نیازهای شما:\n\n"
-        keyboard = []
         for i, need in enumerate(needs, 1):
             desc = need['description'] or 'بدون توضیح'
             qty = need['quantity']
             message += f"{i}. {need['name']}\n   توضیح: {desc}\n   تعداد: {qty}\n\n"
-            button_text = f"ویرایش {i}: {format_button_text(need['name'])}"
-            keyboard.append([InlineKeyboardButton(button_text, callback_data=f"edit_need_{need['id']}")])
         
-        #keyboard.append([InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        # ایجاد کیبورد معمولی با دکمه ویرایش
+        keyboard = [
+            ['✏️ ویرایش نیازها'],
+            ['🔙 بازگشت به منوی اصلی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         
         await update.message.reply_text(message, reply_markup=reply_markup)
         logger.info(f"Needs list sent to user {user_id}")
-        return States.EDIT_NEED  # برای ویرایش، یا اگر نمی‌خوای END برگردون
-    
+        
+        # ذخیره نیازها در context برای استفاده در ویرایش
+        context.user_data['user_needs_list'] = needs
+        
+        return States.EDIT_NEED
+        
     except psycopg2.OperationalError as op_e:
         logger.error(f"Operational DB error in list_my_needs for user {user_id}: {op_e}", exc_info=True)
         await update.message.reply_text("خطا در اتصال به دیتابیس. لطفا بررسی کنید که سرور postgres فعال است.")
@@ -3804,73 +3811,118 @@ async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if conn:
             conn.close()
             logger.info(f"DB connection closed for user {user_id}")
+async def handle_edit_needs_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت دکمه ویرایش نیازها در کیبورد معمولی"""
+    try:
+        if update.message.text == "✏️ ویرایش نیازها":
+            return await edit_needs(update, context)
+    except Exception as e:
+        logger.error(f"Error in handle_edit_needs_button: {e}")
+        await update.message.reply_text("خطا در پردازش درخواست ویرایش.")
+    return States.EDIT_NEED
 
 async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start needs editing process"""
+    """شروع فرآیند ویرایش نیازها"""
     try:
         # حذف stateهای مربوط به داروها
         drug_keys = ['editing_drug', 'edit_field', 'current_selection']
         for key in drug_keys:
             context.user_data.pop(key, None)
         
-        query = update.callback_query
-        await query.answer()
-
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                cursor.execute('''
-                SELECT id, name, description, quantity 
-                FROM user_needs 
-                WHERE user_id = %s
-                ORDER BY name
-                ''', (update.effective_user.id,))
-                needs = cursor.fetchall()
-                
-                if not needs:
-                    await query.edit_message_text("هیچ نیازی برای ویرایش وجود ندارد.")
-                    return ConversationHandler.END
-                
-                keyboard = []
-                for need in needs:
-                    # نام کوتاه شده برای دکمه
-                    display_name = need['name']
-                    if len(display_name) > 30:
-                        display_name = display_name[:27] + "..."
+        # استفاده از نیازهای ذخیره شده در context یا دریافت از دیتابیس
+        needs = context.user_data.get('user_needs_list', [])
+        
+        if not needs:
+            conn = None
+            try:
+                conn = get_db_connection()
+                with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                    cursor.execute('''
+                    SELECT id, name, description, quantity 
+                    FROM user_needs 
+                    WHERE user_id = %s
+                    ORDER BY name
+                    ''', (update.effective_user.id,))
+                    needs = cursor.fetchall()
                     
-                    button_text = f"{display_name} ({need['quantity']})"
-                    keyboard.append([InlineKeyboardButton(
-                        button_text,
-                        callback_data=f"edit_need_{need['id']}"
-                    )])
-                
-                keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
-                
-                await query.edit_message_text(
-                    "لطفا نیازی که می‌خواهید ویرایش کنید را انتخاب کنید:",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-                return States.EDIT_NEED
-                
-        except Exception as e:
-            logger.error(f"Error in edit_needs: {e}", exc_info=True)
-            await query.edit_message_text("خطا در دریافت لیست نیازها.")
+            except Exception as e:
+                logger.error(f"Error in edit_needs: {e}", exc_info=True)
+                await update.message.reply_text("خطا در دریافت لیست نیازها.")
+                return ConversationHandler.END
+            finally:
+                if conn:
+                    conn.close()
+
+        if not needs:
+            await update.message.reply_text("هیچ نیازی برای ویرایش وجود ندارد.")
             return ConversationHandler.END
-        finally:
-            if conn:
-                conn.close()
+        
+        # ساخت کیبورد برای انتخاب نیاز
+        keyboard = []
+        for need in needs:
+            # نام کوتاه شده برای دکمه
+            display_name = need['name']
+            if len(display_name) > 30:
+                display_name = display_name[:27] + "..."
+            
+            button_text = f"✏️ {display_name} ({need['quantity']})"
+            keyboard.append([button_text])
+        
+        keyboard.append(["🔙 بازگشت"])
+        
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        await update.message.reply_text(
+            "لطفا نیازی که می‌خواهید ویرایش کنید را انتخاب کنید:",
+            reply_markup=reply_markup
+        )
+        
+        # ذخیره نیازها در context برای استفاده در مرحله بعد
+        context.user_data['editing_needs_list'] = needs
+        
+        return States.EDIT_NEED
                 
     except Exception as e:
         logger.error(f"Error in edit_needs: {e}", exc_info=True)
-        try:
-            await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
-        except:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="خطایی رخ داده است. لطفا دوباره تلاش کنید."
-            )
+        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت انتخاب نیاز خاص برای ویرایش"""
+    try:
+        selection = update.message.text
+        
+        if selection == "🔙 بازگشت":
+            return await list_my_needs(update, context)
+        
+        if selection.startswith("✏️ "):
+            # استخراج نام نیاز از دکمه
+            need_display = selection[2:]  # حذف "✏️ "
+            needs = context.user_data.get('editing_needs_list', [])
+            
+            # پیدا کردن نیاز انتخاب شده
+            selected_need = None
+            for need in needs:
+                display_name = need['name']
+                if len(display_name) > 30:
+                    display_name = display_name[:27] + "..."
+                expected_text = f"{display_name} ({need['quantity']})"
+                
+                if expected_text == need_display:
+                    selected_need = need
+                    break
+            
+            if selected_need:
+                context.user_data['editing_need'] = dict(selected_need)
+                return await edit_need_item(update, context)
+            else:
+                await update.message.reply_text("نیاز انتخاب شده یافت نشد.")
+                
+        return States.EDIT_NEED
+        
+    except Exception as e:
+        logger.error(f"Error in handle_select_need_for_edit: {e}")
+        await update.message.reply_text("خطا در انتخاب نیاز.")
+        return States.EDIT_NEED
 
 async def edit_need_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Edit specific need item"""
@@ -5660,6 +5712,38 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
             return await generate_personnel_code(update, context)
         elif text == 'تنظیم شاخه‌های دارویی':
             return await setup_medical_categories(update, context)
+        elif text == '✏️ ویرایش نیازها':
+            # هندلر جدید برای دکمه ویرایش نیازها
+            return await handle_edit_needs_button(update, context)
+        elif text == '🔙 بازگشت به منوی اصلی':
+            # بازگشت به منوی اصلی
+            keyboard = [
+                ['اضافه کردن دارو', 'جستجوی دارو'],
+                ['لیست داروهای من', 'ثبت نیاز جدید'],
+                ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                ['تنظیم شاخه‌های دارویی']
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            await update.message.reply_text(
+                "به منوی اصلی بازگشتید. لطفاً یک گزینه را انتخاب کنید:",
+                reply_markup=reply_markup
+            )
+            return ConversationHandler.END
+        elif text.startswith('✏️ ') and ' (' in text and text.endswith(')'):
+            # تشخیص دکمه‌های ویرایش نیازهای خاص (مثل "✏️ استامینوفن (100)")
+            return await handle_select_need_for_edit(update, context)
+        elif text in ['✏️ ویرایش نام', '✏️ ویرایش توضیحات', '✏️ ویرایش تعداد', '🗑️ حذف نیاز']:
+            # مدیریت دکمه‌های ویرایش جزئیات نیاز
+            return await handle_need_edit_action_from_keyboard(update, context)
+        elif text in ['✅ بله، حذف شود', '❌ خیر، انصراف']:
+            # مدیریت تأیید حذف نیاز
+            return await handle_need_deletion_confirmation(update, context)
+        elif text == '🔙 بازگشت به لیست':
+            # بازگشت از ویرایش جزئیات به لیست نیازها
+            return await list_my_needs(update, context)
+        elif text == '🔙 بازگشت':
+            # بازگشت عمومی
+            return await list_my_needs(update, context)
         else:
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
@@ -6094,6 +6178,7 @@ def main():
             entry_points=[
                 MessageHandler(filters.Regex('^ثبت نیاز جدید$'), add_need),
                 MessageHandler(filters.Regex('^لیست نیازهای من$'), list_my_needs),
+                MessageHandler(filters.Regex('^✏️ ویرایش نیازها$'), handle_edit_needs_button),
                 CallbackQueryHandler(edit_needs, pattern="^edit_needs$"),
                 CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
                 CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
@@ -6117,6 +6202,7 @@ def main():
             
                 ],
                 States.EDIT_NEED: [
+                    MessageHandler(filters.Regex(r'^(✏️ .+|🔙 بازگشت)$'), handle_select_need_for_edit),
                     CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
                     CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
                     CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
