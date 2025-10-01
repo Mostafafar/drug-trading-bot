@@ -4260,7 +4260,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 
                 # ارسال کیبورد اصلی به صورت جداگانه
-                await update.message.reply_text(
+               #await update.message.reply_text(
                     "برای ادامه از منوی زیر استفاده کنید:",
                     reply_markup=reply_markup_main
                 )
