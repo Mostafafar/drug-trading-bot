@@ -6208,10 +6208,10 @@ def main():
             ],
             states={
                 States.SEARCH_DRUG: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search)
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search),
                     MessageHandler(
                     filters.Regex(r'^(اضافه کردن دارو|لیست داروهای من|ثبت نیاز جدید|لیست نیازهای من|ساخت کد پرسنل|تنظیم شاخه‌های دارویی)$'), 
-                    handle_state_change
+                    handle_state_change)
                 ],
                 States.SELECT_PHARMACY: [
                     CallbackQueryHandler(select_pharmacy, pattern=r'^pharmacy_\d+$'),
