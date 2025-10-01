@@ -3775,6 +3775,7 @@ async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i, need in enumerate(needs, 1):
             desc = need['description'] or 'بدون توضیح'
             qty = need['quantity']
+            # نمایش نام کامل بدون کوتاه کردن
             message += f"{i}. {need['name']}\n   توضیح: {desc}\n   تعداد: {qty}\n\n"
         
         # ایجاد کیبورد معمولی با دکمه ویرایش
@@ -3820,6 +3821,14 @@ async def handle_edit_needs_button(update: Update, context: ContextTypes.DEFAULT
         logger.error(f"Error in handle_edit_needs_button: {e}")
         await update.message.reply_text("خطا در پردازش درخواست ویرایش.")
     return States.EDIT_NEED
+async def handle_back_from_edit_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت بازگشت از ویرایش نیاز"""
+    try:
+        if update.message.text in ["🔙 بازگشت", "🔙 بازگشت به منوی اصلی"]:
+            return await clear_conversation_state(update, context)
+    except Exception as e:
+        logger.error(f"Error in handle_back_from_edit_need: {e}")
+        return await clear_conversation_state(update, context)
 
 async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع فرآیند ویرایش نیازها"""
@@ -3857,15 +3866,13 @@ async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("هیچ نیازی برای ویرایش وجود ندارد.")
             return ConversationHandler.END
         
-        # ساخت کیبورد برای انتخاب نیاز
+        # ساخت کیبورد برای انتخاب نیاز - با نام کامل
         keyboard = []
         for need in needs:
-            # نام کوتاه شده برای دکمه
+            # نمایش نام کامل بدون کوتاه کردن
             display_name = need['name']
-            if len(display_name) > 30:
-                display_name = display_name[:27] + "..."
             
-            button_text = f"✏️ {display_name} ({need['quantity']})"
+            button_text = f"✏️ {display_name}"
             keyboard.append([button_text])
         
         keyboard.append(["🔙 بازگشت"])
@@ -3895,19 +3902,14 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
             return await list_my_needs(update, context)
         
         if selection.startswith("✏️ "):
-            # استخراج نام نیاز از دکمه
-            need_display = selection[2:]  # حذف "✏️ "
+            # استخراج نام کامل نیاز از دکمه
+            need_name = selection[2:]  # حذف "✏️ "
             needs = context.user_data.get('editing_needs_list', [])
             
-            # پیدا کردن نیاز انتخاب شده
+            # پیدا کردن نیاز انتخاب شده با تطبیق کامل نام
             selected_need = None
             for need in needs:
-                display_name = need['name']
-                if len(display_name) > 30:
-                    display_name = display_name[:27] + "..."
-                expected_text = f"{display_name} ({need['quantity']})"
-                
-                if expected_text == need_display:
+                if need['name'] == need_name:
                     selected_need = need
                     break
             
@@ -3915,7 +3917,17 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
                 context.user_data['editing_need'] = dict(selected_need)
                 return await edit_need_item(update, context)
             else:
-                await update.message.reply_text("نیاز انتخاب شده یافت نشد.")
+                # اگر با نام کامل پیدا نشد، با تطبیق جزئی جستجو کنیم
+                for need in needs:
+                    if need['name'].startswith(need_name) or need_name.startswith(need['name']):
+                        selected_need = need
+                        break
+                
+                if selected_need:
+                    context.user_data['editing_need'] = dict(selected_need)
+                    return await edit_need_item(update, context)
+                else:
+                    await update.message.reply_text("نیاز انتخاب شده یافت نشد.")
                 
         return States.EDIT_NEED
         
@@ -4039,8 +4051,11 @@ async def handle_need_edit_action(update: Update, context: ContextTypes.DEFAULT_
 
 async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save need edit changes"""
-    await clear_conversation_state(update, context, silent=True)
     try:
+        # بررسی اگر کاربر می‌خواهد بازگردد
+        if update.message.text in ["🔙 بازگشت", "🔙 بازگشت به منوی اصلی"]:
+            return await clear_conversation_state(update, context)
+        
         edit_field = context.user_data.get('edit_field')
         new_value = update.message.text
         need = context.user_data.get('editing_need')
@@ -4103,13 +4118,13 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"توضیحات: {need['description'] or 'بدون توضیح'}\n"
             f"تعداد: {need['quantity']}\n\n"
             "لطفا گزینه مورد نظر را انتخاب کنید:",
-            reply_markup=InlineKeyboardMarkup(keyboard))
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return States.EDIT_NEED
     except Exception as e:
         logger.error(f"Error in save_need_edit: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
 async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle need deletion confirmation"""
     await clear_conversation_state(update, context, silent=True)
@@ -6202,7 +6217,8 @@ def main():
             
                 ],
                 States.EDIT_NEED: [
-                    MessageHandler(filters.Regex(r'^(✏️ .+|🔙 بازگشت)$'), handle_select_need_for_edit),
+                    MessageHandler(filters.Regex(r'^(✏️ .+)$'), handle_select_need_for_edit),
+                    MessageHandler(filters.Regex(r'^(🔙 بازگشت|🔙 بازگشت به منوی اصلی)$'), handle_back_from_edit_need),
                     CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
                     CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
                     CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
@@ -6371,6 +6387,8 @@ def main():
         handle_state_change  # تابعی که state رو پاک میکنه و عملیات رو شروع میکنه
         ))
         application.add_handler(CallbackQueryHandler(handle_need_drug_callback, pattern="^need_drug_"))
+        # در بخش اضافه کردن هندلرها:
+        application.add_handler(MessageHandler(filters.Regex('^🔙 بازگشت به منوی اصلی$'), clear_conversation_state))
         application.add_handler(CallbackQueryHandler(handle_add_drug_callback, pattern="^add_drug_"))
         # Add ban user command
         # Add ban user command - فقط برای messageها
