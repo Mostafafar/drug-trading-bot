@@ -4260,8 +4260,8 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 
                 # ارسال کیبورد اصلی به صورت جداگانه
-               #await update.message.reply_text(
-                    "برای ادامه از منوی زیر استفاده کنید:",
+                await update.message.reply_text(
+                    " داروخانه مدنظر خود را انتخاب کنید ",
                     reply_markup=reply_markup_main
                 )
                 
@@ -4491,7 +4491,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 # دکمه‌های عملیاتی - به صورت عمودی
                 if offer_items or comp_items:
                     keyboard.append([KeyboardButton("✅ اتمام انتخاب")])
-                keyboard.append([KeyboardButton("🔙 بازگشت به داروخانه‌ها")])
+                keyboard.append([KeyboardButton("🔙 بازگشت به منوی اصلی")])
                 
                 reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
                 
@@ -4542,8 +4542,9 @@ async def handle_drug_selection_from_keyboard(update: Update, context: ContextTy
         # مدیریت دکمه‌های خاص
         if selection == "✅ اتمام انتخاب":
             return await handle_finish_selection(update, context)
-        elif selection == "🔙 بازگشت به داروخانه‌ها":
-            return await handle_back_button(update, context)
+        # تغییر این خط: به جای بازگشت به داروخانه‌ها، به منوی اصلی برگردد
+        elif selection == "🔙 بازگشت به منوی اصلی":
+            return await clear_conversation_state(update, context)
         elif selection == "📌 داروهای داروخانه هدف":
             context.user_data['current_list_type'] = 'target'
             context.user_data['page_target'] = 0
