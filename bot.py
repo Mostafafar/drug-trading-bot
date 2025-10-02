@@ -3820,7 +3820,7 @@ async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # نمایش نام کامل بدون کوتاه کردن
             display_name = need['name']
             
-            button_text = f"✏️ {display_name}"
+            button_text = f"✏️ {display_name.strip()}"
             keyboard.append([button_text])
         
         keyboard.append(["🔙 بازگشت"])
@@ -3850,14 +3850,14 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
             return await list_my_needs(update, context)
         
         if selection.startswith("✏️ "):
-            # استخراج نام کامل نیاز از دکمه
-            need_name = selection[2:]  # حذف "✏️ "
+            # استخراج نام کامل نیاز از دکمه و حذف فاصله اضافه
+            need_name = selection[2:].strip()  # حذف "✏️ " و فاصله‌های اضافه
             needs = context.user_data.get('editing_needs_list', [])
             
             # پیدا کردن نیاز انتخاب شده با تطبیق کامل نام
             selected_need = None
             for need in needs:
-                if need['name'] == need_name:
+                if need['name'].strip() == need_name:
                     selected_need = need
                     break
             
@@ -3882,7 +3882,6 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
         logger.error(f"Error in handle_select_need_for_edit: {e}")
         await update.message.reply_text("خطا در انتخاب نیاز.")
         return States.EDIT_NEED
-
 async def edit_need_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Edit specific need item"""
     await clear_conversation_state(update, context, silent=True)
