@@ -3865,17 +3865,16 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
                 context.user_data['editing_need'] = dict(selected_need)
                 return await edit_need_item(update, context)
             else:
-                # اگر با نام کامل پیدا نشد، با تطبیق جزئی جستجو کنیم
-                for need in needs:
-                    if need['name'].startswith(need_name) or need_name.startswith(need['name']):
-                        selected_need = need
-                        break
+                # اگر با نام کامل پیدا نشد، لاگ کنیم برای دیباگ
+                logger.warning(f"Need not found with exact match: '{need_name}'")
+                logger.warning(f"Available needs: {[need['name'] for need in needs]}")
                 
-                if selected_need:
-                    context.user_data['editing_need'] = dict(selected_need)
-                    return await edit_need_item(update, context)
-                else:
-                    await update.message.reply_text("نیاز انتخاب شده یافت نشد.")
+                # نمایش مجدد لیست با پیام خطا
+                await update.message.reply_text(
+                    f"❌ نیاز «{need_name}» یافت نشد.\n\n"
+                    "لطفا از لیست زیر یک نیاز را انتخاب کنید:"
+                )
+                return await edit_needs(update, context)
                 
         return States.EDIT_NEED
         
