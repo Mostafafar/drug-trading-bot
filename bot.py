@@ -3773,8 +3773,20 @@ async def handle_edit_needs_button(update: Update, context: ContextTypes.DEFAULT
 async def handle_back_from_edit_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت بازگشت از ویرایش نیاز"""
     try:
-        if update.message.text in ["🔙 بازگشت", "🔙 بازگشت به منوی اصلی"]:
-            return await clear_conversation_state(update, context)
+        if not update.message:
+            return States.EDIT_NEED
+            
+        # پاک کردن اطلاعات ویرایش از context
+        context.user_data.pop('editing_need', None)
+        context.user_data.pop('edit_field', None)
+        
+        await update.message.reply_text(
+            "در حال بازگشت به لیست نیازها...",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        
+        return await list_my_needs(update, context)
+        
     except Exception as e:
         logger.error(f"Error in handle_back_from_edit_need: {e}")
         return await clear_conversation_state(update, context)
@@ -3850,11 +3862,11 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
             
         selection = update.message.text
         
-        # اولویت اول: بررسی دکمه‌های عملیاتی
-        if selection in ["🔙 بازگشت", "🔙 بازگشت به منوی اصلی"]:
+        # 🔥 اولویت اول: بررسی دکمه‌های بازگشت
+        if selection in ["🔙 بازگشت", "🔙 بازگشت به لیست نیازها", "🔙 بازگشت به منوی اصلی"]:
             return await list_my_needs(update, context)
             
-        # ❌ فقط ویرایش تعداد و حذف
+        # سپس: بررسی دکمه‌های عملیاتی
         if selection in ["✏️ ویرایش تعداد", "🗑️ حذف نیاز"]:
             return await handle_need_edit_action_from_keyboard(update, context)
             
@@ -3901,7 +3913,6 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
             if selected_need:
                 context.user_data['editing_need'] = dict(selected_need)
                 
-                # ❌ منوی ساده‌تر: فقط ویرایش تعداد و حذف
                 keyboard = [
                     ['✏️ ویرایش تعداد'],
                     ['🗑️ حذف نیاز'],
@@ -3924,7 +3935,17 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
                     "لطفا از لیست زیر یک نیاز را انتخاب کنید:"
                 )
                 return await edit_needs(update, context)
-                
+        
+        # 🔥 اگر هیچکدام از موارد بالا نبود، احتمالاً کاربر عدد وارد کرده
+        # اما ما در این state نباید عدد دریافت کنیم، پس خطا بده
+        await update.message.reply_text(
+            "❌ لطفا یکی از گزینه‌های موجود را انتخاب کنید.",
+            reply_markup=ReplyKeyboardMarkup([
+                ['✏️ ویرایش تعداد'],
+                ['🗑️ حذف نیاز'],
+                ['🔙 بازگشت به لیست نیازها']
+            ], resize_keyboard=True)
+        )
         return States.EDIT_NEED
         
     except Exception as e:
@@ -4200,12 +4221,14 @@ async def handle_need_edit_action(update: Update, context: ContextTypes.DEFAULT_
 async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save need edit changes - فقط برای تعداد"""
     try:
-        # بررسی اگر کاربر می‌خواهد بازگردد
-        if update.message.text in ["🔙 بازگشت", "🔙 بازگشت به منوی اصلی"]:
-            return await clear_conversation_state(update, context)
+        # 🔥 اول بررسی کن اگر کاربر می‌خواهد بازگردد
+        user_input = update.message.text
+        
+        if user_input in ["🔙 بازگشت", "🔙 بازگشت به لیست نیازها", "🔙 بازگشت به منوی اصلی"]:
+            return await list_my_needs(update, context)
         
         edit_field = context.user_data.get('edit_field')
-        new_value = update.message.text
+        new_value = user_input
         need = context.user_data.get('editing_need')
         
         if not edit_field or not need:
@@ -4215,7 +4238,17 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ❌ فقط برای تعداد
         if edit_field == 'quantity':
             try:
-                new_value = int(new_value)
+                # تبدیل اعداد فارسی به انگلیسی
+                persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+                new_value = new_value.translate(persian_to_english)
+                
+                # استخراج فقط ارقام
+                digits = ''.join(filter(str.isdigit, new_value))
+                if not digits:
+                    await update.message.reply_text("❌ لطفا یک عدد معتبر وارد کنید.")
+                    return States.EDIT_NEED
+                    
+                new_value = int(digits)
                 if new_value <= 0:
                     await update.message.reply_text("لطفا عددی بزرگتر از صفر وارد کنید.")
                     return States.EDIT_NEED
@@ -4268,6 +4301,7 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardMarkup(keyboard)
         )
         return States.EDIT_NEED
+        
     except Exception as e:
         logger.error(f"Error in save_need_edit: {e}")
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
@@ -6375,14 +6409,19 @@ def main():
             
                 ],
                 States.EDIT_NEED: [
-                    MessageHandler(filters.Regex(r'^(✏️ .+)$'), handle_select_need_for_edit),
-                    MessageHandler(filters.Regex(r'^(🔙 بازگشت|🔙 بازگشت به منوی اصلی)$'), handle_back_from_edit_need),
+                    MessageHandler(filters.Regex(r'^(🔙 بازگشت|🔙 بازگشت به لیست نیازها|🔙 بازگشت به منوی اصلی)$'), 
+                 handle_back_from_edit_need),
+    
+    # سپس: دکمه‌های عملیاتی
                     MessageHandler(filters.Regex(r'^(✏️ ویرایش تعداد|🗑️ حذف نیاز)$'), 
-                                 handle_need_edit_action_from_keyboard),
+                 handle_need_edit_action_from_keyboard),
                     MessageHandler(filters.Regex(r'^(✅ بله، حذف شود|❌ خیر، انصراف)$'), 
-                                 handle_need_deletion_confirmation),
+                 handle_need_deletion_confirmation),
+    
+    # سپس: انتخاب نیاز از لیست
                     MessageHandler(filters.Regex(r'^(✏️ .+)$'), handle_select_need_for_edit),
-                    MessageHandler(filters.Regex(r'^(🔙 بازگشت|🔙 بازگشت به منوی اصلی)$'), handle_back_from_edit_need),
+    
+    # 🔥 سپس: ذخیره ویرایش (فقط برای تعداد) - این باید آخر باشد
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit),
                     #CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
                    # CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
