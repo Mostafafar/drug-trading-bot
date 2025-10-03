@@ -3727,10 +3727,10 @@ async def list_my_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # نمایش نام کامل بدون کوتاه کردن
             message += f"{i}. {need['name']}\n   توضیح: {desc}\n   تعداد: {qty}\n\n"
         
-        # ایجاد کیبورد معمولی با دکمه ویرایش
+        # ایجاد کیبورد معمولی با دکمه ویرایش و بازگشت
         keyboard = [
             ['✏️ ویرایش نیازها'],
-            ['🔙 بازگشت به منوی اصلی']
+            ['🔙 بازگشت به منوی اصلی']  # تغییر این خط
         ]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         
@@ -3771,21 +3771,29 @@ async def handle_edit_needs_button(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text("خطا در پردازش درخواست ویرایش.")
     return States.EDIT_NEED
 async def handle_back_from_edit_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت بازگشت از ویرایش نیاز"""
+    """مدیریت بازگشت از ویرایش نیاز به منوی اصلی"""
     try:
         if not update.message:
-            return States.EDIT_NEED
+            return ConversationHandler.END
             
-        # پاک کردن اطلاعات ویرایش از context
-        context.user_data.pop('editing_need', None)
-        context.user_data.pop('edit_field', None)
+        # پاک کردن کامل اطلاعات ویرایش از context
+        context.user_data.clear()
+        
+        # نمایش منوی اصلی
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         
         await update.message.reply_text(
-            "در حال بازگشت به لیست نیازها...",
-            reply_markup=ReplyKeyboardRemove()
+            "به منوی اصلی بازگشتید. لطفاً یک گزینه را انتخاب کنید:",
+            reply_markup=reply_markup
         )
         
-        return await list_my_needs(update, context)
+        return ConversationHandler.END
         
     except Exception as e:
         logger.error(f"Error in handle_back_from_edit_need: {e}")
