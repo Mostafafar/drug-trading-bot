@@ -4141,7 +4141,8 @@ async def handle_need_deletion_confirmation(update: Update, context: ContextType
             
     except Exception as e:
         logger.error(f"Error in handle_need_deletion_confirmation: {e}")
-        await update.message.reply_text("
+        await update.message.reply_text("❌ خطا در پردازش درخواست.")
+        return States.EDIT_NEED
 async def handle_need_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle need edit action selection"""
     await clear_conversation_state(update, context, silent=True)
