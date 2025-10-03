@@ -6410,13 +6410,13 @@ def main():
                 ],
                 States.EDIT_NEED: [
                     MessageHandler(filters.Regex(r'^(🔙 بازگشت|🔙 بازگشت به لیست نیازها|🔙 بازگشت به منوی اصلی)$'), 
-                 handle_back_from_edit_need),
+                                handle_back_from_edit_need),
     
     # سپس: دکمه‌های عملیاتی
                     MessageHandler(filters.Regex(r'^(✏️ ویرایش تعداد|🗑️ حذف نیاز)$'), 
-                 handle_need_edit_action_from_keyboard),
+                                handle_need_edit_action_from_keyboard),
                     MessageHandler(filters.Regex(r'^(✅ بله، حذف شود|❌ خیر، انصراف)$'), 
-                 handle_need_deletion_confirmation),
+                                handle_need_deletion_confirmation),
     
     # سپس: انتخاب نیاز از لیست
                     MessageHandler(filters.Regex(r'^(✏️ .+)$'), handle_select_need_for_edit),
