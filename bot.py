@@ -3845,16 +3845,22 @@ async def edit_needs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت انتخاب نیاز خاص برای ویرایش"""
     try:
-        # بررسی وجود پیام
         if not update.message:
-            logger.error("No message in handle_select_need_for_edit")
             return States.EDIT_NEED
             
         selection = update.message.text
         
-        if selection == "🔙 بازگشت":
+        # 🔥 اولویت اول: بررسی دکمه‌های عملیاتی
+        if selection in ["🔙 بازگشت", "🔙 بازگشت به منوی اصلی"]:
             return await list_my_needs(update, context)
+            
+        if selection in ["✏️ ویرایش نام", "✏️ ویرایش توضیحات", "✏️ ویرایش تعداد", "🗑️ حذف نیاز"]:
+            return await handle_need_edit_action_from_keyboard(update, context)
+            
+        if selection in ["✅ بله، حذف شود", "❌ خیر، انصراف"]:
+            return await handle_need_deletion_confirmation(update, context)
         
+        # 🔥 سپس بررسی انتخاب نیاز از لیست
         if selection.startswith("✏️ "):
             # استخراج نام کامل نیاز از دکمه
             need_name = selection[2:].strip()
@@ -4005,7 +4011,7 @@ async def handle_need_edit_action_from_keyboard(update: Update, context: Context
         need = context.user_data.get('editing_need')
         
         if not need:
-            await update.message.reply_text("اطلاعات نیاز یافت نشد.")
+            await update.message.reply_text("❌ ابتدا یک نیاز را برای ویرایش انتخاب کنید.")
             return await edit_needs(update, context)
         
         if action == "✏️ ویرایش نام":
@@ -4040,16 +4046,15 @@ async def handle_need_edit_action_from_keyboard(update: Update, context: Context
             reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             
             await update.message.reply_text(
-                f"آیا مطمئن هستید که می‌خواهید نیاز «{need['name']}» را حذف کنید؟",
+                f"⚠️ آیا مطمئن هستید که می‌خواهید نیاز «{need['name']}» را حذف کنید؟",
                 reply_markup=reply_markup
             )
             return States.EDIT_NEED
             
     except Exception as e:
         logger.error(f"Error in handle_need_edit_action_from_keyboard: {e}")
-        await update.message.reply_text("خطا در پردازش درخواست.")
+        await update.message.reply_text("❌ خطا در پردازش درخواست.")
         return States.EDIT_NEED
-
 async def handle_need_deletion_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle need deletion confirmation from keyboard"""
     try:
@@ -4060,7 +4065,7 @@ async def handle_need_deletion_confirmation(update: Update, context: ContextType
         need = context.user_data.get('editing_need')
         
         if not need:
-            await update.message.reply_text("اطلاعات نیاز یافت نشد.")
+            await update.message.reply_text("❌ اطلاعات نیاز یافت نشد.")
             return await edit_needs(update, context)
         
         if confirmation == "✅ بله، حذف شود":
@@ -4072,19 +4077,36 @@ async def handle_need_deletion_confirmation(update: Update, context: ContextType
                         'DELETE FROM user_needs WHERE id = %s AND user_id = %s',
                         (need['id'], update.effective_user.id)
                     )
+                    deleted_rows = cursor.rowcount
                     conn.commit()
                     
-                    await update.message.reply_text(
-                        f"✅ نیاز «{need['name']}» با موفقیت حذف شد.",
-                        reply_markup=ReplyKeyboardRemove()
-                    )
-                    
-                    # بازگشت به لیست نیازها
-                    return await list_my_needs(update, context)
+                    if deleted_rows > 0:
+                        await update.message.reply_text(
+                            f"✅ نیاز «{need['name']}» با موفقیت حذف شد.",
+                            reply_markup=ReplyKeyboardRemove()
+                        )
+                        
+                        # پاک کردن اطلاعات از context
+                        context.user_data.pop('editing_need', None)
+                        context.user_data.pop('editing_needs_list', None)
+                        
+                        # بازگشت به لیست نیازها
+                        return await list_my_needs(update, context)
+                    else:
+                        await update.message.reply_text(
+                            "❌ نیاز یافت نشد یا قبلاً حذف شده است.",
+                            reply_markup=ReplyKeyboardRemove()
+                        )
+                        return await edit_needs(update, context)
                     
             except Exception as e:
-                logger.error(f"Error deleting need: {e}")
-                await update.message.reply_text("خطا در حذف نیاز.")
+                logger.error(f"Error deleting need {need['id']}: {e}")
+                if conn:
+                    conn.rollback()
+                await update.message.reply_text(
+                    "❌ خطا در حذف نیاز از پایگاه داده.",
+                    reply_markup=ReplyKeyboardRemove()
+                )
             finally:
                 if conn:
                     conn.close()
@@ -4094,11 +4116,27 @@ async def handle_need_deletion_confirmation(update: Update, context: ContextType
                 "حذف نیاز لغو شد.",
                 reply_markup=ReplyKeyboardRemove()
             )
-            return await edit_needs(update, context)
+            # بازگشت به منوی ویرایش همان نیاز
+            keyboard = [
+                ['✏️ ویرایش نام', '✏️ ویرایش توضیحات'],
+                ['✏️ ویرایش تعداد', '🗑️ حذف نیاز'],
+                ['🔙 بازگشت به لیست نیازها']
+            ]
+            reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            
+            await update.message.reply_text(
+                f"ویرایش نیاز:\n\n"
+                f"نام: {need['name']}\n"
+                f"توضیحات: {need['description'] or 'بدون توضیح'}\n"
+                f"تعداد: {need['quantity']}\n\n"
+                "لطفا گزینه مورد نظر را انتخاب کنید:",
+                reply_markup=reply_markup
+            )
+            return States.EDIT_NEED
             
     except Exception as e:
         logger.error(f"Error in handle_need_deletion_confirmation: {e}")
-        await update.message.reply_text("خطا در پردازش درخواست.")
+        await update.message.reply_text("❌ خطا در پردازش درخواست.")
         return States.EDIT_NEED
 async def handle_need_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle need edit action selection"""
@@ -6339,12 +6377,14 @@ def main():
                                  handle_need_edit_action_from_keyboard),
                     MessageHandler(filters.Regex(r'^(✅ بله، حذف شود|❌ خیر، انصراف)$'), 
                                  handle_need_deletion_confirmation),
+                    MessageHandler(filters.Regex(r'^(✏️ .+)$'), handle_select_need_for_edit),
+                    MessageHandler(filters.Regex(r'^(🔙 بازگشت|🔙 بازگشت به منوی اصلی)$'), handle_back_from_edit_need),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit),
                     CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
                     CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
                     CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit),
                     CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
+
                 ]
             },
             fallbacks=[
