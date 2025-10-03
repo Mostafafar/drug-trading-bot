@@ -3853,7 +3853,31 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
         if selection.startswith("✏️ "):
             # استخراج نام کامل نیاز از دکمه و حذف فاصله اضافه
             need_name = selection[2:].strip()  # حذف "✏️ " و فاصله‌های اضافه
+            
+            # ابتدا از editing_needs_list استفاده کن، اگر نبود از user_needs_list
             needs = context.user_data.get('editing_needs_list', [])
+            if not needs:
+                needs = context.user_data.get('user_needs_list', [])
+            
+            # اگر هنوز لیست نیازها موجود نیست، از دیتابیس بگیر
+            if not needs:
+                conn = None
+                try:
+                    conn = get_db_connection()
+                    with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
+                        cursor.execute('''
+                        SELECT id, name, description, quantity 
+                        FROM user_needs 
+                        WHERE user_id = %s
+                        ORDER BY name
+                        ''', (update.effective_user.id,))
+                        needs = cursor.fetchall()
+                        context.user_data['editing_needs_list'] = needs
+                except Exception as e:
+                    logger.error(f"Error fetching needs from DB: {e}")
+                finally:
+                    if conn:
+                        conn.close()
             
             # پیدا کردن نیاز انتخاب شده با تطبیق کامل نام
             selected_need = None
@@ -3864,7 +3888,24 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
             
             if selected_need:
                 context.user_data['editing_need'] = dict(selected_need)
-                return await edit_need_item(update, context)
+                
+                # نمایش منوی ویرایش برای نیاز انتخاب شده
+                keyboard = [
+                    ['✏️ ویرایش نام', '✏️ ویرایش توضیحات'],
+                    ['✏️ ویرایش تعداد', '🗑️ حذف نیاز'],
+                    ['🔙 بازگشت به لیست نیازها']
+                ]
+                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                
+                await update.message.reply_text(
+                    f"ویرایش نیاز:\n\n"
+                    f"نام: {selected_need['name']}\n"
+                    f"توضیحات: {selected_need['description'] or 'بدون توضیح'}\n"
+                    f"تعداد: {selected_need['quantity']}\n\n"
+                    "لطفا گزینه مورد نظر را انتخاب کنید:",
+                    reply_markup=reply_markup
+                )
+                return States.EDIT_NEED
             else:
                 # اگر با نام کامل پیدا نشد، لاگ کنیم برای دیباگ
                 logger.warning(f"Need not found with exact match: '{need_name}'")
@@ -3880,7 +3921,7 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
         return States.EDIT_NEED
         
     except Exception as e:
-        logger.error(f"Error in handle_select_need_for_edit: {e}")
+        logger.error(f"Error in handle_select_need_for_edit: {e}", exc_info=True)
         await update.message.reply_text("خطا در انتخاب نیاز.")
         return States.EDIT_NEED
 async def edit_need_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
