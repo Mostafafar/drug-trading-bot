@@ -4061,6 +4061,14 @@ async def handle_need_deletion_confirmation(update: Update, context: ContextType
             try:
                 conn = get_db_connection()
                 with conn.cursor() as cursor:
+                    # 🔥 ابتدا رکوردهای مربوطه در match_notifications را حذف کنیم
+                    cursor.execute(
+                        'DELETE FROM match_notifications WHERE need_id = %s',
+                        (need['id'],)
+                    )
+                    logger.info(f"Deleted {cursor.rowcount} match notifications for need {need['id']}")
+                    
+                    # سپس نیاز را حذف کنیم
                     cursor.execute(
                         'DELETE FROM user_needs WHERE id = %s AND user_id = %s',
                         (need['id'], update.effective_user.id)
@@ -4091,10 +4099,19 @@ async def handle_need_deletion_confirmation(update: Update, context: ContextType
                 logger.error(f"Error deleting need {need['id']}: {e}")
                 if conn:
                     conn.rollback()
-                await update.message.reply_text(
-                    "❌ خطا در حذف نیاز از پایگاه داده.",
-                    reply_markup=ReplyKeyboardRemove()
-                )
+                
+                # پیام خطای خاص برای Foreign Key constraint
+                if "foreign key constraint" in str(e).lower():
+                    await update.message.reply_text(
+                        "❌ این نیاز در سیستم استفاده شده و نمی‌توان آن را حذف کرد.\n\n"
+                        "⚠️ لطفاً ابتدا نوتیفیکیشن‌های مربوطه را بررسی کنید.",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                else:
+                    await update.message.reply_text(
+                        "❌ خطا در حذف نیاز از پایگاه داده.",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
             finally:
                 if conn:
                     conn.close()
@@ -4106,17 +4123,17 @@ async def handle_need_deletion_confirmation(update: Update, context: ContextType
             )
             # بازگشت به منوی ویرایش همان نیاز
             keyboard = [
-                ['✏️ ویرایش نام', '✏️ ویرایش توضیحات'],
-                ['✏️ ویرایش تعداد', '🗑️ حذف نیاز'],
+                ['✏️ ویرایش تعداد'],
+                ['🗑️ حذف نیاز'],
                 ['🔙 بازگشت به لیست نیازها']
             ]
             reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
             
             await update.message.reply_text(
                 f"ویرایش نیاز:\n\n"
-                f"نام: {need['name']}\n"
-                f"توضیحات: {need['description'] or 'بدون توضیح'}\n"
-                f"تعداد: {need['quantity']}\n\n"
+                f"💊 نام: {need['name']}\n"
+                f"📝 توضیحات: {need['description'] or 'بدون توضیح'}\n"
+                f"📦 تعداد: {need['quantity']}\n\n"
                 "لطفا گزینه مورد نظر را انتخاب کنید:",
                 reply_markup=reply_markup
             )
@@ -4124,8 +4141,7 @@ async def handle_need_deletion_confirmation(update: Update, context: ContextType
             
     except Exception as e:
         logger.error(f"Error in handle_need_deletion_confirmation: {e}")
-        await update.message.reply_text("❌ خطا در پردازش درخواست.")
-        return States.EDIT_NEED
+        await update.message.reply_text("
 async def handle_need_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle need edit action selection"""
     await clear_conversation_state(update, context, silent=True)
