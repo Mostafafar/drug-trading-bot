@@ -6348,10 +6348,10 @@ def main():
                 MessageHandler(filters.Regex('^ثبت نیاز جدید$'), add_need),
                 MessageHandler(filters.Regex('^لیست نیازهای من$'), list_my_needs),
                 MessageHandler(filters.Regex('^✏️ ویرایش نیازها$'), handle_edit_needs_button),
-                CallbackQueryHandler(edit_needs, pattern="^edit_needs$"),
-                CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
-                CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
-                CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$"),
+          #      CallbackQueryHandler(edit_needs, pattern="^edit_needs$"),
+          #      CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
+            #    CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
+             #   CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$"),
                 CallbackQueryHandler(handle_need_drug_selection, pattern="^need_drug_") 
             ],
             states={
@@ -6373,17 +6373,17 @@ def main():
                 States.EDIT_NEED: [
                     MessageHandler(filters.Regex(r'^(✏️ .+)$'), handle_select_need_for_edit),
                     MessageHandler(filters.Regex(r'^(🔙 بازگشت|🔙 بازگشت به منوی اصلی)$'), handle_back_from_edit_need),
-                    MessageHandler(filters.Regex(r'^(✏️ ویرایش نام|✏️ ویرایش توضیحات|✏️ ویرایش تعداد|🗑️ حذف نیاز)$'), 
+                    MessageHandler(filters.Regex(r'^(✏️ ویرایش تعداد|🗑️ حذف نیاز)$'), 
                                  handle_need_edit_action_from_keyboard),
                     MessageHandler(filters.Regex(r'^(✅ بله، حذف شود|❌ خیر، انصراف)$'), 
                                  handle_need_deletion_confirmation),
                     MessageHandler(filters.Regex(r'^(✏️ .+)$'), handle_select_need_for_edit),
                     MessageHandler(filters.Regex(r'^(🔙 بازگشت|🔙 بازگشت به منوی اصلی)$'), handle_back_from_edit_need),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_need_edit),
-                    CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
-                    CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
-                    CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
-                    CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
+                    #CallbackQueryHandler(edit_needs, pattern="^back_to_needs_list$"),
+                   # CallbackQueryHandler(edit_need_item, pattern="^edit_need_"),
+                  #  CallbackQueryHandler(handle_need_edit_action, pattern="^(edit_need_name|edit_need_desc|edit_need_quantity|delete_need)$"),
+                  #  CallbackQueryHandler(handle_need_deletion, pattern="^(confirm_need_delete|cancel_need_delete)$")
 
                 ]
             },
