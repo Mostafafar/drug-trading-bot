@@ -3850,17 +3850,18 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
             
         selection = update.message.text
         
-        # 🔥 اولویت اول: بررسی دکمه‌های عملیاتی
+        # اولویت اول: بررسی دکمه‌های عملیاتی
         if selection in ["🔙 بازگشت", "🔙 بازگشت به منوی اصلی"]:
             return await list_my_needs(update, context)
             
-        if selection in ["✏️ ویرایش نام", "✏️ ویرایش توضیحات", "✏️ ویرایش تعداد", "🗑️ حذف نیاز"]:
+        # ❌ فقط ویرایش تعداد و حذف
+        if selection in ["✏️ ویرایش تعداد", "🗑️ حذف نیاز"]:
             return await handle_need_edit_action_from_keyboard(update, context)
             
         if selection in ["✅ بله، حذف شود", "❌ خیر، انصراف"]:
             return await handle_need_deletion_confirmation(update, context)
         
-        # 🔥 سپس بررسی انتخاب نیاز از لیست
+        # سپس بررسی انتخاب نیاز از لیست
         if selection.startswith("✏️ "):
             # استخراج نام کامل نیاز از دکمه
             need_name = selection[2:].strip()
@@ -3900,19 +3901,19 @@ async def handle_select_need_for_edit(update: Update, context: ContextTypes.DEFA
             if selected_need:
                 context.user_data['editing_need'] = dict(selected_need)
                 
-                # نمایش منوی ویرایش برای نیاز انتخاب شده
+                # ❌ منوی ساده‌تر: فقط ویرایش تعداد و حذف
                 keyboard = [
-                    ['✏️ ویرایش نام', '✏️ ویرایش توضیحات'],
-                    ['✏️ ویرایش تعداد', '🗑️ حذف نیاز'],
+                    ['✏️ ویرایش تعداد'],
+                    ['🗑️ حذف نیاز'],
                     ['🔙 بازگشت به لیست نیازها']
                 ]
                 reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
                 
                 await update.message.reply_text(
                     f"ویرایش نیاز:\n\n"
-                    f"نام: {selected_need['name']}\n"
-                    f"توضیحات: {selected_need['description'] or 'بدون توضیح'}\n"
-                    f"تعداد: {selected_need['quantity']}\n\n"
+                    f"💊 نام: {selected_need['name']}\n"
+                    f"📝 توضیحات: {selected_need['description'] or 'بدون توضیح'}\n"
+                    f"📦 تعداد: {selected_need['quantity']}\n\n"
                     "لطفا گزینه مورد نظر را انتخاب کنید:",
                     reply_markup=reply_markup
                 )
@@ -4002,9 +4003,10 @@ async def edit_need_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return ConversationHandler.END
 async def handle_need_edit_action_from_keyboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle need edit actions from keyboard buttons"""
+    """Handle need edit actions from keyboard buttons - فقط ویرایش تعداد و حذف"""
     try:
         if not update.message:
+            logger.error("No message in handle_need_edit_action_from_keyboard")
             return States.EDIT_NEED
             
         action = update.message.text
@@ -4014,23 +4016,9 @@ async def handle_need_edit_action_from_keyboard(update: Update, context: Context
             await update.message.reply_text("❌ ابتدا یک نیاز را برای ویرایش انتخاب کنید.")
             return await edit_needs(update, context)
         
-        if action == "✏️ ویرایش نام":
-            await update.message.reply_text(
-                f"نام فعلی: {need['name']}\n\nلطفا نام جدید را وارد کنید:",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            context.user_data['edit_field'] = 'name'
-            return States.EDIT_NEED
-            
-        elif action == "✏️ ویرایش توضیحات":
-            await update.message.reply_text(
-                f"توضیحات فعلی: {need['description'] or 'بدون توضیح'}\n\nلطفا توضیحات جدید را وارد کنید:",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            context.user_data['edit_field'] = 'description'
-            return States.EDIT_NEED
-            
-        elif action == "✏️ ویرایش تعداد":
+        # ❌ ویرایش نام و توضیحات حذف شد
+        # ✅ فقط ویرایش تعداد و حذف
+        if action == "✏️ ویرایش تعداد":
             await update.message.reply_text(
                 f"تعداد فعلی: {need['quantity']}\n\nلطفا تعداد جدید را وارد کنید:",
                 reply_markup=ReplyKeyboardRemove()
@@ -4193,7 +4181,7 @@ async def handle_need_edit_action(update: Update, context: ContextTypes.DEFAULT_
         return ConversationHandler.END
 
 async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save need edit changes"""
+    """Save need edit changes - فقط برای تعداد"""
     try:
         # بررسی اگر کاربر می‌خواهد بازگردد
         if update.message.text in ["🔙 بازگشت", "🔙 بازگشت به منوی اصلی"]:
@@ -4207,6 +4195,7 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("خطا در ویرایش. لطفا دوباره تلاش کنید.")
             return ConversationHandler.END
 
+        # ❌ فقط برای تعداد
         if edit_field == 'quantity':
             try:
                 new_value = int(new_value)
@@ -4233,7 +4222,7 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 await update.message.reply_text(
                     f"✅ ویرایش با موفقیت انجام شد!\n\n"
-                    f"فیلد {edit_field} به {new_value} تغییر یافت."
+                    f"تعداد به {new_value} تغییر یافت."
                 )
                 
                 # Update context
@@ -4246,22 +4235,20 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if conn:
                 conn.close()
         
-        # Show edit menu again
+        # Show edit menu again (ساده‌تر)
         keyboard = [
-            [InlineKeyboardButton("✏️ ویرایش نام", callback_data="edit_need_name")],
-            [InlineKeyboardButton("✏️ ویرایش توضیحات", callback_data="edit_need_desc")],
-            [InlineKeyboardButton("✏️ ویرایش تعداد", callback_data="edit_need_quantity")],
-            [InlineKeyboardButton("🗑️ حذف نیاز", callback_data="delete_need")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_needs_list")]
+            ['✏️ ویرایش تعداد'],
+            ['🗑️ حذف نیاز'],
+            ['🔙 بازگشت به لیست نیازها']
         ]
         
         await update.message.reply_text(
             f"ویرایش نیاز:\n\n"
-            f"نام: {need['name']}\n"
-            f"توضیحات: {need['description'] or 'بدون توضیح'}\n"
-            f"تعداد: {need['quantity']}\n\n"
+            f"💊 نام: {need['name']}\n"
+            f"📝 توضیحات: {need['description'] or 'بدون توضیح'}\n"
+            f"📦 تعداد: {need['quantity']}\n\n"
             "لطفا گزینه مورد نظر را انتخاب کنید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            reply_markup=ReplyKeyboardMarkup(keyboard)
         )
         return States.EDIT_NEED
     except Exception as e:
