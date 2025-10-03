@@ -4075,7 +4075,7 @@ async def handle_need_deletion_confirmation(update: Update, context: ContextType
         
         if not need:
             await update.message.reply_text("❌ اطلاعات نیاز یافت نشد.")
-            return await edit_needs(update, context)
+            return await clear_conversation_state(update, context)
         
         if confirmation == "✅ بله، حذف شود":
             conn = None
@@ -4098,50 +4098,55 @@ async def handle_need_deletion_confirmation(update: Update, context: ContextType
                     conn.commit()
                     
                     if deleted_rows > 0:
+                        # 🔥 پاک‌سازی کامل و بازگشت به منوی اصلی
+                        context.user_data.clear()
+                        
+                        keyboard = [
+                            ['اضافه کردن دارو', 'جستجوی دارو'],
+                            ['لیست داروهای من', 'ثبت نیاز جدید'],
+                            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                            ['تنظیم شاخه‌های دارویی']
+                        ]
+                        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                        
                         await update.message.reply_text(
-                            f"✅ نیاز «{need['name']}» با موفقیت حذف شد.",
-                            reply_markup=ReplyKeyboardRemove()
+                            f"✅ نیاز «{need['name']}» با موفقیت حذف شد.\n\nبه منوی اصلی بازگشتید:",
+                            reply_markup=reply_markup
                         )
-                        
-                        # پاک کردن اطلاعات از context
-                        context.user_data.pop('editing_need', None)
-                        context.user_data.pop('editing_needs_list', None)
-                        
-                        # بازگشت به لیست نیازها
-                        return await list_my_needs(update, context)
+                        return ConversationHandler.END
                     else:
                         await update.message.reply_text(
                             "❌ نیاز یافت نشد یا قبلاً حذف شده است.",
                             reply_markup=ReplyKeyboardRemove()
                         )
-                        return await edit_needs(update, context)
+                        return await clear_conversation_state(update, context)
                     
             except Exception as e:
                 logger.error(f"Error deleting need {need['id']}: {e}")
                 if conn:
                     conn.rollback()
                 
-                # پیام خطای خاص برای Foreign Key constraint
-                if "foreign key constraint" in str(e).lower():
-                    await update.message.reply_text(
-                        "❌ این نیاز در سیستم استفاده شده و نمی‌توان آن را حذف کرد.\n\n"
-                        "⚠️ لطفاً ابتدا نوتیفیکیشن‌های مربوطه را بررسی کنید.",
-                        reply_markup=ReplyKeyboardRemove()
-                    )
-                else:
-                    await update.message.reply_text(
-                        "❌ خطا در حذف نیاز از پایگاه داده.",
-                        reply_markup=ReplyKeyboardRemove()
-                    )
+                # پاک‌سازی و بازگشت به منوی اصلی در صورت خطا
+                context.user_data.clear()
+                
+                keyboard = [
+                    ['اضافه کردن دارو', 'جستجوی دارو'],
+                    ['لیست داروهای من', 'ثبت نیاز جدید'],
+                    ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                    ['تنظیم شاخه‌های دارویی']
+                ]
+                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                
+                await update.message.reply_text(
+                    "❌ خطا در حذف نیاز.\n\nبه منوی اصلی بازگشتید:",
+                    reply_markup=reply_markup
+                )
+                return ConversationHandler.END
             finally:
                 if conn:
                     conn.close()
                     
         elif confirmation == "❌ خیر، انصراف":
-            await update.message.reply_text(
-                "حذف نیاز لغو شد.",
-                reply_markup=ReplyKeyboardRemove()
-            )
             # بازگشت به منوی ویرایش همان نیاز
             keyboard = [
                 ['✏️ ویرایش تعداد'],
@@ -4162,8 +4167,23 @@ async def handle_need_deletion_confirmation(update: Update, context: ContextType
             
     except Exception as e:
         logger.error(f"Error in handle_need_deletion_confirmation: {e}")
-        await update.message.reply_text("❌ خطا در پردازش درخواست.")
-        return States.EDIT_NEED
+        
+        # در صورت خطا به منوی اصلی برگرد
+        context.user_data.clear()
+        
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        await update.message.reply_text(
+            "❌ خطا در پردازش درخواست.\n\nبه منوی اصلی بازگشتید:",
+            reply_markup=reply_markup
+        )
+        return ConversationHandler.END
 async def handle_need_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle need edit action selection"""
     await clear_conversation_state(update, context, silent=True)
@@ -4219,13 +4239,13 @@ async def handle_need_edit_action(update: Update, context: ContextTypes.DEFAULT_
         return ConversationHandler.END
 
 async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save need edit changes - فقط برای تعداد"""
+    """ذخیره ویرایش تعداد نیاز و بازگشت صحیح به منوی اصلی"""
     try:
-        # 🔥 اول بررسی کن اگر کاربر می‌خواهد بازگردد
-        user_input = update.message.text
+        user_input = update.message.text.strip()
         
+        # 🔥 اول بررسی کن اگر کاربر می‌خواهد بازگردد
         if user_input in ["🔙 بازگشت", "🔙 بازگشت به لیست نیازها", "🔙 بازگشت به منوی اصلی"]:
-            return await list_my_needs(update, context)
+            return await clear_conversation_state(update, context)
         
         edit_field = context.user_data.get('edit_field')
         new_value = user_input
@@ -4233,7 +4253,7 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if not edit_field or not need:
             await update.message.reply_text("خطا در ویرایش. لطفا دوباره تلاش کنید.")
-            return ConversationHandler.END
+            return await clear_conversation_state(update, context)
 
         # ❌ فقط برای تعداد
         if edit_field == 'quantity':
@@ -4285,26 +4305,43 @@ async def save_need_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if conn:
                 conn.close()
         
-        # Show edit menu again (ساده‌تر)
+        # 🔥 پاک‌سازی کامل context و بازگشت به منوی اصلی
+        context.user_data.clear()
+        
+        # نمایش منوی اصلی با کیبورد استاندارد
         keyboard = [
-            ['✏️ ویرایش تعداد'],
-            ['🗑️ حذف نیاز'],
-            ['🔙 بازگشت به لیست نیازها']
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
         ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         
         await update.message.reply_text(
-            f"ویرایش نیاز:\n\n"
-            f"💊 نام: {need['name']}\n"
-            f"📝 توضیحات: {need['description'] or 'بدون توضیح'}\n"
-            f"📦 تعداد: {need['quantity']}\n\n"
-            "لطفا گزینه مورد نظر را انتخاب کنید:",
-            reply_markup=ReplyKeyboardMarkup(keyboard)
+            "✅ ویرایش نیاز با موفقیت انجام شد.\n\nبه منوی اصلی بازگشتید:",
+            reply_markup=reply_markup
         )
-        return States.EDIT_NEED
+        
+        return ConversationHandler.END
         
     except Exception as e:
         logger.error(f"Error in save_need_edit: {e}")
-        await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        
+        # در صورت خطا هم به منوی اصلی برگرد
+        context.user_data.clear()
+        
+        keyboard = [
+            ['اضافه کردن دارو', 'جستجوی دارو'],
+            ['لیست داروهای من', 'ثبت نیاز جدید'],
+            ['لیست نیازهای من', 'ساخت کد پرسنل'],
+            ['تنظیم شاخه‌های دارویی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        
+        await update.message.reply_text(
+            "⚠️ خطایی در ویرایش رخ داد.\n\nبه منوی اصلی بازگشتید:",
+            reply_markup=reply_markup
+        )
         return ConversationHandler.END
 async def handle_need_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle need deletion confirmation"""
