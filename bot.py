@@ -658,7 +658,8 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
                 'selected_pharmacy_id', 'selected_pharmacy_name', 'selected_drug',
                 'offer_items', 'comp_items', 'need_name', 'need_desc',
                 'selected_drug_for_need', 'editing_need', 'edit_field',
-                'editing_drug'  
+                'editing_drug','user_needs_list', 'editing_needs_list', 'editing_need',
+                'editing_drug', 'edit_field'  
             ]
             
             # ذخیره اطلاعات مبادله
