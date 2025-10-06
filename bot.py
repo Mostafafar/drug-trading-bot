@@ -3678,8 +3678,8 @@ async def add_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton(
                 "🔍 جستجوی دارو برای نیاز", 
                 switch_inline_query_current_chat="need "
-            )],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+            )]
+            
         ]
         
         await update.message.reply_text(
