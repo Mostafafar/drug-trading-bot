@@ -2608,8 +2608,8 @@ async def search_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
     """شروع جستجو با اینلاین کوئری"""
     await clear_conversation_state(update, context, silent=True)
     keyboard = [
-        [InlineKeyboardButton("🔍 جستجوی دارو", switch_inline_query_current_chat="")],
-        [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+        [InlineKeyboardButton("🔍 جستجوی دارو", switch_inline_query_current_chat="")]
+        
     ]
     
     await update.message.reply_text(
