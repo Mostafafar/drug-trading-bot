@@ -2444,8 +2444,8 @@ async def add_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton(
                 "🔍 جستجوی دارو برای اضافه کردن", 
                 switch_inline_query_current_chat="add "
-            )],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back")]
+            )]
+            
         ]
         
         await update.message.reply_text(
