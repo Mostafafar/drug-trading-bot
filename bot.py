@@ -2874,7 +2874,7 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # بازگشت به منوی اصلی در صورت خطا
         return await clear_conversation_state(update, context)
 async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """لیست داروهای کاربر با کیبورد معمولی مشابه نیازها"""
+    """لیست داروهای کاربر با فقط دو دکمه: ویرایش داروها و بازگشت"""
     try:
         # پاک کردن stateهای قبلی
         await clear_conversation_state(update, context, silent=True)
@@ -2906,16 +2906,11 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # ذخیره لیست داروها در context برای استفاده در ویرایش
                     context.user_data['user_drugs_list'] = drugs
                     
-                    # ساخت کیبورد معمولی مشابه نیازها
-                    keyboard = []
-                    for drug in drugs:
-                        # نمایش نام کامل دارو در دکمه
-                        button_text = f"✏️ {drug['name']}"
-                        keyboard.append([button_text])
-                    
-                    # دکمه ویرایش داروها و بازگشت
-                    keyboard.append(["✏️ ویرایش داروها"])
-                    keyboard.append(["🔙 بازگشت به منوی اصلی"])
+                    # ساخت کیبورد ساده با فقط دو دکمه
+                    keyboard = [
+                        ['✏️ ویرایش داروها'],
+                        ['🔙 بازگشت به منوی اصلی']
+                    ]
                     
                     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
                     
@@ -2939,9 +2934,8 @@ async def list_my_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in list_my_drugs: {e}")
         return ConversationHandler.END
-
 async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """شروع فرآیند ویرایش داروها با کیبورد معمولی"""
+    """شروع فرآیند ویرایش داروها - نمایش لیست داروها با دکمه‌های ✏️"""
     try:
         # حذف stateهای مربوط به نیازها
         need_keys = ['editing_need', 'edit_field', 'user_needs_list', 'editing_needs_list']
@@ -2976,15 +2970,15 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("هیچ دارویی برای ویرایش وجود ندارد.")
             return ConversationHandler.END
         
-        # ساخت کیبورد برای انتخاب دارو - با نام کامل
+        # ساخت کیبورد برای انتخاب دارو - هر دارو با دکمه ✏️
         keyboard = []
         for drug in drugs:
-            # نمایش نام کامل بدون کوتاه کردن
+            # نمایش نام کامل با دکمه ✏️
             display_name = drug['name']
-            
             button_text = f"✏️ {display_name.strip()}"
             keyboard.append([button_text])
         
+        # دکمه بازگشت به لیست داروها (نه منوی اصلی)
         keyboard.append(["🔙 بازگشت به لیست داروها"])
         
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -3003,6 +2997,8 @@ async def edit_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in edit_drugs: {e}", exc_info=True)
         await update.message.reply_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
+
 async def handle_select_drug_for_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت انتخاب دارو خاص برای ویرایش"""
     try:
