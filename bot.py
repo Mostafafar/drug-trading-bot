@@ -6995,6 +6995,8 @@ def main():
         application.add_handler(drug_handler)
         application.add_handler(needs_handler)
         application.add_handler(trade_handler)
+        # In your main application setup
+        application.add_handler(search_handler)
         application.add_handler(categories_handler)
         application.add_handler(admin_handler)
         application.add_handler(InlineQueryHandler(handle_inline_query))
