@@ -6305,11 +6305,14 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
             return await setup_medical_categories(update, context)
         
         # 🔥 سیستم ویرایش داروها - کاملاً مشابه نیازها
+        # در تابع handle_state_change، این بخش را اضافه/اصلاح کنید:
+
         elif text == '✏️ ویرایش داروها':
             return await edit_drugs(update, context)
-        elif text.startswith('✏️ ') and not text.endswith('ها') and 'editing_drugs_list' in context.user_data:
-            # تشخیص دکمه‌های ویرایش داروهای خاص (مثل "✏️ استامینوفن")
+        elif text.startswith('✏️ ') and not text.endswith('ها'):
+    # تشخیص دکمه‌های ویرایش داروهای خاص (مثل "✏️ استامینوفن")
             return await handle_select_drug_for_edit(update, context)
+
         elif text in ['✏️ ویرایش تاریخ', '✏️ ویرایش تعداد', '🗑️ حذف دارو']:
             # مدیریت دکمه‌های ویرایش جزئیات دارو
             return await handle_drug_edit_action_from_keyboard(update, context)
