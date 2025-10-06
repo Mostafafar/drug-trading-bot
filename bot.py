@@ -6236,6 +6236,7 @@ async def main_menu_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in main_menu_access: {e}")
         await update.message.reply_text("خطایی در بازگشت به منوی اصلی رخ داد.")
         return ConversationHandler.END
+
 async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت تغییر فاز بین عملیات مختلف با تشخیص stateهای فعال"""
     try:
@@ -6306,9 +6307,40 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
             return await generate_personnel_code(update, context)
         elif text == 'تنظیم شاخه‌های دارویی':
             return await setup_medical_categories(update, context)
+        
+        # 🔥 سیستم ویرایش داروها - کاملاً مشابه نیازها
+        elif text == '✏️ ویرایش داروها':
+            return await edit_drugs(update, context)
+        elif text.startswith('✏️ ') and not text.endswith('ها') and 'editing_drugs_list' in context.user_data:
+            # تشخیص دکمه‌های ویرایش داروهای خاص (مثل "✏️ استامینوفن")
+            return await handle_select_drug_for_edit(update, context)
+        elif text in ['✏️ ویرایش تاریخ', '✏️ ویرایش تعداد', '🗑️ حذف دارو']:
+            # مدیریت دکمه‌های ویرایش جزئیات دارو
+            return await handle_drug_edit_action_from_keyboard(update, context)
+        elif text in ['✅ بله، حذف شود', '❌ خیر، انصراف'] and 'editing_drug' in context.user_data:
+            # مدیریت تأیید حذف دارو
+            return await handle_drug_deletion_confirmation(update, context)
+        elif text == '🔙 بازگشت به لیست داروها':
+            # بازگشت از ویرایش جزئیات به لیست داروها
+            return await list_my_drugs(update, context)
+        
+        # 🔥 سیستم ویرایش نیازها
         elif text == '✏️ ویرایش نیازها':
-            # هندلر جدید برای دکمه ویرایش نیازها
             return await handle_edit_needs_button(update, context)
+        elif text.startswith('✏️ ') and ' (' in text and text.endswith(')'):
+            # تشخیص دکمه‌های ویرایش نیازهای خاص (مثل "✏️ استامینوفن (100)")
+            return await handle_select_need_for_edit(update, context)
+        elif text in ['✏️ ویرایش نام', '✏️ ویرایش توضیحات', '✏️ ویرایش تعداد', '🗑️ حذف نیاز']:
+            # مدیریت دکمه‌های ویرایش جزئیات نیاز
+            return await handle_need_edit_action_from_keyboard(update, context)
+        elif text in ['✅ بله، حذف شود', '❌ خیر، انصراف'] and 'editing_need' in context.user_data:
+            # مدیریت تأیید حذف نیاز
+            return await handle_need_deletion_confirmation(update, context)
+        elif text == '🔙 بازگشت به لیست نیازها':
+            # بازگشت از ویرایش جزئیات به لیست نیازها
+            return await list_my_needs(update, context)
+        
+        # 🔥 بازگشت‌های عمومی
         elif text == '🔙 بازگشت به منوی اصلی':
             # بازگشت به منوی اصلی
             keyboard = [
@@ -6323,21 +6355,16 @@ async def handle_state_change(update: Update, context: ContextTypes.DEFAULT_TYPE
                 reply_markup=reply_markup
             )
             return ConversationHandler.END
-        elif text.startswith('✏️ ') and ' (' in text and text.endswith(')'):
-            # تشخیص دکمه‌های ویرایش نیازهای خاص (مثل "✏️ استامینوفن (100)")
-            return await handle_select_need_for_edit(update, context)
-        elif text in ['✏️ ویرایش نام', '✏️ ویرایش توضیحات', '✏️ ویرایش تعداد', '🗑️ حذف نیاز']:
-            # مدیریت دکمه‌های ویرایش جزئیات نیاز
-            return await handle_need_edit_action_from_keyboard(update, context)
-        elif text in ['✅ بله، حذف شود', '❌ خیر، انصراف']:
-            # مدیریت تأیید حذف نیاز
-            return await handle_need_deletion_confirmation(update, context)
-        elif text == '🔙 بازگشت به لیست':
-            # بازگشت از ویرایش جزئیات به لیست نیازها
-            return await list_my_needs(update, context)
         elif text == '🔙 بازگشت':
-            # بازگشت عمومی
-            return await list_my_needs(update, context)
+            # بازگشت عمومی - تشخیص نوع بازگشت بر اساس context
+            if 'editing_drug' in context.user_data or 'editing_drugs_list' in context.user_data:
+                return await list_my_drugs(update, context)
+            elif 'editing_need' in context.user_data or 'user_needs_list' in context.user_data:
+                return await list_my_needs(update, context)
+            else:
+                # بازگشت به منوی اصلی اگر context مشخص نیست
+                return await clear_conversation_state(update, context)
+        
         else:
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
