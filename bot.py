@@ -261,7 +261,8 @@ async def initialize_db():
                     buyer_id BIGINT REFERENCES users(id),
                     status TEXT DEFAULT 'pending',
                     total_price NUMERIC,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    responded_at TIMESTAMP
                 )
             ''')
             logger.info("Created offers table")
