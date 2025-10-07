@@ -5894,6 +5894,54 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return await submit_offer(update, context)
         
+        # 🔥 دریافت اطلاعات تاریخ از دیتابیس
+        conn = None
+        offer_drugs_info = []
+        comp_drugs_info = []
+        
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                # دریافت اطلاعات داروهای درخواستی
+                for item in offer_items:
+                    cursor.execute('''
+                    SELECT date FROM drug_items WHERE id = %s
+                    ''', (item.get('drug_id'),))
+                    date_result = cursor.fetchone()
+                    date = date_result[0] if date_result else 'نامشخص'
+                    offer_drugs_info.append({
+                        'name': item['drug_name'],
+                        'price': item['price'],
+                        'quantity': item['quantity'],
+                        'date': date
+                    })
+                
+                # دریافت اطلاعات داروهای جبرانی
+                for item in comp_items:
+                    cursor.execute('''
+                    SELECT name, price, date FROM drug_items WHERE id = %s
+                    ''', (item['id'],))
+                    drug_result = cursor.fetchone()
+                    if drug_result:
+                        comp_drugs_info.append({
+                            'name': drug_result[0],
+                            'price': drug_result[1],
+                            'quantity': item['quantity'],
+                            'date': drug_result[2]
+                        })
+                    else:
+                        comp_drugs_info.append({
+                            'name': item.get('name', 'نامشخص'),
+                            'price': item.get('price', 'نامشخص'),
+                            'quantity': item['quantity'],
+                            'date': 'نامشخص'
+                        })
+        except Exception as e:
+            logger.error(f"Error getting drug dates: {e}")
+        finally:
+            if conn:
+                conn.close()
+        
         keyboard = [
             [InlineKeyboardButton("✅ ارسال پیشنهاد", callback_data="send_offer")],
             [InlineKeyboardButton("✏️ ویرایش", callback_data="edit_selection")],
@@ -5902,22 +5950,16 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         message = "📋 تأیید نهایی پیشنهاد:\n\n"
         message += "📌 داروهای درخواستی:\n"
-        for item in offer_items:
-            message += f"- {item['drug_name']} - {item['price']}\n"
-            message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item.get('date', 'نامشخص')}\n"
+        for item in offer_drugs_info:
+            message += f"- {item['name']} - {item['price']}\n"
+            message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
         message += f"\n💰 جمع کل درخواستی: {format_price(offer_total)}\n"
         
         message += "\n📌 داروهای جبرانی شما:\n"
-        if comp_items:
-            for item in comp_items:
-                # استفاده از get برای مدیریت فیلدهای ممکن
-                drug_name = item.get('name') or item.get('drug_name', 'نامشخص')
-                price = item.get('price', 'نامشخص')
-                quantity = item.get('quantity', 0)
-                date = item.get('date', 'نامشخص')
-                
-                message += f"- {drug_name} - {price}\n"
-                message += f"  📦 تعداد: {quantity} عدد | 📅 تاریخ: {date}\n"
+        if comp_drugs_info:
+            for item in comp_drugs_info:
+                message += f"- {item['name']} - {item['price']}\n"
+                message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
             message += f"\n💰 جمع کل جبرانی: {format_price(comp_total)}\n"
         else:
             message += "هیچ داروی جبرانی انتخاب نشده است.\n"
@@ -5984,6 +6026,45 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 conn.commit()
                 
+                # 🔥 دریافت اطلاعات تاریخ داروها از دیتابیس
+                offer_drugs_info = []
+                comp_drugs_info = []
+                
+                # دریافت اطلاعات داروهای درخواستی
+                for item in offer_items:
+                    cursor.execute('''
+                    SELECT date FROM drug_items WHERE id = %s
+                    ''', (item.get('drug_id'),))
+                    date_result = cursor.fetchone()
+                    date = date_result[0] if date_result else 'نامشخص'
+                    offer_drugs_info.append({
+                        'name': item['drug_name'],
+                        'price': item['price'],
+                        'quantity': item['quantity'],
+                        'date': date
+                    })
+                
+                # دریافت اطلاعات داروهای جبرانی
+                for item in comp_items:
+                    cursor.execute('''
+                    SELECT name, price, date FROM drug_items WHERE id = %s
+                    ''', (item['id'],))
+                    drug_result = cursor.fetchone()
+                    if drug_result:
+                        comp_drugs_info.append({
+                            'name': drug_result[0],
+                            'price': drug_result[1],
+                            'quantity': item['quantity'],
+                            'date': drug_result[2]
+                        })
+                    else:
+                        comp_drugs_info.append({
+                            'name': item.get('name', 'نامشخص'),
+                            'price': item.get('price', 'نامشخص'),
+                            'quantity': item['quantity'],
+                            'date': 'نامشخص'
+                        })
+                
                 keyboard = [
                     [InlineKeyboardButton("✅ تأیید پیشنهاد", callback_data=f"accept_{offer_id}")],
                     [InlineKeyboardButton("❌ رد پیشنهاد", callback_data=f"reject_{offer_id}")]
@@ -5991,21 +6072,16 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 offer_message = "📬 پیشنهاد جدید دریافت شد:\n\n"
                 offer_message += "📌 داروهای درخواستی:\n"
-                for item in offer_items:
-                    offer_message += f"- {item['drug_name']} - {item['price']}\n"
-                    offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item.get('date', 'نامشخص')}\n"
+                for item in offer_drugs_info:
+                    offer_message += f"- {item['name']} - {item['price']}\n"
+                    offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
                 offer_message += f"\n💰 جمع کل درخواستی: {format_price(offer_total)}\n"
                 
                 offer_message += "\n📌 داروهای جبرانی:\n"
-                if comp_items:
-                    for item in comp_items:
-                        drug_name = item.get('name') or item.get('drug_name', 'نامشخص')
-                        price = item.get('price', 'نامشخص')
-                        quantity = item.get('quantity', 0)
-                        date = item.get('date', 'نامشخص')
-                        
-                        offer_message += f"- {drug_name} - {price}\n"
-                        offer_message += f"  📦 تعداد: {quantity} عدد | 📅 تاریخ: {date}\n"
+                if comp_drugs_info:
+                    for item in comp_drugs_info:
+                        offer_message += f"- {item['name']} - {item['price']}\n"
+                        offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
                     offer_message += f"\n💰 جمع کل جبرانی: {format_price(comp_total)}\n"
                 else:
                     offer_message += "هیچ داروی جبرانی انتخاب نشده است.\n"
