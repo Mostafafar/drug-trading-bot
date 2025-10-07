@@ -7389,9 +7389,9 @@ def main():
         application.add_handler(MessageHandler(filters.Regex('^ساخت کد پرسنل$'), generate_personnel_code))
         application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
         application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_user_"))
+        # جدید - مدیریت accept/reject پیشنهادهای دارو
+        application.add_handler(CallbackQueryHandler(handle_offer_response, pattern=r'^(accept|reject)_[0-9]+$'))
         
-        application.add_handler(CallbackQueryHandler(approve_user_callback, pattern="^approve_"))
-        application.add_handler(CallbackQueryHandler(approve_user_callback, pattern="^reject_"))
         application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_user_"))
         application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_user_"))
         application.add_handler(CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"))
