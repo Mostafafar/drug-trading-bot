@@ -4849,7 +4849,7 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # اضافه کردن به پیام
                     message += f"🏥 {pharmacy_name}:\n"
                     for drug in drugs[:3]:  # حداکثر 3 دارو نمایش داده شود
-                        message += f"  💊 {drug['drug_name']} - {drug['price']} - {drug['quantity']} عدد\n"
+                      message += f"  💊 {drug['drug_name']} - {drug['price']} - {drug['quantity']} عدد - 📅 {drug['date']}\n"
                     if len(drugs) > 3:
                         message += f"  ... و {len(drugs) - 3} داروی دیگر\n"
                     message += "\n"
