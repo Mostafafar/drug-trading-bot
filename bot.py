@@ -5071,7 +5071,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
                 message = f"💊 انتخاب دارو برای مبادله با {pharmacy_name}\n\n"
                 message += f"📌 {list_title} (صفحه {page + 1} از {max(1, (total_items + items_per_page - 1) // items_per_page)}):\n"
                 for i, drug in enumerate(drugs, 1):
-                    message += f"{i}. {drug['name']} - {drug['price']} - {drug['quantity']} عدد\n"
+                    message += f"{i}. {drug['name']} - {drug['price']} - {drug['quantity']} عدد - 📅 {drug['date']}\n"
                 
                 # نمایش خلاصه انتخاب‌ها
                 if offer_items or comp_items:
