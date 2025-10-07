@@ -6035,12 +6035,12 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 conn.commit()
                 
-                # 🔥 دریافت اطلاعات برای پیام‌رسانی
+                # 🔥 دریافت اطلاعات برای پیام‌رسانی - بخش اصلاح شده
                 cursor.execute('''
                 SELECT u.first_name, u.last_name, u.username, p.name as pharmacy_name
                 FROM users u
-                JOIN pharmacies p ON u.id = p.user_id
-                WHERE p.user_id = %s
+                LEFT JOIN pharmacies p ON u.id = p.user_id
+                WHERE u.id = %s
                 ''', (pharmacy_id,))
                 pharmacy_info = cursor.fetchone()
                 
@@ -6052,25 +6052,58 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # ساخت پیام برای داروخانه
                 offer_message = "📬 پیشنهاد جدید دریافت شد:\n\n"
-                offer_message += f"👤 از: {buyer_info[0]} {buyer_info[1]}\n"
-                if buyer_info[2]:
-                    offer_message += f"📎 @{buyer_info[2]}\n"
+                
+                # 🔥 نمایش اطلاعات خریدار - با چک کردن مقادیر None
+                if buyer_info:
+                    buyer_first = buyer_info[0] or "نام"
+                    buyer_last = buyer_info[1] or "فامیل"
+                    buyer_username = buyer_info[2] or "ندارد"
+                    
+                    offer_message += f"👤 از: {buyer_first} {buyer_last}\n"
+                    if buyer_username != "ندارد":
+                        offer_message += f"📎 @{buyer_username}\n"
+                else:
+                    offer_message += "👤 از: کاربر ناشناس\n"
                 
                 offer_message += "\n📌 داروهای درخواستی:\n"
+                
+                # 🔥 دریافت و نمایش تاریخ انقضا برای داروهای درخواستی
                 for item in offer_items:
+                    cursor.execute('''
+                    SELECT date FROM drug_items WHERE id = %s
+                    ''', (item.get('drug_id'),))
+                    date_result = cursor.fetchone()
+                    expiry_date = date_result[0] if date_result else 'نامشخص'
+                    
                     offer_message += f"• {item['drug_name']} - {item['price']}\n"
-                    offer_message += f"  📦 تعداد: {item['quantity']} عدد\n"
+                    offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {expiry_date}\n"
                 
                 offer_message += "\n📌 داروهای جبرانی:\n"
+                
+                # 🔥 دریافت و نمایش تاریخ انقضا برای داروهای جبرانی
                 if comp_items:
                     for item in comp_items:
-                        offer_message += f"• {item.get('name', 'نامشخص')} - {item.get('price', 'نامشخص')}\n"
-                        offer_message += f"  📦 تعداد: {item['quantity']} عدد\n"
+                        cursor.execute('''
+                        SELECT name, price, date FROM drug_items WHERE id = %s
+                        ''', (item['id'],))
+                        drug_result = cursor.fetchone()
+                        
+                        if drug_result:
+                            drug_name = drug_result[0] or item.get('name', 'نامشخص')
+                            drug_price = drug_result[1] or item.get('price', 'نامشخص')
+                            expiry_date = drug_result[2] or 'نامشخص'
+                            
+                            offer_message += f"• {drug_name} - {drug_price}\n"
+                            offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {expiry_date}\n"
+                        else:
+                            offer_message += f"• {item.get('name', 'نامشخص')} - {item.get('price', 'نامشخص')}\n"
+                            offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: نامشخص\n"
                 else:
                     offer_message += "• هیچ داروی جبرانی\n"
                 
                 offer_message += f"\n💰 جمع کل: {format_price(offer_total)}\n"
                 
+                # 🔥 ایجاد دکمه‌های اینلاین
                 keyboard = [
                     [InlineKeyboardButton("✅ تأیید پیشنهاد", callback_data=f"accept_{offer_id}")],
                     [InlineKeyboardButton("❌ رد پیشنهاد", callback_data=f"reject_{offer_id}")]
@@ -6080,8 +6113,11 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(
                     chat_id=pharmacy_id,
                     text=offer_message,
-                    reply_markup=InlineKeyboardMarkup(keyboard)
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode=ParseMode.HTML
                 )
+                
+                # ادامه کد...
                 
                 # 🔥 ارسال پیام به ادمین
                 admin_message = "🆕 پیشنهاد جدید ثبت شد:\n\n"
@@ -6426,6 +6462,25 @@ async def handle_back_to_pharmacies(update: Update, context: ContextTypes.DEFAUL
         else:
             await update.message.reply_text(error_msg)
         return ConversationHandler.END
+def safe_get_user_info(cursor, user_id):
+    """دریافت ایمن اطلاعات کاربر با مدیریت مقادیر None"""
+    try:
+        cursor.execute('''
+        SELECT first_name, last_name, username 
+        FROM users WHERE id = %s
+        ''', (user_id,))
+        result = cursor.fetchone()
+        
+        if result:
+            return {
+                'first_name': result[0] or "نام",
+                'last_name': result[1] or "فامیل", 
+                'username': result[2] or None
+            }
+        return {'first_name': "کاربر", 'last_name': "ناشناس", 'username': None}
+    except Exception as e:
+        logger.error(f"Error getting user info: {e}")
+        return {'first_name': "کاربر", 'last_name': "ناشناس", 'username': None}
 async def handle_match_notification(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle match notification and initiate exchange"""
     
@@ -7397,6 +7452,8 @@ def main():
         application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_user_"))
         application.add_handler(CallbackQueryHandler(confirm_offer, pattern="^confirm_offer$"))
         application.add_handler(CallbackQueryHandler(submit_offer, pattern="^submit_offer$"))
+        # اضافه کردن هندلرهای callback
+        application.add_handler(CallbackQueryHandler(callback_handler, pattern=".*"))
         application.add_handler(CallbackQueryHandler(handle_back_to_pharmacies, pattern="^back_to_pharmacies$"))
         
         application.add_handler(MessageHandler(filters.Regex('^منوی اصلی$'), main_menu_access))
