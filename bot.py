@@ -5903,15 +5903,21 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = "📋 تأیید نهایی پیشنهاد:\n\n"
         message += "📌 داروهای درخواستی:\n"
         for item in offer_items:
-            message += f"- {item['name']} - {item['price']}\n"
+            message += f"- {item['drug_name']} - {item['price']}\n"
             message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item.get('date', 'نامشخص')}\n"
         message += f"\n💰 جمع کل درخواستی: {format_price(offer_total)}\n"
         
         message += "\n📌 داروهای جبرانی شما:\n"
         if comp_items:
             for item in comp_items:
-                message += f"- {item['name']} - {item['price']}\n"
-                message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item.get('date', 'نامشخص')}\n"
+                # استفاده از get برای مدیریت فیلدهای ممکن
+                drug_name = item.get('name') or item.get('drug_name', 'نامشخص')
+                price = item.get('price', 'نامشخص')
+                quantity = item.get('quantity', 0)
+                date = item.get('date', 'نامشخص')
+                
+                message += f"- {drug_name} - {price}\n"
+                message += f"  📦 تعداد: {quantity} عدد | 📅 تاریخ: {date}\n"
             message += f"\n💰 جمع کل جبرانی: {format_price(comp_total)}\n"
         else:
             message += "هیچ داروی جبرانی انتخاب نشده است.\n"
@@ -5928,8 +5934,6 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in confirm_offer: {e}")
         await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
-
-
 async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send the finalized offer to the pharmacy"""
     await clear_conversation_state(update, context, silent=True)
@@ -5993,10 +5997,19 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 offer_message += f"\n💰 جمع کل درخواستی: {format_price(offer_total)}\n"
                 
                 offer_message += "\n📌 داروهای جبرانی:\n"
-                for item in comp_items:
-                    offer_message += f"- {item['name']} - {item['price']}\n"
-                    offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item.get('date', 'نامشخص')}\n"
-                offer_message += f"\n💰 جمع کل جبرانی: {format_price(comp_total)}\n"
+                if comp_items:
+                    for item in comp_items:
+                        drug_name = item.get('name') or item.get('drug_name', 'نامشخص')
+                        price = item.get('price', 'نامشخص')
+                        quantity = item.get('quantity', 0)
+                        date = item.get('date', 'نامشخص')
+                        
+                        offer_message += f"- {drug_name} - {price}\n"
+                        offer_message += f"  📦 تعداد: {quantity} عدد | 📅 تاریخ: {date}\n"
+                    offer_message += f"\n💰 جمع کل جبرانی: {format_price(comp_total)}\n"
+                else:
+                    offer_message += "هیچ داروی جبرانی انتخاب نشده است.\n"
+                
                 offer_message += f"\n📊 اختلاف قیمت: {format_price(offer_total - comp_total)}\n"
                 
                 await context.bot.send_message(
