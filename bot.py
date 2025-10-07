@@ -5976,6 +5976,7 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in confirm_offer: {e}")
         await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send the finalized offer to the pharmacy"""
     await clear_conversation_state(update, context, silent=True)
@@ -6005,105 +6006,105 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
+                # ذخیره پیشنهاد در دیتابیس
                 cursor.execute('''
-                INSERT INTO offers (pharmacy_id, buyer_id, total_price)
-                VALUES (%s, %s, %s)
+                INSERT INTO offers (pharmacy_id, buyer_id, total_price, status)
+                VALUES (%s, %s, %s, 'pending')
                 RETURNING id
                 ''', (pharmacy_id, buyer_id, offer_total))
                 offer_id = cursor.fetchone()[0]
                 
+                # ذخیره آیتم‌های پیشنهاد
                 for item in offer_items:
                     cursor.execute('''
-                    INSERT INTO offer_items (offer_id, drug_name, price, quantity)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO offer_items (offer_id, drug_name, price, quantity, item_type)
+                    VALUES (%s, %s, %s, %s, 'requested')
                     ''', (offer_id, item['drug_name'], item['price'], item['quantity']))
                 
+                # ذخیره آیتم‌های جبرانی
                 for item in comp_items:
                     cursor.execute('''
-                    INSERT INTO compensation_items (offer_id, drug_id, quantity)
-                    VALUES (%s, %s, %s)
-                    ''', (offer_id, item['id'], item['quantity']))
+                    INSERT INTO offer_items (offer_id, drug_name, price, quantity, item_type)
+                    VALUES (%s, %s, %s, %s, 'compensation')
+                    ''', (offer_id, item.get('name', 'نامشخص'), item.get('price', 'نامشخص'), item['quantity']))
                 
                 conn.commit()
                 
-                # 🔥 دریافت اطلاعات تاریخ داروها از دیتابیس
-                offer_drugs_info = []
-                comp_drugs_info = []
+                # 🔥 دریافت اطلاعات برای پیام‌رسانی
+                cursor.execute('''
+                SELECT u.first_name, u.last_name, u.username, p.name as pharmacy_name
+                FROM users u
+                JOIN pharmacies p ON u.id = p.user_id
+                WHERE p.user_id = %s
+                ''', (pharmacy_id,))
+                pharmacy_info = cursor.fetchone()
                 
-                # دریافت اطلاعات داروهای درخواستی
+                cursor.execute('''
+                SELECT first_name, last_name, username 
+                FROM users WHERE id = %s
+                ''', (buyer_id,))
+                buyer_info = cursor.fetchone()
+                
+                # ساخت پیام برای داروخانه
+                offer_message = "📬 پیشنهاد جدید دریافت شد:\n\n"
+                offer_message += f"👤 از: {buyer_info[0]} {buyer_info[1]}\n"
+                if buyer_info[2]:
+                    offer_message += f"📎 @{buyer_info[2]}\n"
+                
+                offer_message += "\n📌 داروهای درخواستی:\n"
                 for item in offer_items:
-                    cursor.execute('''
-                    SELECT date FROM drug_items WHERE id = %s
-                    ''', (item.get('drug_id'),))
-                    date_result = cursor.fetchone()
-                    date = date_result[0] if date_result else 'نامشخص'
-                    offer_drugs_info.append({
-                        'name': item['drug_name'],
-                        'price': item['price'],
-                        'quantity': item['quantity'],
-                        'date': date
-                    })
+                    offer_message += f"• {item['drug_name']} - {item['price']}\n"
+                    offer_message += f"  📦 تعداد: {item['quantity']} عدد\n"
                 
-                # دریافت اطلاعات داروهای جبرانی
-                for item in comp_items:
-                    cursor.execute('''
-                    SELECT name, price, date FROM drug_items WHERE id = %s
-                    ''', (item['id'],))
-                    drug_result = cursor.fetchone()
-                    if drug_result:
-                        comp_drugs_info.append({
-                            'name': drug_result[0],
-                            'price': drug_result[1],
-                            'quantity': item['quantity'],
-                            'date': drug_result[2]
-                        })
-                    else:
-                        comp_drugs_info.append({
-                            'name': item.get('name', 'نامشخص'),
-                            'price': item.get('price', 'نامشخص'),
-                            'quantity': item['quantity'],
-                            'date': 'نامشخص'
-                        })
+                offer_message += "\n📌 داروهای جبرانی:\n"
+                if comp_items:
+                    for item in comp_items:
+                        offer_message += f"• {item.get('name', 'نامشخص')} - {item.get('price', 'نامشخص')}\n"
+                        offer_message += f"  📦 تعداد: {item['quantity']} عدد\n"
+                else:
+                    offer_message += "• هیچ داروی جبرانی\n"
+                
+                offer_message += f"\n💰 جمع کل: {format_price(offer_total)}\n"
                 
                 keyboard = [
                     [InlineKeyboardButton("✅ تأیید پیشنهاد", callback_data=f"accept_{offer_id}")],
                     [InlineKeyboardButton("❌ رد پیشنهاد", callback_data=f"reject_{offer_id}")]
                 ]
                 
-                offer_message = "📬 پیشنهاد جدید دریافت شد:\n\n"
-                offer_message += "📌 داروهای درخواستی:\n"
-                for item in offer_drugs_info:
-                    offer_message += f"- {item['name']} - {item['price']}\n"
-                    offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
-                offer_message += f"\n💰 جمع کل درخواستی: {format_price(offer_total)}\n"
-                
-                offer_message += "\n📌 داروهای جبرانی:\n"
-                if comp_drugs_info:
-                    for item in comp_drugs_info:
-                        offer_message += f"- {item['name']} - {item['price']}\n"
-                        offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
-                    offer_message += f"\n💰 جمع کل جبرانی: {format_price(comp_total)}\n"
-                else:
-                    offer_message += "هیچ داروی جبرانی انتخاب نشده است.\n"
-                
-                offer_message += f"\n📊 اختلاف قیمت: {format_price(offer_total - comp_total)}\n"
-                
+                # ارسال پیام به داروخانه
                 await context.bot.send_message(
                     chat_id=pharmacy_id,
                     text=offer_message,
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 
-                await query.edit_message_text(
-                    "✅ پیشنهاد شما با موفقیت ارسال شد!\n\n"
-                    "پس از تأیید داروخانه با شما تماس گرفته خواهد شد."
+                # 🔥 ارسال پیام به ادمین
+                admin_message = "🆕 پیشنهاد جدید ثبت شد:\n\n"
+                admin_message += f"🆔 کد پیشنهاد: {offer_id}\n"
+                admin_message += f"👤 خریدار: {buyer_info[0]} {buyer_info[1]}\n"
+                if buyer_info[2]:
+                    admin_message += f"📎 @{buyer_info[2]}\n"
+                admin_message += f"🏥 داروخانه: {pharmacy_info[3] if pharmacy_info else 'نامشخص'}\n"
+                admin_message += f"💰 مبلغ: {format_price(offer_total)}\n"
+                admin_message += "\n📞 منتظر پاسخ داروخانه هستیم..."
+                
+                await context.bot.send_message(
+                    chat_id=ADMIN_CHAT_ID,
+                    text=admin_message
                 )
                 
-                # نمایش منوی اصلی بعد از ارسال موفقیت‌آمیز
+                # پیام موفقیت به کاربر
+                await query.edit_message_text(
+                    "✅ پیشنهاد شما با موفقیت ارسال شد!\n\n"
+                    "پس از تأیید داروخانه، ادمین با شما تماس خواهد گرفت."
+                )
+                
+                # بازگشت به منوی اصلی
                 keyboard = [
                     ['اضافه کردن دارو', 'جستجوی دارو'],
-                    ['تنظیم شاخه‌های دارویی', 'لیست داروهای من'],
-                    ['ثبت نیاز جدید', 'لیست نیازهای من']
+                    ['لیست داروهای من', 'ثبت نیاز جدید'],
+                    ['لیست نیازهای من', 'ساخت کد پرسنل'],
+                    ['تنظیم شاخه‌های دارویی']
                 ]
                 reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
                 
@@ -6129,6 +6130,259 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in send_offer: {e}")
         await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle offer acceptance/rejection from pharmacy"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        data = query.data.split('_')
+        action = data[0]  # accept or reject
+        offer_id = int(data[1])
+        
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                # دریافت اطلاعات پیشنهاد
+                cursor.execute('''
+                SELECT o.pharmacy_id, o.buyer_id, o.total_price, 
+                       p.name as pharmacy_name,
+                       u1.first_name as buyer_first, u1.last_name as buyer_last, u1.username as buyer_username,
+                       u2.first_name as pharmacy_first, u2.last_name as pharmacy_last, u2.username as pharmacy_username
+                FROM offers o
+                JOIN pharmacies p ON o.pharmacy_id = p.user_id
+                JOIN users u1 ON o.buyer_id = u1.id
+                JOIN users u2 ON o.pharmacy_id = u2.id
+                WHERE o.id = %s
+                ''', (offer_id,))
+                offer_info = cursor.fetchone()
+                
+                if not offer_info:
+                    await query.edit_message_text("پیشنهاد یافت نشد.")
+                    return
+                
+                pharmacy_id, buyer_id, total_price, pharmacy_name, buyer_first, buyer_last, buyer_username, pharmacy_first, pharmacy_last, pharmacy_username = offer_info
+                
+                if action == 'accept':
+                    # به روزرسانی وضعیت پیشنهاد
+                    cursor.execute('''
+                    UPDATE offers SET status = 'accepted', responded_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    ''', (offer_id,))
+                    
+                    # 🔥 پیام به خریدار
+                    buyer_message = "✅ پیشنهاد شما تأیید شد!\n\n"
+                    buyer_message += f"🏥 داروخانه: {pharmacy_name}\n"
+                    buyer_message += f"💰 مبلغ کل: {format_price(total_price)}\n\n"
+                    buyer_message += "📞 لطفاً با ادمین تماس بگیرید تا هماهنگی‌های نهایی انجام شود.\n"
+                    buyer_message += f"👤 ادمین: @{ADMIN_CHAT_ID}\n\n"
+                    buyer_message += "✅ این پیشنهاد توسط داروخانه تأیید شده است."
+                    
+                    await context.bot.send_message(
+                        chat_id=buyer_id,
+                        text=buyer_message
+                    )
+                    
+                    # 🔥 پیام به ادمین
+                    admin_message = "✅ پیشنهاد تأیید شد:\n\n"
+                    admin_message += f"🆔 کد پیشنهاد: {offer_id}\n"
+                    admin_message += f"👤 خریدار: {buyer_first} {buyer_last}\n"
+                    if buyer_username:
+                        admin_message += f"📎 @{buyer_username}\n"
+                    admin_message += f"🏥 داروخانه: {pharmacy_name}\n"
+                    admin_message += f"💰 مبلغ: {format_price(total_price)}\n\n"
+                    admin_message += "📞 لطفاً با طرفین تماس بگیرید و هماهنگی‌های نهایی را انجام دهید."
+                    
+                    # اضافه کردن دکمه‌های مدیریت برای ادمین
+                    admin_keyboard = [
+                        [InlineKeyboardButton("📞 تماس با خریدار", callback_data=f"contact_buyer_{buyer_id}")],
+                        [InlineKeyboardButton("📞 تماس با فروشنده", callback_data=f"contact_seller_{pharmacy_id}")],
+                        [InlineKeyboardButton("✅ تأیید نهایی معامله", callback_data=f"finalize_{offer_id}")]
+                    ]
+                    
+                    await context.bot.send_message(
+                        chat_id=ADMIN_CHAT_ID,
+                        text=admin_message,
+                        reply_markup=InlineKeyboardMarkup(admin_keyboard)
+                    )
+                    
+                    # تأیید به داروخانه
+                    await query.edit_message_text(
+                        "✅ پیشنهاد با موفقیت تأیید شد!\n\n"
+                        "ادمین با شما تماس خواهد گرفت."
+                    )
+                    
+                elif action == 'reject':
+                    # به روزرسانی وضعیت پیشنهاد
+                    cursor.execute('''
+                    UPDATE offers SET status = 'rejected', responded_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    ''', (offer_id,))
+                    
+                    # 🔥 پیام به خریدار
+                    buyer_message = "❌ پیشنهاد شما رد شد\n\n"
+                    buyer_message += f"🏥 داروخانه: {pharmacy_name}\n"
+                    buyer_message += "📞 برای اطلاعات بیشتر با ادمین تماس بگیرید.\n"
+                    buyer_message += f"👤 ادمین: @{ADMIN_CHAT_ID}"
+                    
+                    await context.bot.send_message(
+                        chat_id=buyer_id,
+                        text=buyer_message
+                    )
+                    
+                    # 🔥 پیام به ادمین
+                    admin_message = "❌ پیشنهاد رد شد:\n\n"
+                    admin_message += f"🆔 کد پیشنهاد: {offer_id}\n"
+                    admin_message += f"👤 خریدار: {buyer_first} {buyer_last}\n"
+                    if buyer_username:
+                        admin_message += f"📎 @{buyer_username}\n"
+                    admin_message += f"🏥 داروخانه: {pharmacy_name}\n"
+                    admin_message += f"💰 مبلغ: {format_price(total_price)}\n\n"
+                    admin_message += "📞 لطفاً در صورت نیاز با خریدار تماس بگیرید."
+                    
+                    await context.bot.send_message(
+                        chat_id=ADMIN_CHAT_ID,
+                        text=admin_message
+                    )
+                    
+                    # اطلاع به داروخانه
+                    await query.edit_message_text(
+                        "❌ پیشنهاد رد شد.\n\n"
+                        "به خریدار اطلاع داده شد."
+                    )
+                
+                conn.commit()
+                
+        except Exception as e:
+            logger.error(f"Error handling offer response: {e}")
+            if conn:
+                conn.rollback()
+            await query.edit_message_text("خطا در پردازش درخواست.")
+        finally:
+            if conn:
+                conn.close()
+                
+    except Exception as e:
+        logger.error(f"Error in handle_offer_response: {e}")
+        await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
+async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle admin actions for offer management"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        data = query.data.split('_')
+        action = data[0]
+        
+        if action == 'contact':
+            contact_type = data[1]  # buyer or seller
+            user_id = int(data[2])
+            
+            # دریافت اطلاعات کاربر
+            conn = None
+            try:
+                conn = get_db_connection()
+                with conn.cursor() as cursor:
+                    cursor.execute('''
+                    SELECT first_name, last_name, username, phone 
+                    FROM users WHERE id = %s
+                    ''', (user_id,))
+                    user_info = cursor.fetchone()
+                    
+                    if user_info:
+                        contact_message = f"📞 اطلاعات تماس {contact_type}:\n\n"
+                        contact_message += f"👤 نام: {user_info[0]} {user_info[1]}\n"
+                        if user_info[2]:
+                            contact_message += f"📎 کاربری: @{user_info[2]}\n"
+                        if user_info[3]:
+                            contact_message += f"📞 تلفن: {user_info[3]}\n"
+                        contact_message += f"🆔 آیدی: {user_id}"
+                        
+                        await query.edit_message_text(contact_message)
+                    else:
+                        await query.edit_message_text("اطلاعات کاربر یافت نشد.")
+                        
+            except Exception as e:
+                logger.error(f"Error getting user info: {e}")
+                await query.edit_message_text("خطا در دریافت اطلاعات.")
+            finally:
+                if conn:
+                    conn.close()
+                    
+        elif action == 'finalize':
+            offer_id = int(data[1])
+            
+            conn = None
+            try:
+                conn = get_db_connection()
+                with conn.cursor() as cursor:
+                    # به روزرسانی وضعیت نهایی
+                    cursor.execute('''
+                    UPDATE offers SET status = 'finalized', finalized_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    ''', (offer_id,))
+                    
+                    # دریافت اطلاعات برای اطلاع‌رسانی
+                    cursor.execute('''
+                    SELECT o.buyer_id, o.pharmacy_id, o.total_price,
+                           u1.first_name as buyer_first, u1.last_name as buyer_last,
+                           u2.first_name as seller_first, u2.last_name as seller_last,
+                           p.name as pharmacy_name
+                    FROM offers o
+                    JOIN users u1 ON o.buyer_id = u1.id
+                    JOIN users u2 ON o.pharmacy_id = u2.id
+                    JOIN pharmacies p ON o.pharmacy_id = p.user_id
+                    WHERE o.id = %s
+                    ''', (offer_id,))
+                    offer_info = cursor.fetchone()
+                    
+                    if offer_info:
+                        buyer_id, pharmacy_id, total_price, buyer_first, buyer_last, seller_first, seller_last, pharmacy_name = offer_info
+                        
+                        # پیام به خریدار
+                        buyer_message = "🎉 معامله نهایی شد!\n\n"
+                        buyer_message += f"🏥 داروخانه: {pharmacy_name}\n"
+                        buyer_message += f"💰 مبلغ: {format_price(total_price)}\n\n"
+                        buyer_message += "✅ معامله توسط ادمین تأیید نهایی شد.\n"
+                        buyer_message += "📞 برای هماهنگی تحویل با داروخانه تماس بگیرید."
+                        
+                        await context.bot.send_message(
+                            chat_id=buyer_id,
+                            text=buyer_message
+                        )
+                        
+                        # پیام به فروشنده
+                        seller_message = "🎉 معامله نهایی شد!\n\n"
+                        seller_message += f"👤 خریدار: {buyer_first} {buyer_last}\n"
+                        seller_message += f"💰 مبلغ: {format_price(total_price)}\n\n"
+                        seller_message += "✅ معامله توسط ادمین تأیید نهایی شد.\n"
+                        seller_message += "📞 برای هماهنگی تحویل با خریدار تماس بگیرید."
+                        
+                        await context.bot.send_message(
+                            chat_id=pharmacy_id,
+                            text=seller_message
+                        )
+                        
+                        conn.commit()
+                        
+                        await query.edit_message_text(
+                            "✅ معامله با موفقیت نهایی شد!\n\n"
+                            "به هر دو طرف اطلاع داده شد."
+                        )
+                    
+            except Exception as e:
+                logger.error(f"Error finalizing offer: {e}")
+                if conn:
+                    conn.rollback()
+                await query.edit_message_text("خطا در نهایی کردن معامله.")
+            finally:
+                if conn:
+                    conn.close()
+                    
+    except Exception as e:
+        logger.error(f"Error in handle_admin_actions: {e}")
+        await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
 
 async def handle_back_to_pharmacies(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle back to pharmacy selection"""
