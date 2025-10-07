@@ -1083,6 +1083,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await confirm_totals(update, context)
         elif query.data == "edit_selection":
             return await show_two_column_selection(update, context)
+        elif query.data.startswith("accept_") or query.data.startswith("reject_"):
+            return await handle_offer_response(update, context)
+        elif query.data.startswith("contact_") or query.data.startswith("finalize_"):
+            return await handle_admin_actions(update, context)
         
         logger.warning(f"Unhandled callback data: {query.data}")
         await query.edit_message_text("این گزینه در حال حاضر قابل استفاده نیست.")
