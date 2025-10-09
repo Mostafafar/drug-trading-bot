@@ -7020,7 +7020,7 @@ def main():
         
         # Create application with persistence
         persistence = PicklePersistence(filepath='bot_data.pickle')
-        application = ApplicationBuilder().token("8447101535:AAFMFkqJeMFNBfhzrY1VURkfJI-vu766LrY").persistence(persistence).build()
+        application = ApplicationBuilder().token("7561122181:AAFV1DSZT8C4eYNETAzbJtHlu0bThy8GyMk").persistence(persistence).build()
         
         # تعریف توابع کمکی برای نمایش خطا
         async def ask_for_national_card_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
