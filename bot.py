@@ -2028,7 +2028,7 @@ async def upload_excel_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
 
 async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle Excel file upload with merging functionality"""
+    """Handle Excel file upload with proper merging functionality"""
     try:
         if update.message.document:
             # Handle document upload
@@ -2039,7 +2039,7 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # Process new Excel file
                 new_df = pd.read_excel(file_path, engine='openpyxl')
                 
-                # Rename columns to standard names
+                # استانداردسازی ستون‌ها
                 column_mapping = {
                     'نام فارسی': 'name',
                     'قیمت واحد': 'price',
@@ -2052,7 +2052,9 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
                 new_df = new_df[['name', 'price']].dropna()
                 new_df['name'] = new_df['name'].astype(str).str.strip()
                 new_df['price'] = new_df['price'].astype(str).str.strip()
-                new_df = new_df.drop_duplicates()
+                
+                # تبدیل قیمت به عدد برای مقایسه
+                new_df['price_num'] = new_df['price'].apply(parse_price)
                 
                 # Load existing data if available
                 try:
@@ -2060,14 +2062,21 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
                     existing_df = existing_df[['name', 'price']].dropna()
                     existing_df['name'] = existing_df['name'].astype(str).str.strip()
                     existing_df['price'] = existing_df['price'].astype(str).str.strip()
+                    existing_df['price_num'] = existing_df['price'].apply(parse_price)
                 except:
-                    existing_df = pd.DataFrame(columns=['name', 'price'])
+                    existing_df = pd.DataFrame(columns=['name', 'price', 'price_num'])
                 
-                # Merge data - keep higher price for duplicates
+                # 🔥 ادغام صحیح - حفظ قیمت بالاتر
                 merged_df = pd.concat([existing_df, new_df])
-                merged_df['price'] = merged_df['price'].apply(parse_price)
-                merged_df = merged_df.sort_values('price', ascending=False)
+                
+                # 🔥 گروه‌بندی بر اساس نام و حفظ رکورد با بالاترین قیمت
+                merged_df = merged_df.sort_values('price_num', ascending=False)
                 merged_df = merged_df.drop_duplicates('name', keep='first')
+                
+                # حذف ستون کمکی
+                merged_df = merged_df[['name', 'price']]
+                
+                # مرتب‌سازی نهایی
                 merged_df = merged_df.sort_values('name')
                 
                 # Save merged data
@@ -2076,15 +2085,16 @@ async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # Prepare statistics
                 added_count = len(new_df)
                 total_count = len(merged_df)
-                duplicates_count = len(new_df) + len(existing_df) - len(merged_df)
+                real_duplicates = len(new_df) + len(existing_df) - len(merged_df)
                 
                 await update.message.reply_text(
                     f"✅ فایل اکسل با موفقیت ادغام شد!\n\n"
                     f"آمار:\n"
                     f"- داروهای جدید اضافه شده: {added_count}\n"
-                    f"- موارد تکراری: {duplicates_count}\n"
+                    f"- موارد تکراری: {real_duplicates}\n"
                     f"- کل داروها پس از ادغام: {total_count}\n\n"
-                    f"برای استفاده از داده‌های جدید، ربات را ریستارت کنید."
+                    f"✅ قیمت‌های بالاتر حفظ شدند.\n"
+                    f"✅ داده‌های قدیمی از دست نرفتند."
                 )
                 
                 # Save to database
