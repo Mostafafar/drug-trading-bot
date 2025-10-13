@@ -831,7 +831,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.application.create_task(check_for_matches(update.effective_user.id, context))
         
         # Different menu for pharmacy admin vs regular users vs personnel
-        if is_pharmacy_admin:
+        if is_admin:
+    # 🆕 منوی ادمین - اضافه کردن دکمه مدیریت داروها
+            keyboard = [
+                ['📊 آمار ربات', '👥 مدیریت کاربران'],
+                ['🛠️ مدیریت داروها', '📢 ارسال پیام همگانی'],
+                ['📤 آپلود اکسل', '⚙️ تنظیمات'],
+                ['🔙 منوی اصلی']
+          ]
+          welcome_msg = "به پنل مدیریت ادمین خوش آمدید."
+    
+        elif is_pharmacy_admin:
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
                 ['لیست داروهای من', 'ثبت نیاز جدید'],
@@ -7842,6 +7852,7 @@ def main():
         
         application.add_handler(CallbackQueryHandler(handle_restart_after_ban, pattern="^restart_after_ban$"))
         application.add_handler(admin_drugs_conv_handler)
+        application.add_handler(MessageHandler(filters.Regex('^🛠️ مدیریت داروها$'), admin_manage_drugs))
 
         # Add error handler
         application.add_error_handler(error_handler)
