@@ -838,8 +838,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ['🛠️ مدیریت داروها', '📢 ارسال پیام همگانی'],
                 ['📤 آپلود اکسل', '⚙️ تنظیمات'],
                 ['🔙 منوی اصلی']
-          ]
-          welcome_msg = "به پنل مدیریت ادمین خوش آمدید."
+           ]
+           welcome_msg = "به پنل مدیریت ادمین خوش آمدید."
     
         elif is_pharmacy_admin:
             keyboard = [
