@@ -7449,9 +7449,6 @@ def main():
                 CommandHandler('cancel', cancel)
             ],
             
-    
-
-            }
         )
 
 
