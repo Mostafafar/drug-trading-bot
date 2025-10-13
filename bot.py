@@ -7448,9 +7448,9 @@ def main():
                 MessageHandler(filters.Regex('^🔙 بازگشت به منوی ادمین$'), admin_manage_drugs),
                 CommandHandler('cancel', cancel)
             ],
-            map_to_parent={
-                States.END: ConversationHandler.END,
-                States.ADMIN_MANAGE_DRUGS: States.ADMIN_MANAGE_DRUGS
+            
+    
+
             }
         )
 
@@ -7844,6 +7844,7 @@ def main():
         # Add restart handler for banned users
         
         application.add_handler(CallbackQueryHandler(handle_restart_after_ban, pattern="^restart_after_ban$"))
+        application.add_handler(admin_drugs_conv_handler)
 
         # Add error handler
         application.add_error_handler(error_handler)
