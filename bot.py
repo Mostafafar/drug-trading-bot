@@ -2500,7 +2500,7 @@ def split_drug_info(full_text):
         description = "قیمت نامشخص"
     return title, description
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle inline query for drug search with separate options for add and need"""
+    """Handle inline query for drug search with separate options for add, need, and edit"""
     await clear_conversation_state(update, context, silent=True)
     query = update.inline_query.query
     
@@ -2514,6 +2514,9 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     elif query.startswith("add ") or current_state == States.SEARCH_DRUG_FOR_ADDING:
         search_type = "add"
         query = query[4:].strip() if query.startswith("add ") else query
+    elif query.startswith("edit ") or current_state == States.ADMIN_MANAGE_DRUGS:
+        search_type = "edit"
+        query = query[5:].strip() if query.startswith("edit ") else query
     else:
         search_type = "search"  # پیش‌فرض
     
@@ -2556,6 +2559,23 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                             [InlineKeyboardButton(
                                 "📋 ثبت نیاز",
                                 callback_data=f"need_drug_{idx}"
+                            )]
+                        ])
+                    )
+                )
+            elif search_type == "edit":
+                results.append(
+                    InlineQueryResultArticle(
+                        id=f"edit_{idx}",
+                        title=f"✏️ {title_part}",
+                        description=f"{desc_part} - قیمت: {price}",
+                        input_message_content=InputTextMessageContent(
+                            f"💊 {name}\n💰 قیمت: {price}"
+                        ),
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(
+                                "✏️ ویرایش دارو",
+                                callback_data=f"edit_drug_{idx}"
                             )]
                         ])
                     )
