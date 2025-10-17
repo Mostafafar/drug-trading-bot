@@ -654,6 +654,26 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
             States.ADD_NEED_QUANTITY,
             States.ADD_NEED_NAME,
         ]
+        current_state = context.user_data.get('_conversation_state')
+        admin_states = [
+            States.ADMIN_MANAGE_DRUGS,
+            States.ADMIN_EDIT_DRUG_NAME,
+            States.ADMIN_EDIT_DRUG_PRICE
+        ]
+        if current_state in admin_states:
+            preserved_data = {k: context.user_data[k] for k in context.user_data if k in keys_to_preserve}
+            context.user_data.clear()
+            context.user_data.update(preserved_data)
+            context.user_data['_conversation_state'] = current_state
+            logger.info(f"Preserved admin keys: {list(context.user_data.keys())}")
+       else:
+            preserved_data = {k: context.user_data[k] for k in context.user_data if k in keys_to_preserve}
+            context.user_data.clear()
+            context.user_data.update(preserved_data)
+            logger.info(f"Preserved keys: {list(context.user_data.keys())}")
+    
+      if silent:
+          return ConversationHandler.END
         
         if is_in_need_process:
             # اگر در حال ثبت نیاز است، همه چیز را پاک کن
