@@ -663,7 +663,7 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
                 'offer_items', 'comp_items', 'need_name', 'need_desc',
                 'selected_drug_for_need', 'editing_need', 'edit_field',
                 'editing_drug','user_needs_list', 'editing_needs_list', 'editing_need',
-                'editing_drug', 'edit_field'  
+                'editing_drug', 'edit_field' , 'admin_editing_drug' 
             ]
             
             # ذخیره اطلاعات مبادله
