@@ -7068,49 +7068,44 @@ async def handle_restart_after_ban(update: Update, context: ContextTypes.DEFAULT
             pass
         return ConversationHandler.END
 async def admin_manage_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت داروها توسط ادمین"""
+    """شروع مدیریت داروها توسط ادمین"""
+    # 🔥 فقط پاک کردن stateهای غیرضروری
+    await clear_conversation_state(update, context, silent=True)
+    
+    # بررسی اینکه کاربر ادمین است
+    conn = None
     try:
-        # بررسی دسترسی ادمین
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                cursor.execute('SELECT is_admin FROM users WHERE id = %s', (update.effective_user.id,))
-                result = cursor.fetchone()
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute('SELECT is_admin FROM users WHERE id = %s', (update.effective_user.id,))
+            result = cursor.fetchone()
+            
+            if not result or not result[0]:
+                await update.message.reply_text("❌ شما دسترسی ادمین ندارید.")
+                return ConversationHandler.END
                 
-                if not result or not result[0]:
-                    await update.message.reply_text("❌ شما دسترسی ادمین ندارید.")
-                    return ConversationHandler.END
-        except Exception as e:
-            logger.error(f"Error checking admin status: {e}")
-            await update.message.reply_text("خطا در بررسی دسترسی.")
-            return ConversationHandler.END
-        finally:
-            if conn:
-                conn.close()
-
-        # نمایش منوی مدیریت داروها
-        keyboard = [
-            ['📝 ویرایش نام دارو'],
-            ['💰 ویرایش قیمت دارو'],
-            ['➕ اضافه کردن دارو جدید'],
-            ['🗑️ حذف دارو'],
-            ['🔙 بازگشت به منوی ادمین']
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        
-        await update.message.reply_text(
-            "🛠️ پنل مدیریت داروها\n\n"
-            "لطفاً عملیات مورد نظر را انتخاب کنید:",
-            reply_markup=reply_markup
-        )
-        
-        return States.ADMIN_MANAGE_DRUGS
-        
     except Exception as e:
-        logger.error(f"Error in admin_manage_drugs: {e}")
-        await update.message.reply_text("خطایی رخ داده است.")
+        logger.error(f"Error checking admin status: {e}")
+        await update.message.reply_text("خطا در بررسی دسترسی.")
         return ConversationHandler.END
+    finally:
+        if conn:
+            conn.close()
+    
+    # 🔥 تنظیم state برای تشخیص در اینلاین کوئری
+    context.user_data['_conversation_state'] = States.ADMIN_MANAGE_DRUGS
+    
+    # ایجاد دکمه اینلاین برای جستجوی دارو
+    keyboard = [
+        [InlineKeyboardButton("🔍 جستجوی دارو برای ویرایش", switch_inline_query_current_chat="edit ")]
+    ]
+    
+    await update.message.reply_text(
+        "برای ویرایش داروها، روی دکمه زیر کلیک کنید و نام دارو را جستجو کنید:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    
+    return States.ADMIN_MANAGE_DRUGS
 async def admin_search_drug_for_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """جستجوی دارو برای ویرایش توسط ادمین"""
     try:
