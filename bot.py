@@ -2058,6 +2058,7 @@ async def upload_excel_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def handle_excel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle Excel file upload with proper merging functionality"""
+    global drug_list
     try:
         if update.message.document:
             # Handle document upload
