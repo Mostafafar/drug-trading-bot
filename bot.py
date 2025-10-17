@@ -7155,6 +7155,7 @@ async def handle_admin_drug_selection(update: Update, context: ContextTypes.DEFA
         return States.ADMIN_MANAGE_DRUGS
 async def admin_edit_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع فرآیند ویرایش نام"""
+    global drug_list
     try:
         query = update.callback_query
         await query.answer()
@@ -7216,6 +7217,7 @@ async def save_admin_drug_name(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def admin_edit_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع فرآیند ویرایش قیمت"""
+    
     try:
         query = update.callback_query
         await query.answer()
@@ -7238,6 +7240,7 @@ async def admin_edit_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def save_admin_drug_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ذخیره قیمت جدید"""
+    global drug_list
     try:
         new_price = update.message.text.strip()
         
@@ -7281,6 +7284,7 @@ async def save_admin_drug_price(update: Update, context: ContextTypes.DEFAULT_TY
         return await admin_manage_drugs(update, context)
 async def admin_delete_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """حذف دارو از لیست"""
+    global drug_list
     try:
         query = update.callback_query
         await query.answer()
