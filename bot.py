@@ -645,7 +645,7 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
         logger.info(f"Current keys in user_data: {list(context.user_data.keys())}")
         inline_keys_to_preserve = [
             '_conversation_state', 'selected_drug', 'selected_drug_for_need',
-            'need_name', 'need_desc', 'admin_editing_drug'
+            'need_name', 'need_desc', 'admin_editing_drug']
         
         # 🔥 بررسی اینکه آیا کاربر در حال ثبت نیاز است یا مبادله
         current_state = context.user_data.get('_conversation_state')
