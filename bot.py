@@ -643,6 +643,9 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
     try:
         logger.info(f"Clearing conversation state for user {update.effective_user.id}")
         logger.info(f"Current keys in user_data: {list(context.user_data.keys())}")
+        inline_keys_to_preserve = [
+            '_conversation_state', 'selected_drug', 'selected_drug_for_need',
+            'need_name', 'need_desc', 'admin_editing_drug'
         
         # 🔥 بررسی اینکه آیا کاربر در حال ثبت نیاز است یا مبادله
         current_state = context.user_data.get('_conversation_state')
@@ -663,7 +666,7 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
                 'offer_items', 'comp_items', 'need_name', 'need_desc',
                 'selected_drug_for_need', 'editing_need', 'edit_field',
                 'editing_drug','user_needs_list', 'editing_needs_list', 'editing_need',
-                'editing_drug', 'edit_field' , 'admin_editing_drug' 
+                'editing_drug', 'edit_field' 
             ]
             
             # ذخیره اطلاعات مبادله
