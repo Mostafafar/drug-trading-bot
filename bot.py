@@ -755,7 +755,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn = get_db_connection()
             with conn.cursor() as cursor:
                 cursor.execute('''
-                SELECT is_verified, is_pharmacy_admin, is_personnel
+                SELECT is_verified, is_pharmacy_admin, is_personnel, is_admin
                 FROM users 
                 WHERE id = %s
                 ''', (update.effective_user.id,))
@@ -793,18 +793,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_verified = False
         is_pharmacy_admin = False
         is_personnel = False
+        is_admin = False  # اضافه کردن این خط
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
                 cursor.execute('''
-                SELECT u.is_verified, u.is_pharmacy_admin, u.is_personnel
+                SELECT u.is_verified, u.is_pharmacy_admin, u.is_personnel, u.is_admin
                 FROM users u
                 WHERE u.id = %s
                 ''', (update.effective_user.id,))
                 result = cursor.fetchone()
                 if result:
-                    is_verified, is_pharmacy_admin, is_personnel = result
+                    is_verified, is_pharmacy_admin, is_personnel, is_admin = result
         except Exception as e:
             logger.error(f"Database error in start: {e}")
         finally:
@@ -830,9 +831,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # For verified users - show appropriate main menu
         context.application.create_task(check_for_matches(update.effective_user.id, context))
         
-        # Different menu for pharmacy admin vs regular users vs personnel
+        # Different menu for admin vs pharmacy admin vs regular users vs personnel
         if is_admin:
-    # 🆕 منوی ادمین - اضافه کردن دکمه مدیریت داروها
+            # 🆕 منوی ادمین - اضافه کردن دکمه مدیریت داروها
             keyboard = [
                 ['📊 آمار ربات', '👥 مدیریت کاربران'],
                 ['🛠️ مدیریت داروها', '📢 ارسال پیام همگانی'],
@@ -840,7 +841,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ['🔙 منوی اصلی']
             ]
             welcome_msg = "به پنل مدیریت ادمین خوش آمدید."
-    
+            
         elif is_pharmacy_admin:
             keyboard = [
                 ['اضافه کردن دارو', 'جستجوی دارو'],
