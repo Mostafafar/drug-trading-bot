@@ -7110,6 +7110,7 @@ async def admin_manage_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
 async def handle_admin_drug_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت انتخاب دارو از اینلاین کوئری"""
+    global drug_list
     try:
         query = update.callback_query
         await query.answer()
