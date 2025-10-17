@@ -7071,7 +7071,7 @@ async def handle_restart_after_ban(update: Update, context: ContextTypes.DEFAULT
 async def admin_manage_drugs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع مدیریت داروها توسط ادمین"""
     # 🔥 فقط پاک کردن stateهای غیرضروری
-    await clear_conversation_state(update, context, silent=True)
+    #await clear_conversation_state(update, context, silent=True)
     
     # بررسی اینکه کاربر ادمین است
     conn = None
