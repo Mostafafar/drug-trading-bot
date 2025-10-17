@@ -1106,17 +1106,17 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data.startswith("contact_") or query.data.startswith("finalize_"):
             return await handle_admin_actions(update, context)
         elif query.data.startswith("edit_drug_"):
-            return await handle_admin_edit_drug(update, context)
+            return await handle_admin_drug_selection(update, context)
         elif query.data == "admin_edit_name":
-            return await admin_edit_drug_name(update, context)
+            return await admin_edit_name(update, context)
         elif query.data == "admin_edit_price":
-            return await admin_edit_drug_price(update, context)
-        elif query.data == "admin_back_to_edit":
-            return await handle_admin_edit_drug(update, context)
-        elif query.data == "admin_back_to_search":
-            return await admin_manage_drugs(update, context)
+            return await admin_edit_price(update, context)
         elif query.data == "admin_delete_drug":
             return await admin_delete_drug(update, context)
+        elif query.data == "admin_back_to_edit":
+            return await admin_back_to_edit(update, context)
+        elif query.data == "admin_back_to_search":
+            return await admin_manage_drugs(update, context)
         
         logger.warning(f"Unhandled callback data: {query.data}")
         await query.edit_message_text("این گزینه در حال حاضر قابل استفاده نیست.")
