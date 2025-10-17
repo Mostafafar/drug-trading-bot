@@ -7438,17 +7438,7 @@ def main():
         )
 
         # هندلر شروع و ثبت نام
-        start_handler = ConversationHandler(
-            entry_points=[CommandHandler('start', start)],
-            states={
-                States.START: [
-                    CallbackQueryHandler(admin_verify_start, pattern='^admin_verify$'),
-                    CallbackQueryHandler(personnel_login_start, pattern='^personnel_login$'),
-                    CallbackQueryHandler(register_pharmacy_name, pattern='^register$'),
-                    CallbackQueryHandler(simple_verify_start, pattern='^simple_verify$'),
-                ],
-                States.ADMIN_VERIFY_PHARMACY_NAME: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, admin_verify_pharmacy_name)
+        
 
 
 
