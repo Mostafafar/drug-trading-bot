@@ -7300,7 +7300,7 @@ async def admin_delete_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         drug_name = drug_list[idx][0]
         
         # حذف از لیست
-        global drug_list
+        #global drug_list
         drug_list.pop(idx)
         
         # حذف از فایل اکسل
