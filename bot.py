@@ -2516,7 +2516,7 @@ def split_drug_info(full_text):
     return title, description
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle inline query for drug search with separate options for add, need, and edit"""
-    #await clear_conversation_state(update, context, silent=True)
+    await clear_conversation_state(update, context, silent=True)
     query = update.inline_query.query
     
     # 🔥 تشخیص نوع جستجو از context - بهبود یافته
