@@ -2542,7 +2542,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     await clear_conversation_state(update, context, silent=True)
     query = update.inline_query.query
     
-    # 🔥 تشخیص نوع جستجو از context - بهبود یافته
+    # تشخیص نوع جستجو از context
     current_state = context.user_data.get('_conversation_state')
     
     # تشخیص بر اساس state و query
@@ -2613,7 +2613,7 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(
                                 "✏️ ویرایش دارو",
-                                callback_data=f"edit_drug_{idx}"
+                                callback_data=f"edit_drug_{idx}"  # 🔥 تغییر به این فرمت
                             )]
                         ])
                     )
@@ -2640,6 +2640,52 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             break
     
     await update.inline_query.answer(results)
+async def handle_admin_edit_drug_from_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت ویرایش دارو از طریق اینلاین کوئری"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        # استخراج ایندکس دارو از callback data
+        idx = int(query.data.split("_")[2])
+        
+        if 0 <= idx < len(drug_list):
+            selected_drug = drug_list[idx]
+            
+            # ذخیره اطلاعات دارو برای ویرایش
+            context.user_data['admin_editing_drug'] = {
+                'name': selected_drug[0],
+                'price': selected_drug[1],
+                'index': idx
+            }
+            
+            # تنظیم state
+            context.user_data['_conversation_state'] = States.ADMIN_MANAGE_DRUGS
+            
+            # نمایش منوی ویرایش
+            keyboard = [
+                [InlineKeyboardButton("✏️ ویرایش نام", callback_data="admin_edit_name")],
+                [InlineKeyboardButton("💰 ویرایش قیمت", callback_data="admin_edit_price")],
+                [InlineKeyboardButton("🗑️ حذف دارو", callback_data="admin_delete_drug")],
+                [InlineKeyboardButton("🔙 بازگشت", callback_data="admin_back_to_search")]
+            ]
+            
+            await query.edit_message_text(
+                f"✏️ مدیریت دارو:\n\n"
+                f"💊 نام: {selected_drug[0]}\n"
+                f"💰 قیمت: {selected_drug[1]}\n\n"
+                f"لطفا عملیات مورد نظر را انتخاب کنید:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return States.ADMIN_MANAGE_DRUGS
+        else:
+            await query.edit_message_text("❌ دارو یافت نشد.")
+            return ConversationHandler.END
+            
+    except Exception as e:
+        logger.error(f"Error in handle_admin_edit_drug_from_inline: {e}")
+        await query.edit_message_text("❌ خطا در انتخاب دارو برای ویرایش.")
+        return ConversationHandler.END
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         result_id = update.chosen_inline_result.result_id
