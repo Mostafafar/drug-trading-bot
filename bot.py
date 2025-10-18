@@ -1137,6 +1137,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await admin_back_to_edit(update, context)
         elif query.data == "admin_back_to_search":
             return await admin_manage_drugs(update, context)
+        elif query.data.startswith("edit_drug_"):
+            return await handle_admin_edit_drug_from_inline(update, context)
         
         logger.warning(f"Unhandled callback data: {query.data}")
         await query.edit_message_text("این گزینه در حال حاضر قابل استفاده نیست.")
