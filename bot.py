@@ -2647,10 +2647,21 @@ async def handle_admin_edit_drug_from_inline(update: Update, context: ContextTyp
         await query.answer()
         
         # استخراج ایندکس دارو از callback data
-        idx = int(query.data.split("_")[2])
+        data_parts = query.data.split("_")
+        logger.info(f"Callback data: {query.data}, Parts: {data_parts}")
+        
+        if len(data_parts) >= 3:
+            idx = int(data_parts[2])
+        else:
+            await query.edit_message_text("❌ فرمت داده نامعتبر است.")
+            return ConversationHandler.END
+        
+        logger.info(f"Drug index: {idx}, Drug list length: {len(drug_list)}")
+        logger.info(f"First few drugs: {drug_list[:3] if drug_list else 'Empty list'}")
         
         if 0 <= idx < len(drug_list):
             selected_drug = drug_list[idx]
+            logger.info(f"Selected drug: {selected_drug}")
             
             # ذخیره اطلاعات دارو برای ویرایش
             context.user_data['admin_editing_drug'] = {
@@ -2679,11 +2690,12 @@ async def handle_admin_edit_drug_from_inline(update: Update, context: ContextTyp
             )
             return States.ADMIN_MANAGE_DRUGS
         else:
-            await query.edit_message_text("❌ دارو یافت نشد.")
+            logger.error(f"Index out of range: {idx}, list length: {len(drug_list)}")
+            await query.edit_message_text("❌ دارو یافت نشد. لطفا دوباره جستجو کنید.")
             return ConversationHandler.END
             
     except Exception as e:
-        logger.error(f"Error in handle_admin_edit_drug_from_inline: {e}")
+        logger.error(f"Error in handle_admin_edit_drug_from_inline: {e}", exc_info=True)
         await query.edit_message_text("❌ خطا در انتخاب دارو برای ویرایش.")
         return ConversationHandler.END
 async def handle_chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
