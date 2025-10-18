@@ -7735,6 +7735,7 @@ def main():
         # Add restart handler for banned users
         
         application.add_handler(CallbackQueryHandler(handle_restart_after_ban, pattern="^restart_after_ban$"))
+        application.add_handler(admin_edit_drug_handler)
 
         # Add error handler
         application.add_error_handler(error_handler)
