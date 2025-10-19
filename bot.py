@@ -7159,6 +7159,7 @@ async def handle_admin_edit_drug_callback(update: Update, context: ContextTypes.
                     'name': selected_drug[0],
                     'price': selected_drug[1]
                 }
+                context.user_data['admin_mode'] = True
                 
                 keyboard = [
                     [InlineKeyboardButton("✏️ ویرایش نام", callback_data="admin_edit_name")],
