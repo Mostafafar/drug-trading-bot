@@ -7305,13 +7305,9 @@ async def handle_admin_edit_action(update: Update, context: ContextTypes.DEFAULT
 
 
 async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Entering save_admin_drug_edit, user: {update.effective_user.id}, message: {update.message.text}")
-    logger.info(f"context.user_data: {context.user_data}")
-    
+    logger.info(f"save_admin_drug_edit called, user: {update.effective_user.id}, message: {update.message.text}, state: {context.user_data.get('_conversation_state')}")
     try:
         user_id = update.effective_user.id
-        logger.info(f"Admin {user_id} saving drug price edit")
-        
         new_price = update.message.text.strip()
         editing_drug = context.user_data.get('admin_editing_drug')
         logger.info(f"new_price: {new_price}, editing_drug: {editing_drug}")
@@ -7322,7 +7318,6 @@ async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYP
             return await show_admin_menu(update, context)
         
         # اعتبارسنجی و فرمت قیمت
-        logger.info("Validating price")
         try:
             persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
             new_price = new_price.translate(persian_to_english)
@@ -7347,7 +7342,7 @@ async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYP
             return States.ADMIN_EDIT_DRUG_PRICE
         
         # به‌روزرسانی drug_list
-        logger.info("Updating drug_list")
+        logger.info(f"drug_list before update: {drug_list[:5]}")
         global drug_list
         updated = False
         for i, (name, price) in enumerate(drug_list):
