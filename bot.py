@@ -641,61 +641,46 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
 async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT_TYPE, silent: bool = False):
     """Clear the conversation state while preserving essential trade, need and admin data"""
     try:
-        logger.info(f"Clearing conversation state for user {update.effective_user.id}")
+        user_id = update.effective_user.id
+        logger.info(f"Clearing conversation state for user {user_id}")
         logger.info(f"Current keys in user_data: {list(context.user_data.keys())}")
         
-        # 🔥 بررسی اینکه آیا کاربر در حال ثبت نیاز است یا مبادله یا ویرایش ادمین
+        # 🔥 تشخیص اگر کاربر ادمین است و در حال ویرایش دارو است
+        is_admin_editing = any(key in context.user_data for key in ['admin_editing_drug', 'admin_mode'])
         current_state = context.user_data.get('_conversation_state')
-        is_in_need_process = current_state in [
-            States.SEARCH_DRUG_FOR_NEED, 
-            States.ADD_NEED_QUANTITY,
-            States.ADD_NEED_NAME,
-        ]
-        
-        is_in_admin_edit_process = current_state in [
-            States.ADMIN_EDIT_DRUG,
-            States.ADMIN_EDIT_DRUG_NAME,
+        is_in_admin_process = current_state in [
+            States.ADMIN_EDIT_DRUG, 
+            States.ADMIN_EDIT_DRUG_NAME, 
             States.ADMIN_EDIT_DRUG_PRICE,
-            States.ADMIN_UPLOAD_EXCEL,
+            States.ADMIN_UPLOAD_EXCEL
         ]
         
-        if is_in_need_process:
-            # اگر در حال ثبت نیاز است، همه چیز را پاک کن
-            context.user_data.clear()
-            logger.info("Cleared all data for need registration process")
-        elif is_in_admin_edit_process:
-            # اگر در حال ویرایش ادمین است، فقط اطلاعات ادمین را حفظ کن
+        # 🔥 اگر ادمین در حال ویرایش است، stateها را حفظ کن
+        if is_admin_editing or is_in_admin_process:
+            logger.info(f"Admin editing detected - preserving state for user {user_id}")
+            
+            # حفظ تمام کلیدهای مربوط به ادمین
             admin_keys_to_preserve = [
-                # کلیدهای ویرایش دارو
-                'admin_editing_drug', 'edit_field', '_conversation_state',
-                
-                # کلیدهای آپلود اکسل
-                'excel_file_path', 'uploaded_excel_data',
-                
-                # کلیدهای مدیریت کاربران
-                'pending_approvals', 'selected_user_id',
-                
-                # کلیدهای مشاهده آمار
-                'stats_filter', 'stats_data',
-                
-                # کلیدهای عمومی ادمین
-                'admin_mode', 'last_admin_action'
+                'admin_editing_drug', 'admin_mode', '_conversation_state',
+                'edit_field', 'excel_file_path', 'uploaded_excel_data',
+                'pending_approvals', 'selected_user_id', 'last_admin_action'
             ]
             
-            # ذخیره اطلاعات ادمین
-            preserved_admin_data = {}
+            preserved_data = {}
             for key in admin_keys_to_preserve:
                 if key in context.user_data:
-                    preserved_admin_data[key] = context.user_data[key]
+                    preserved_data[key] = context.user_data[key]
                     logger.info(f"Preserving admin key: {key}")
             
-            # پاک کردن کامل همه stateها
+            # پاک کردن کامل context
             context.user_data.clear()
             
-            # بازگرداندن اطلاعات ادمین
-            context.user_data.update(preserved_admin_data)
-            logger.info("Preserved admin editing data")
+            # بازگردانی داده‌های ادمین
+            context.user_data.update(preserved_data)
+            logger.info(f"Admin state preserved for user {user_id}")
+            
         else:
+            # برای کاربران عادی، منطق قبلی
             # حفظ اطلاعات ضروری مربوط به مبادله و ادمین
             keys_to_preserve = [
                 # کلیدهای مبادله
@@ -728,12 +713,8 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
             # پاک کردن کامل همه stateها
             context.user_data.clear()
             
-            # بازگرداندن اطلاعات
+            # بازگردانی اطلاعات
             context.user_data.update(preserved_data)
-        
-        # حذف state مکالمه فقط اگر در حالت ادمین نیستیم
-        if not is_in_admin_edit_process:
-            context.user_data.pop('_conversation_state', None)
         
         logger.info(f"Final keys after clearing: {list(context.user_data.keys())}")
         
