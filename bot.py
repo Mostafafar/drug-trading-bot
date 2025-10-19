@@ -7485,16 +7485,17 @@ def main():
             states={
                 States.ADMIN_EDIT_DRUG: [
                     CallbackQueryHandler(handle_admin_edit_drug_callback, pattern="^admin_edit_drug_"),
-                    CallbackQueryHandler(handle_admin_edit_action, pattern="^admin_edit_"),
-                    CallbackQueryHandler(handle_admin_drug_deletion, pattern="^admin_(confirm|cancel)_delete$"),
-                    CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$")
+                    CallbackQueryHandler(handle_admin_edit_action, pattern="^(admin_edit_name|admin_edit_price|admin_delete_drug|admin_back)$"),
+                    CallbackQueryHandler(handle_admin_drug_deletion, pattern="^admin_(confirm|cancel)_delete$")
                     
                ],
                States.ADMIN_EDIT_DRUG_NAME: [
-                   MessageHandler(filters.TEXT & ~filters.COMMAND, save_admin_drug_edit)
+                   MessageHandler(filters.TEXT & ~filters.COMMAND, save_admin_drug_edit),
+                   CallbackQueryHandler(handle_admin_edit_action, pattern="^admin_back$")
                ],
                States.ADMIN_EDIT_DRUG_PRICE: [
-                   MessageHandler(filters.TEXT & ~filters.COMMAND, save_admin_drug_edit)
+                   MessageHandler(filters.TEXT & ~filters.COMMAND, save_admin_drug_edit),
+                   CallbackQueryHandler(handle_admin_edit_action, pattern="^admin_back$")
                ]
            },
            fallbacks=[CommandHandler('cancel', clear_conversation_state)],
