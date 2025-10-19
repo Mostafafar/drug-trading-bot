@@ -3457,51 +3457,74 @@ async def handle_back_from_edit_drug(update: Update, context: ContextTypes.DEFAU
     except Exception as e:
         logger.error(f"Error in handle_back_from_edit_drug: {e}")
         return await clear_conversation_state(update, context)
-async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle drug edit action selection"""
-    await clear_conversation_state(update, context, silent=True)
+async def handle_admin_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle admin edit actions for drugs"""
     try:
         query = update.callback_query
         await query.answer()
-
-        if query.data == "back_to_list":
-            return await edit_drugs(update, context)
         
-        drug = context.user_data.get('editing_drug')
-        if not drug:
-            await query.edit_message_text("اطلاعات دارو یافت نشد.")
+        drug_data = context.user_data.get('admin_editing_drug')
+        if not drug_data:
+            await query.edit_message_text("❌ اطلاعات دارو یافت نشد. لطفاً دوباره شروع کنید.")
             return ConversationHandler.END
         
-        if query.data == "edit_date":
+        # دکمه‌های ویرایش
+        if query.data == "admin_edit_name":
             await query.edit_message_text(
-                f"تاریخ فعلی: {drug['date']}\n\n"
-                "لطفا تاریخ جدید را وارد کنید (مثال: 1403/05/15):"
+                f"نام فعلی: {drug_data['name']}\n\n"
+                "لطفاً نام جدید را وارد کنید:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت", callback_data="admin_edit_back")]
+                ])
             )
-            context.user_data['edit_field'] = 'date'
-            return States.EDIT_DRUG
-        
-        elif query.data == "edit_quantity":
-            await query.edit_message_text(
-                f"تعداد فعلی: {drug['quantity']}\n\n"
-                "لطفا تعداد جدید را وارد کنید:"
-            )
-            context.user_data['edit_field'] = 'quantity'
-            return States.EDIT_DRUG
-        
-        elif query.data == "delete_drug":
-            keyboard = [
-                [InlineKeyboardButton("✅ بله، حذف شود", callback_data="confirm_delete")],
-                [InlineKeyboardButton("❌ خیر، انصراف", callback_data="cancel_delete")]
-            ]
+            context.user_data['admin_edit_field'] = 'name'
+            context.user_data['_conversation_state'] = States.ADMIN_EDIT_DRUG_NAME  # 🔥 اضافه شد
+            logger.info(f"State set to: {States.ADMIN_EDIT_DRUG_NAME}")
+            return States.ADMIN_EDIT_DRUG_NAME
+            
+        elif query.data == "admin_edit_price":
+            # ذخیره قیمت بدون فرمت برای نمایش
+            raw_price = drug_data['price'].replace(',', '')
             
             await query.edit_message_text(
-                f"آیا مطمئن هستید که می‌خواهید داروی {drug['name']} را حذف کنید؟",
-                reply_markup=InlineKeyboardMarkup(keyboard))
-            return States.EDIT_DRUG
+                f"قیمت فعلی: {drug_data['price']}\n\n"
+                "لطفاً قیمت جدید را وارد کنید (فقط اعداد):",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت", callback_data="admin_edit_back")]
+                ])
+            )
+            context.user_data['admin_edit_field'] = 'price'
+            context.user_data['original_price'] = raw_price
+            context.user_data['_conversation_state'] = States.ADMIN_EDIT_DRUG_PRICE  # 🔥 اضافه شد
+            logger.info(f"State set to: {States.ADMIN_EDIT_DRUG_PRICE}")
+            return States.ADMIN_EDIT_DRUG_PRICE
+            
+        elif query.data == "admin_delete_drug":
+            keyboard = [
+                [InlineKeyboardButton("✅ بله، حذف شود", callback_data="admin_confirm_delete")],
+                [InlineKeyboardButton("❌ خیر، انصراف", callback_data="admin_cancel_delete")]
+            ]
+            await query.edit_message_text(
+                f"⚠️ آیا مطمئن هستید که می‌خواهید داروی زیر را حذف کنید؟\n\n"
+                f"💊 {drug_data['name']}\n"
+                f"💰 {drug_data['price']}\n\n"
+                "این عمل غیرقابل بازگشت است!",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            context.user_data['_conversation_state'] = States.ADMIN_EDIT_DRUG  # 🔥 اضافه شد
+            return States.ADMIN_EDIT_DRUG
+            
+        elif query.data == "admin_edit_back":
+            return await start_admin_edit_drug(update, context)
+            
+        else:
+            logger.warning(f"Unhandled callback in handle_admin_edit_action: {query.data}")
+            await query.edit_message_text("❌ گزینه نامعتبر. لطفاً دوباره تلاش کنید.")
+            return ConversationHandler.END
             
     except Exception as e:
-        logger.error(f"Error in handle_drug_edit_action: {e}")
-        await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
+        logger.error(f"Error in handle_admin_edit_action: {e}")
+        await query.edit_message_text("❌ خطا در پردازش درخواست. لطفاً دوباره تلاش کنید.")
         return ConversationHandler.END
 
 async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
