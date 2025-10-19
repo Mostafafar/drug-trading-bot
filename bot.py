@@ -7612,29 +7612,27 @@ def main():
             states={
                 States.ADMIN_EDIT_DRUG: [
                     CallbackQueryHandler(handle_admin_edit_drug_callback, pattern="^admin_edit_drug_"),
-                    CallbackQueryHandler(handle_admin_edit_action, pattern="^admin_edit_"),
-                    CallbackQueryHandler(handle_admin_drug_deletion, pattern="^admin_(confirm|cancel)_delete$"),
-                    CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$")
+                    CallbackQueryHandler(handle_admin_edit_action, pattern="^admin_(edit_name|edit_price|delete_drug|back_to_list)$"),
+                    CallbackQueryHandler(handle_admin_edit_action, pattern="^admin_(confirm|cancel)_delete$"),
                 ],
                 States.ADMIN_EDIT_DRUG_NAME: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_admin_drug_edit),
-                    CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$")
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_admin_drug_name_edit),
+                    CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$"),
                 ],
                 States.ADMIN_EDIT_DRUG_PRICE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, save_admin_drug_edit),
-                    CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$")
-                ]
-            },
-            fallbacks=[
-                CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$"),
-                CallbackQueryHandler(show_admin_panel, pattern="^back_to_main$"),
-                CommandHandler("cancel", cancel_operation),
-            ],
-            name="admin_edit_drug",
-            persistent=False,
-            allow_reentry=True,
+                    CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$"),
+                ],
+           },
+           fallbacks=[
+               CommandHandler("cancel", clear_conversation_state),
+               CallbackQueryHandler(show_admin_menu, pattern="^back_to_main$"),
+               CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$"),
+           ],
+           name="admin_edit_drug",
+           persistent=False,
+           allow_reentry=True,
         )
-
         # Admin verification handler
         admin_verify_handler = ConversationHandler(
             entry_points=[
