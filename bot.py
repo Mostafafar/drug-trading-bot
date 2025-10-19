@@ -7164,6 +7164,7 @@ async def handle_admin_edit_drug_callback(update: Update, context: ContextTypes.
 
 async def handle_admin_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle admin edit actions - مدیریت stateهای ویرایش"""
+    global drug_list
     try:
         query = update.callback_query
         await query.answer()
@@ -7259,7 +7260,7 @@ async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYP
             df.to_excel(excel_file, index=False, engine='openpyxl')
             
             # به روزرسانی داده در حافظه
-            global drug_list
+            
             drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
             drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
             
