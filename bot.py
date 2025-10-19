@@ -7192,6 +7192,9 @@ async def handle_admin_edit_drug_callback(update: Update, context: ContextTypes.
     return States.ADMIN_EDIT_DRUG
 async def handle_admin_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """مدیریت اقدامات ویرایش دارو توسط ادمین"""
+    # در ابتدای تابع handle_admin_edit_action
+    logger.info(f"Context keys before action: {list(context.user_data.keys())}")
+    logger.info(f"Current state: {context.user_data.get('_conversation_state')}")
     try:
         query = update.callback_query
         await query.answer()
