@@ -656,6 +656,7 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
             States.ADMIN_EDIT_DRUG,
             States.ADMIN_EDIT_DRUG_NAME,
             States.ADMIN_EDIT_DRUG_PRICE,
+            States.ADMIN_UPLOAD_EXCEL,
         ]
         
         if is_in_need_process:
@@ -665,7 +666,20 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
         elif is_in_admin_edit_process:
             # اگر در حال ویرایش ادمین است، فقط اطلاعات ادمین را حفظ کن
             admin_keys_to_preserve = [
-                'admin_editing_drug', 'edit_field', '_conversation_state'
+                # کلیدهای ویرایش دارو
+                'admin_editing_drug', 'edit_field', '_conversation_state',
+                
+                # کلیدهای آپلود اکسل
+                'excel_file_path', 'uploaded_excel_data',
+                
+                # کلیدهای مدیریت کاربران
+                'pending_approvals', 'selected_user_id',
+                
+                # کلیدهای مشاهده آمار
+                'stats_filter', 'stats_data',
+                
+                # کلیدهای عمومی ادمین
+                'admin_mode', 'last_admin_action'
             ]
             
             # ذخیره اطلاعات ادمین
@@ -682,27 +696,40 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
             context.user_data.update(preserved_admin_data)
             logger.info("Preserved admin editing data")
         else:
-            # حفظ اطلاعات ضروری مربوط به مبادله
-            trade_keys_to_preserve = [
+            # حفظ اطلاعات ضروری مربوط به مبادله و ادمین
+            keys_to_preserve = [
+                # کلیدهای مبادله
                 'selected_pharmacy_id', 'selected_pharmacy_name', 'selected_drug',
                 'offer_items', 'comp_items', 'need_name', 'need_desc',
                 'selected_drug_for_need', 'editing_need', 'edit_field',
-                'editing_drug','user_needs_list', 'editing_needs_list', 'editing_need',
-                'editing_drug', 'edit_field', 'admin_editing_drug'  
+                'editing_drug', 'user_needs_list', 'editing_needs_list',
+                
+                # کلیدهای ادمین
+                'admin_editing_drug', 'edit_field', 'admin_mode',
+                
+                # کلیدهای جستجو و لیست‌ها
+                'matched_drugs', 'search_query', 'current_list_type',
+                'page_target', 'page_mine', 'target_drugs', 'my_drugs',
+                
+                # کلیدهای شخصی کاربر
+                'user_categories', 'personnel_code'
             ]
             
-            # ذخیره اطلاعات مبادله
-            preserved_trade_data = {}
-            for key in trade_keys_to_preserve:
+            # حذف مقادیر تکراری و None
+            keys_to_preserve = list(set([k for k in keys_to_preserve if k]))
+            
+            # ذخیره اطلاعات
+            preserved_data = {}
+            for key in keys_to_preserve:
                 if key in context.user_data:
-                    preserved_trade_data[key] = context.user_data[key]
-                    logger.info(f"Preserving trade key: {key}")
+                    preserved_data[key] = context.user_data[key]
+                    logger.info(f"Preserving key: {key}")
             
             # پاک کردن کامل همه stateها
             context.user_data.clear()
             
-            # بازگرداندن اطلاعات مبادله
-            context.user_data.update(preserved_trade_data)
+            # بازگرداندن اطلاعات
+            context.user_data.update(preserved_data)
         
         # حذف state مکالمه فقط اگر در حالت ادمین نیستیم
         if not is_in_admin_edit_process:
@@ -712,6 +739,9 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
         
         if silent:
             return ConversationHandler.END
+            
+        # منوی اصلی - اما اگر در حالت ادمین هستیم، منوی ادمین نشان داده شود
+        
             
         # منوی اصلی
         main_keyboard = [
