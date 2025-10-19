@@ -7308,109 +7308,106 @@ async def handle_admin_edit_action(update: Update, context: ContextTypes.DEFAULT
     
     return States.ADMIN_EDIT_DRUG
 
+
 async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """ذخیره ویرایش قیمت دارو توسط ادمین"""
+    logger.info(f"Entering save_admin_drug_edit, user: {update.effective_user.id}, message: {update.message.text}")
+    logger.info(f"context.user_data: {context.user_data}")
+    
     try:
         user_id = update.effective_user.id
         logger.info(f"Admin {user_id} saving drug price edit")
         
         new_price = update.message.text.strip()
         editing_drug = context.user_data.get('admin_editing_drug')
+        logger.info(f"new_price: {new_price}, editing_drug: {editing_drug}")
         
         if not editing_drug:
             logger.error(f"No editing drug found for admin {user_id}")
             await update.message.reply_text("❌ اطلاعات دارو یافت نشد.")
             return await show_admin_menu(update, context)
         
-        logger.info(f"Editing drug: {editing_drug['name']}, current price: {editing_drug['price']}, new price: {new_price}")
-        
         # اعتبارسنجی و فرمت قیمت
+        logger.info("Validating price")
         try:
-            # تبدیل اعداد فارسی به انگلیسی
             persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
             new_price = new_price.translate(persian_to_english)
-            
-            # حذف همه کاراکترهای غیررقمی
             cleaned_price = ''.join(filter(str.isdigit, new_price))
             
             if not cleaned_price:
+                logger.warning("Invalid price: empty after cleaning")
                 await update.message.reply_text("❌ لطفا یک قیمت معتبر وارد کنید:")
                 return States.ADMIN_EDIT_DRUG_PRICE
                 
-            # تبدیل به عدد
             price_int = int(cleaned_price)
             if price_int <= 0:
+                logger.warning("Invalid price: zero or negative")
                 await update.message.reply_text("❌ قیمت باید بزرگتر از صفر باشد:")
                 return States.ADMIN_EDIT_DRUG_PRICE
                 
-            # فرمت با جداکننده هزارگان فارسی
             formatted_price = "{:,}".format(price_int).replace(",", "،")
-            
+            logger.info(f"Formatted price: {formatted_price}")
         except ValueError as ve:
-            logger.error(f"Price validation error for admin {user_id}: {ve}")
+            logger.error(f"Price validation error: {ve}")
             await update.message.reply_text("❌ لطفا یک عدد معتبر وارد کنید:")
             return States.ADMIN_EDIT_DRUG_PRICE
         
-        # به روزرسانی لیست کش شده
+        # به‌روزرسانی drug_list
+        logger.info("Updating drug_list")
         global drug_list
         updated = False
         for i, (name, price) in enumerate(drug_list):
             if name == editing_drug['name']:
                 drug_list[i] = (name, formatted_price)
                 updated = True
-                logger.info(f"Updated drug list cache: {name} -> {formatted_price}")
+                logger.info(f"Updated drug_list: {name} -> {formatted_price}")
                 break
-        
         if not updated:
-            logger.warning(f"Drug {editing_drug['name']} not found in cache list")
+            logger.warning(f"Drug {editing_drug['name']} not found in drug_list")
         
         # ذخیره در دیتابیس
+        logger.info("Updating database")
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
                 cursor.execute('''
-                UPDATE drug_items 
-                SET price = %s 
-                WHERE name = %s
+                    UPDATE drug_items 
+                    SET price = %s 
+                    WHERE name = %s
                 ''', (formatted_price, editing_drug['name']))
-                
                 affected_rows = cursor.rowcount
                 conn.commit()
+                logger.info(f"Database updated, affected rows: {affected_rows}")
                 
                 if affected_rows == 0:
                     logger.warning(f"No rows affected for drug {editing_drug['name']}")
-                    # همچنان ادامه می‌دهیم چون کش به روز شده است
                 
-                # پیام موفقیت
                 success_msg = (
                     f"✅ قیمت دارو با موفقیت به‌روزرسانی شد!\n\n"
                     f"💊 دارو: {editing_drug['name']}\n"
                     f"💰 قیمت جدید: {formatted_price}\n\n"
                     f"تغییرات در سیستم اعمال شد."
                 )
-                
                 await update.message.reply_text(success_msg)
-                logger.info(f"Drug price updated successfully for {editing_drug['name']}")
-                
         except Exception as e:
-            logger.error(f"Database error updating drug price for admin {user_id}: {e}")
+            logger.error(f"Database error: {e}")
             if conn:
                 conn.rollback()
-            # حتی اگر دیتابیس خطا داد، کش به روز شده است
             await update.message.reply_text(
                 f"⚠️ قیمت در کش به‌روزرسانی شد اما خطا در دیتابیس:\n{formatted_price}"
             )
         finally:
             if conn:
                 conn.close()
+                logger.info("Database connection closed")
         
-        # پاک‌سازی و بازگشت به منوی ادمین
+        # پاک‌سازی و بازگشت
+        logger.info("Clearing context and returning to admin menu")
         context.user_data.pop('admin_editing_drug', None)
         return await show_admin_menu(update, context)
         
     except Exception as e:
-        logger.error(f"Unexpected error in save_admin_drug_edit for user {update.effective_user.id}: {e}")
+        logger.error(f"Unexpected error in save_admin_drug_edit: {e}", exc_info=True)
         await update.message.reply_text("❌ خطای غیرمنتظره رخ داد.")
         return await show_admin_menu(update, context)
 
@@ -7419,31 +7416,30 @@ async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYP
 async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """نمایش منوی ادمین"""
     try:
-        admin_keyboard = [
-            ['📤 آپلود فایل اکسل', '📊 مشاهده آمار'],
-            ['✏️ ویرایش داروها', '🔙 منوی اصلی']
+        keyboard = [
+            ['📊 آمار سیستم', '👥 مدیریت کاربران'],
+            ['💊 ویرایش داروها', '📤 آپلود اکسل'],
+            ['✅ تأیید کاربران', '🔙 منوی اصلی']
         ]
-        reply_markup = ReplyKeyboardMarkup(admin_keyboard, resize_keyboard=True)
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         
         if update.message:
             await update.message.reply_text(
-                "منوی مدیریت ادمین:",
+                "به پنل ادمین خوش آمدید. لطفاً یک گزینه را انتخاب کنید:",
                 reply_markup=reply_markup
             )
         else:
-            # اگر update از طریق callback است
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="منوی مدیریت ادمین:",
+                text="به پنل ادمین خوش آمدید. لطفاً یک گزینه را انتخاب کنید:",
                 reply_markup=reply_markup
             )
         
         return ConversationHandler.END
         
     except Exception as e:
-        logger.error(f"Error showing admin menu: {e}")
+        logger.error(f"Error in show_admin_menu: {e}")
         return ConversationHandler.END
-
 
 
 async def save_admin_drug_name_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
