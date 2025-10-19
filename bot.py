@@ -2493,22 +2493,24 @@ def split_drug_info(full_text):
         description = "قیمت نامشخص"
     return title, description
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle inline query for drug search with separate options for add and need"""
+    """Handle inline query for drug search with separate options for add, need, and edit"""
     await clear_conversation_state(update, context, silent=True)
     query = update.inline_query.query
     
-    # 🔥 تشخیص نوع جستجو از context - بهبود یافته
+    # تشخیص نوع جستجو از context و query
     current_state = context.user_data.get('_conversation_state')
     
-    # تشخیص بر اساس state و query
-    if query.startswith("need ") or current_state == States.SEARCH_DRUG_FOR_NEED:
+    if query.startswith("edit ") or current_state == States.ADMIN_EDIT_DRUG:
+        search_type = "edit"
+        query = query[5:].strip() if query.startswith("edit ") else query
+    elif query.startswith("need ") or current_state == States.SEARCH_DRUG_FOR_NEED:
         search_type = "need"
         query = query[5:].strip() if query.startswith("need ") else query
     elif query.startswith("add ") or current_state == States.SEARCH_DRUG_FOR_ADDING:
         search_type = "add"
         query = query[4:].strip() if query.startswith("add ") else query
     else:
-        search_type = "search"  # پیش‌فرض
+        search_type = "search"
     
     if not query:
         query = ""
@@ -2519,7 +2521,25 @@ async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             title_part = name.split()[0] if name.split() else name
             desc_part = ' '.join(name.split()[1:]) if len(name.split()) > 1 else name
             
-            if search_type == "add":
+            if search_type == "edit":
+                results.append(
+                    InlineQueryResultArticle(
+                        id=f"edit_{idx}",
+                        title=f"✏️ {title_part}",
+                        description=f"{desc_part} - قیمت: {price}",
+                        input_message_content=InputTextMessageContent(
+                            f"💊 {name}\n💰 قیمت: {price}"
+                        ),
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(
+                                "✏️ ویرایش این دارو",
+                                callback_data=f"admin_edit_drug_{idx}"
+                            )]
+                        ])
+                    )
+        )
+            
+            elif search_type == "add":
                 results.append(
                     InlineQueryResultArticle(
                         id=f"add_{idx}",
@@ -7712,6 +7732,7 @@ def main():
         # Add restart handler for banned users
         
         application.add_handler(CallbackQueryHandler(handle_restart_after_ban, pattern="^restart_after_ban$"))
+        application.add_handler(admin_edit_drug_handler)
 
         # Add error handler
         application.add_error_handler(error_handler)
