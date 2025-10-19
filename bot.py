@@ -7049,42 +7049,51 @@ async def handle_restart_after_ban(update: Update, context: ContextTypes.DEFAULT
 async def start_admin_edit_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع فرآیند ویرایش دارو توسط ادمین"""
     try:
-        # بررسی اینکه کاربر ادمین است
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                cursor.execute('SELECT is_admin FROM users WHERE id = %s', (update.effective_user.id,))
-                result = cursor.fetchone()
-                
-                if not result or not result[0]:
-                    await update.message.reply_text("❌ شما دسترسی ادمین ندارید.")
-                    return ConversationHandler.END
-        except Exception as e:
-            logger.error(f"Error checking admin status: {e}")
-            await update.message.reply_text("خطا در بررسی دسترسی.")
-            return ConversationHandler.END
-        finally:
-            if conn:
-                conn.close()
-
-        # ایجاد دکمه اینلاین برای جستجوی دارو
-        keyboard = [
-            [InlineKeyboardButton(
-                "🔍 جستجوی دارو برای ویرایش", 
-                switch_inline_query_current_chat="edit "
-            )]
-        ]
+        # بررسی وجود message
+        if update.message:
+            await update.message.reply_text(
+                "لطفا نام دارویی که می‌خواهید ویرایش کنید را جستجو کنید:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔍 جستجوی دارو", switch_inline_query_current_chat="edit ")]
+                ])
+            )
+        elif update.callback_query:
+            await update.callback_query.answer()
+            await update.callback_query.edit_message_text(
+                "لطفا نام دارویی که می‌خواهید ویرایش کنید را جستجو کنید:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔍 جستجوی دارو", switch_inline_query_current_chat="edit ")]
+                ])
+            )
+        else:
+            # اگر هیچکدام نبود، از context استفاده کن
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                text="لطفا نام دارویی که می‌خواهید ویرایش کنید را جستجو کنید:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔍 جستجوی دارو", switch_inline_query_current_chat="edit ")]
+                ])
+            )
         
-        await update.message.reply_text(
-            "برای ویرایش دارو، روی دکمه زیر کلیک کنید و داروی مورد نظر را جستجو کنید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
         return States.ADMIN_EDIT_DRUG
         
     except Exception as e:
         logger.error(f"Error in start_admin_edit_drug: {e}")
-        await update.message.reply_text("خطایی رخ داده است.")
+        
+        # مدیریت ایمن خطا
+        try:
+            if update.callback_query:
+                await update.callback_query.answer("خطایی رخ داده است.", show_alert=True)
+            elif update.message:
+                await update.message.reply_text("خطایی رخ داده است.")
+            else:
+                await context.bot.send_message(
+                    chat_id=update.effective_user.id,
+                    text="خطایی رخ داده است. لطفا دوباره تلاش کنید."
+                )
+        except Exception as inner_e:
+            logger.error(f"Failed to send error message: {inner_e}")
+        
         return ConversationHandler.END
 async def handle_admin_edit_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug selection for admin editing"""
