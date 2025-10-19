@@ -7653,9 +7653,8 @@ def main():
                 ],
            },
            fallbacks=[
-               CommandHandler("cancel", clear_conversation_state),
-               CallbackQueryHandler(show_admin_menu, pattern="^back_to_main$"),
-               CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$"),
+               CallbackQueryHandler(handle_back, pattern="^back$"),
+               CommandHandler("cancel", cancel)
            ],
            name="admin_edit_drug",
            persistent=False,
