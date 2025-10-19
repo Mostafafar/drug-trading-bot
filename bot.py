@@ -3466,6 +3466,7 @@ async def handle_admin_edit_action(update: Update, context: ContextTypes.DEFAULT
 
 async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ذخیره ویرایش دارو توسط ادمین"""
+    global drug_list
     try:
         user_input = update.message.text.strip()
         edit_field = context.user_data.get('admin_edit_field')
@@ -3528,7 +3529,7 @@ async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYP
                     df.to_excel(excel_file, index=False, engine='openpyxl')
                     
                     # به روزرسانی کش
-                    global drug_list
+                    
                     drug_list = df[['name', 'price']].dropna().drop_duplicates().values.tolist()
                     drug_list = [(str(name).strip(), str(price).strip()) for name, price in drug_list if str(name).strip()]
         
