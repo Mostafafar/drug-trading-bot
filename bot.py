@@ -7134,6 +7134,7 @@ async def handle_admin_edit_drug_callback(update: Update, context: ContextTypes.
         logger.error(f"Error in handle_admin_edit_drug_callback: {e}")
         await query.edit_message_text("خطا در انتخاب دارو.")
         return ConversationHandler.END
+
 async def handle_admin_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle admin edit actions for drugs"""
     try:
@@ -7158,14 +7159,18 @@ async def handle_admin_edit_action(update: Update, context: ContextTypes.DEFAULT
             return States.ADMIN_EDIT_DRUG_NAME
             
         elif query.data == "admin_edit_price":
+            # ذخیره قیمت بدون فرمت برای نمایش
+            raw_price = drug_data['price'].replace(',', '')
+            
             await query.edit_message_text(
                 f"قیمت فعلی: {drug_data['price']}\n\n"
-                "لطفاً قیمت جدید را وارد کنید (فقط اعداد، بدون کاراکترهای اضافی):",
+                "لطفاً قیمت جدید را وارد کنید (فقط اعداد):",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 بازگشت", callback_data="admin_edit_back")]
                 ])
             )
             context.user_data['admin_edit_field'] = 'price'
+            context.user_data['original_price'] = raw_price  # ذخیره قیمت خام
             return States.ADMIN_EDIT_DRUG_PRICE
             
         elif query.data == "admin_delete_drug":
@@ -7194,6 +7199,8 @@ async def handle_admin_edit_action(update: Update, context: ContextTypes.DEFAULT
         logger.error(f"Error in handle_admin_edit_action: {e}")
         await query.edit_message_text("❌ خطا در پردازش درخواست. لطفاً دوباره تلاش کنید.")
         return ConversationHandler.END
+
+
 async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save changes to drug name or price and confirm"""
     try:
@@ -7205,40 +7212,53 @@ async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text("❌ خطا در ویرایش. لطفاً دوباره شروع کنید.")
             return ConversationHandler.END
         
-        # اعتبارسنجی ورودی برای قیمت
+        # اعتبارسنجی ورودی
         if edit_field == 'price':
             try:
-                # حذف کاراکترهای غیرعددی به جز نقطه اعشار
-                cleaned_value = ''.join(c for c in new_value if c.isdigit() or c == '.')
-                float(cleaned_value)  # بررسی معتبر بودن عدد
+                # حذف کاراکترهای غیرعددی (کاما، نقطه و...)
+                cleaned_value = ''.join(c for c in new_value if c.isdigit())
+                
+                if not cleaned_value:
+                    raise ValueError("Empty price")
+                    
+                # تبدیل به عدد برای اعتبارسنجی
+                int(cleaned_value)
                 new_value = cleaned_value
             except ValueError:
                 await update.message.reply_text(
-                    "❌ قیمت وارد شده نامعتبر است. لطفاً فقط اعداد وارد کنید."
+                    "❌ قیمت وارد شده نامعتبر است. لطفاً فقط اعداد وارد کنید.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 بازگشت", callback_data="admin_edit_back")]
+                    ])
                 )
                 return States.ADMIN_EDIT_DRUG_PRICE
         
         # به‌روزرسانی در drug_list
         idx = drug_data['index']
         old_name = drug_data['name']
-        old_price = drug_data['price']
-        
-        if edit_field == 'name':
-            drug_list[idx] = (new_value, drug_list[idx][1])
-        elif edit_field == 'price':
-            drug_list[idx] = (drug_list[idx][0], new_value)
+        old_price = context.user_data.get('original_price', drug_data['price'].replace(',', ''))
         
         # ذخیره در فایل اکسل
         try:
             df = pd.read_excel(excel_file, engine='openpyxl')
             
-            # پیدا کردن ردیف مربوطه
+            # تبدیل قیمت‌های اکسل به string و حذف کاما
+            df['price'] = df['price'].astype(str).str.replace(',', '')
+            
+            # پیدا کردن ردیف مربوطه با استفاده از قیمت خام
             mask = (df['name'] == old_name) & (df['price'] == old_price)
+            
             if mask.any():
                 if edit_field == 'name':
                     df.loc[mask, 'name'] = new_value
+                    drug_list[idx] = (new_value, drug_list[idx][1])
+                    display_value = new_value
                 elif edit_field == 'price':
                     df.loc[mask, 'price'] = new_value
+                    # فرمت‌بندی قیمت برای نمایش
+                    formatted_price = f"{int(new_value):,}"
+                    drug_list[idx] = (drug_list[idx][0], formatted_price)
+                    display_value = formatted_price
                 
                 df.to_excel(excel_file, index=False, engine='openpyxl')
                 
@@ -7250,20 +7270,22 @@ async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYP
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
                 await update.message.reply_text(
-                    f"✅ { 'نام' if edit_field == 'name' else 'قیمت' } دارو با موفقیت به‌روزرسانی شد!\n\n"
+                    f"✅ {'نام' if edit_field == 'name' else 'قیمت'} دارو با موفقیت به‌روزرسانی شد!\n\n"
                     f"💊 نام: {new_value if edit_field == 'name' else drug_data['name']}\n"
-                    f"💰 قیمت: {new_value if edit_field == 'price' else drug_data['price']}",
+                    f"💰 قیمت: {display_value if edit_field == 'price' else drug_data['price']}",
                     reply_markup=reply_markup
                 )
                 
                 # پاک‌سازی داده‌های موقت
                 context.user_data.pop('admin_edit_field', None)
                 context.user_data.pop('admin_editing_drug', None)
+                context.user_data.pop('original_price', None)
                 
                 return States.ADMIN_EDIT_DRUG
             else:
                 await update.message.reply_text(
-                    "❌ دارو در فایل اکسل یافت نشد. لطفاً دوباره تلاش کنید."
+                    f"❌ دارو در فایل اکسل یافت نشد.\n"
+                    f"Debug info: نام={old_name}, قیمت={old_price}"
                 )
                 return ConversationHandler.END
                 
