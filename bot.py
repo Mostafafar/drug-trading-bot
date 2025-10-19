@@ -116,7 +116,10 @@ class States(Enum):
     CONFIRM_TOTALS = auto()  
     ADMIN_VERIFY_PHARMACY_NAME = auto()
     SEARCH_DRUG_FOR_NEED = auto()
-    ADD_DRUG_FROM_INLINE = auto() # اضافه کردن این خط
+    ADD_DRUG_FROM_INLINE = auto()
+    ADMIN_EDIT_DRUG = auto()
+    ADMIN_EDIT_DRUG_NAME = auto()
+    ADMIN_EDIT_DRUG_PRICE = auto()# اضافه کردن این خط
 
 def get_db_connection(max_retries=3, retry_delay=1.0):
     """Get a database connection with retry logic"""
@@ -1088,6 +1091,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await handle_offer_response(update, context)
         elif query.data.startswith("contact_") or query.data.startswith("finalize_"):
             return await handle_admin_actions(update, context)
+        elif query.data.startswith("admin_edit_drug_"):
+            return await handle_admin_edit_drug_callback(update, context)
+        elif query.data.startswith("admin_edit_") or query.data in ["admin_confirm_delete", "admin_cancel_delete"]:
+            return await handle_admin_edit_action(update, context)
         
         logger.warning(f"Unhandled callback data: {query.data}")
         await query.edit_message_text("این گزینه در حال حاضر قابل استفاده نیست.")
