@@ -7152,10 +7152,15 @@ async def start_admin_edit_drug(update: Update, context: ContextTypes.DEFAULT_TY
         
         return ConversationHandler.END
 async def handle_admin_edit_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت callback ویرایش دارو توسط ادمین"""
+    """Handle admin drug edit callback"""
     try:
         query = update.callback_query
         await query.answer()
+        
+        logger.info(f"🔄 handle_admin_edit_drug_callback - Context keys: {list(context.user_data.keys())}")
+        logger.info(f"🔄 handle_admin_edit_drug_callback - Current state: {context.user_data.get('_conversation_state')}")
+        
+        # بقیه کد...
         
         if query.data.startswith("admin_edit_drug_"):
             idx = int(query.data.split("_")[3])
