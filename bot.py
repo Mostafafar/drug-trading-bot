@@ -7135,170 +7135,248 @@ async def handle_admin_edit_drug_callback(update: Update, context: ContextTypes.
         await query.edit_message_text("خطا در انتخاب دارو.")
         return ConversationHandler.END
 
+
+async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ذخیره ویرایش قیمت دارو توسط ادمین"""
+    try:
+        new_price = update.message.text.strip()
+        editing_drug = context.user_data.get('admin_editing_drug')
+        
+        if not editing_drug:
+            await update.message.reply_text("❌ اطلاعات دارو یافت نشد.")
+            return ConversationHandler.END
+        
+        # اعتبارسنجی و فرمت قیمت
+        try:
+            # تبدیل اعداد فارسی به انگلیسی
+            persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+            new_price = new_price.translate(persian_to_english)
+            
+            # حذف کاراکترهای غیرعددی به جز ارقام
+            cleaned_price = ''.join(c for c in new_price if c.isdigit())
+            
+            if not cleaned_price:
+                await update.message.reply_text("❌ لطفا یک قیمت معتبر وارد کنید:")
+                return States.ADMIN_EDIT_DRUG_PRICE
+                
+            # تبدیل به عدد و فرمت با جداکننده هزارگان
+            price_int = int(cleaned_price)
+            if price_int <= 0:
+                await update.message.reply_text("❌ قیمت باید بزرگتر از صفر باشد:")
+                return States.ADMIN_EDIT_DRUG_PRICE
+                
+            formatted_price = "{:,}".format(price_int).replace(",", "،")
+            
+        except ValueError:
+            await update.message.reply_text("❌ لطفا یک عدد معتبر وارد کنید:")
+            return States.ADMIN_EDIT_DRUG_PRICE
+        
+        # ذخیره در دیتابیس
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                UPDATE drug_items 
+                SET price = %s 
+                WHERE id = %s
+                ''', (formatted_price, editing_drug['id']))
+                conn.commit()
+                
+                # به روزرسانی لیست کش شده
+                for i, (name, price) in enumerate(drug_list):
+                    if name == editing_drug['name']:
+                        drug_list[i] = (name, formatted_price)
+                        break
+                
+                # پیام موفقیت
+                success_msg = (
+                    f"✅ قیمت دارو با موفقیت به‌روزرسانی شد!\n\n"
+                    f"💊 دارو: {editing_drug['name']}\n"
+                    f"💰 قیمت جدید: {formatted_price}\n\n"
+                    f"برای ادامه ویرایش، از منوی ادمین استفاده کنید."
+                )
+                
+                await update.message.reply_text(success_msg)
+                
+        except Exception as e:
+            logger.error(f"Error updating drug price: {e}")
+            if conn:
+                conn.rollback()
+            await update.message.reply_text("❌ خطا در به‌روزرسانی قیمت.")
+            return States.ADMIN_EDIT_DRUG_PRICE
+        finally:
+            if conn:
+                conn.close()
+        
+        # پاک‌سازی کامل و پایان مکالمه
+        context.user_data.clear()
+        
+        # نمایش منوی ادمین
+        admin_keyboard = [
+            ['📤 آپلود فایل اکسل', '📊 مشاهده آمار'],
+            ['✏️ ویرایش داروها', '🔙 منوی اصلی']
+        ]
+        reply_markup = ReplyKeyboardMarkup(admin_keyboard, resize_keyboard=True)
+        
+        await update.message.reply_text(
+            "ویرایش با موفقیت انجام شد. لطفا گزینه مورد نظر را انتخاب کنید:",
+            reply_markup=reply_markup
+        )
+        
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"Error in save_admin_drug_edit: {e}")
+        await update.message.reply_text("❌ خطایی رخ داد. به منوی اصلی بازگشتید.")
+        return ConversationHandler.END
+
 async def handle_admin_edit_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle admin edit actions for drugs"""
+    """مدیریت اقدامات ویرایش دارو توسط ادمین"""
     try:
         query = update.callback_query
         await query.answer()
         
-        drug_data = context.user_data.get('admin_editing_drug')
-        if not drug_data:
-            await query.edit_message_text("❌ اطلاعات دارو یافت نشد. لطفاً دوباره شروع کنید.")
+        drug = context.user_data.get('admin_editing_drug')
+        if not drug:
+            await query.edit_message_text("❌ اطلاعات دارو یافت نشد.")
             return ConversationHandler.END
         
-        # دکمه‌های ویرایش
-        if query.data == "admin_edit_name":
+        if query.data == "admin_back_to_list":
+            # بازگشت به لیست داروها
+            context.user_data.pop('admin_editing_drug', None)
+            return await handle_admin_edit_drug_callback(update, context)
+        
+        elif query.data == "admin_cancel_delete":
+            # لغو حذف - بازگشت به منوی ویرایش
+            keyboard = [
+                [InlineKeyboardButton("✏️ ویرایش نام", callback_data="admin_edit_name")],
+                [InlineKeyboardButton("✏️ ویرایش قیمت", callback_data="admin_edit_price")],
+                [InlineKeyboardButton("🗑️ حذف دارو", callback_data="admin_delete_drug")],
+                [InlineKeyboardButton("🔙 بازگشت به لیست", callback_data="admin_back_to_list")]
+            ]
+            
             await query.edit_message_text(
-                f"نام فعلی: {drug_data['name']}\n\n"
-                "لطفاً نام جدید را وارد کنید:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 بازگشت", callback_data="admin_edit_back")]
-                ])
+                f"ویرایش دارو:\n\n"
+                f"💊 نام: {drug['name']}\n"
+                f"💰 قیمت: {drug['price']}\n\n"
+                "لطفا گزینه مورد نظر را انتخاب کنید:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            context.user_data['admin_edit_field'] = 'name'
+            return States.ADMIN_EDIT_DRUG
+        
+        elif query.data == "admin_confirm_delete":
+            # تأیید حذف دارو
+            conn = None
+            try:
+                conn = get_db_connection()
+                with conn.cursor() as cursor:
+                    cursor.execute('DELETE FROM drug_items WHERE id = %s', (drug['id'],))
+                    
+                    # به روزرسانی لیست کش شده
+                    global drug_list
+                    drug_list = [(name, price) for name, price in drug_list if name != drug['name']]
+                    
+                    conn.commit()
+                    
+                    await query.edit_message_text(f"✅ داروی «{drug['name']}» با موفقیت حذف شد.")
+                    
+            except Exception as e:
+                logger.error(f"Error deleting drug: {e}")
+                if conn:
+                    conn.rollback()
+                await query.edit_message_text("❌ خطا در حذف دارو.")
+            finally:
+                if conn:
+                    conn.close()
+            
+            # پاک‌سازی و بازگشت
+            context.user_data.clear()
+            return ConversationHandler.END
+        
+        elif query.data == "admin_edit_name":
+            await query.edit_message_text(
+                f"نام فعلی: {drug['name']}\n\nلطفا نام جدید را وارد کنید:"
+            )
             return States.ADMIN_EDIT_DRUG_NAME
             
         elif query.data == "admin_edit_price":
-            # ذخیره قیمت بدون فرمت برای نمایش
-            raw_price = drug_data['price'].replace(',', '')
-            
             await query.edit_message_text(
-                f"قیمت فعلی: {drug_data['price']}\n\n"
-                "لطفاً قیمت جدید را وارد کنید (فقط اعداد):",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 بازگشت", callback_data="admin_edit_back")]
-                ])
+                f"قیمت فعلی: {drug['price']}\n\nلطفا قیمت جدید را وارد کنید:"
             )
-            context.user_data['admin_edit_field'] = 'price'
-            context.user_data['original_price'] = raw_price  # ذخیره قیمت خام
             return States.ADMIN_EDIT_DRUG_PRICE
-            
+        
         elif query.data == "admin_delete_drug":
+            # درخواست تأیید حذف
             keyboard = [
                 [InlineKeyboardButton("✅ بله، حذف شود", callback_data="admin_confirm_delete")],
                 [InlineKeyboardButton("❌ خیر، انصراف", callback_data="admin_cancel_delete")]
             ]
+            
             await query.edit_message_text(
-                f"⚠️ آیا مطمئن هستید که می‌خواهید داروی زیر را حذف کنید؟\n\n"
-                f"💊 {drug_data['name']}\n"
-                f"💰 {drug_data['price']}\n\n"
-                "این عمل غیرقابل بازگشت است!",
+                f"⚠️ آیا مطمئن هستید که می‌خواهید داروی «{drug['name']}» را حذف کنید؟",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return States.ADMIN_EDIT_DRUG
             
-        elif query.data == "admin_edit_back":
-            return await start_admin_edit_drug(update, context)
-            
-        else:
-            logger.warning(f"Unhandled callback in handle_admin_edit_action: {query.data}")
-            await query.edit_message_text("❌ گزینه نامعتبر. لطفاً دوباره تلاش کنید.")
-            return ConversationHandler.END
-            
     except Exception as e:
         logger.error(f"Error in handle_admin_edit_action: {e}")
-        await query.edit_message_text("❌ خطا در پردازش درخواست. لطفاً دوباره تلاش کنید.")
-        return ConversationHandler.END
+        await query.edit_message_text("❌ خطا در پردازش درخواست.")
+    
+    return States.ADMIN_EDIT_DRUG
 
-
-async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Save changes to drug name or price and confirm"""
+# همچنین نیاز به تابع برای ذخیره ویرایش نام دارو داریم
+async def save_admin_drug_name_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ذخیره ویرایش نام دارو توسط ادمین"""
     try:
-        new_value = update.message.text.strip()
-        edit_field = context.user_data.get('admin_edit_field')
-        drug_data = context.user_data.get('admin_editing_drug')
+        new_name = update.message.text.strip()
+        editing_drug = context.user_data.get('admin_editing_drug')
         
-        if not edit_field or not drug_data:
-            await update.message.reply_text("❌ خطا در ویرایش. لطفاً دوباره شروع کنید.")
+        if not editing_drug:
+            await update.message.reply_text("❌ اطلاعات دارو یافت نشد.")
             return ConversationHandler.END
         
-        # اعتبارسنجی ورودی
-        if edit_field == 'price':
-            try:
-                # حذف کاراکترهای غیرعددی (کاما، نقطه و...)
-                cleaned_value = ''.join(c for c in new_value if c.isdigit())
-                
-                if not cleaned_value:
-                    raise ValueError("Empty price")
-                    
-                # تبدیل به عدد برای اعتبارسنجی
-                int(cleaned_value)
-                new_value = cleaned_value
-            except ValueError:
-                await update.message.reply_text(
-                    "❌ قیمت وارد شده نامعتبر است. لطفاً فقط اعداد وارد کنید.",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔙 بازگشت", callback_data="admin_edit_back")]
-                    ])
-                )
-                return States.ADMIN_EDIT_DRUG_PRICE
+        if not new_name:
+            await update.message.reply_text("❌ لطفا نام معتبری وارد کنید:")
+            return States.ADMIN_EDIT_DRUG_NAME
         
-        # به‌روزرسانی در drug_list
-        idx = drug_data['index']
-        old_name = drug_data['name']
-        old_price = context.user_data.get('original_price', drug_data['price'].replace(',', ''))
-        
-        # ذخیره در فایل اکسل
+        # ذخیره در دیتابیس
+        conn = None
         try:
-            df = pd.read_excel(excel_file, engine='openpyxl')
-            
-            # تبدیل قیمت‌های اکسل به string و حذف کاما
-            df['price'] = df['price'].astype(str).str.replace(',', '')
-            
-            # پیدا کردن ردیف مربوطه با استفاده از قیمت خام
-            mask = (df['name'] == old_name) & (df['price'] == old_price)
-            
-            if mask.any():
-                if edit_field == 'name':
-                    df.loc[mask, 'name'] = new_value
-                    drug_list[idx] = (new_value, drug_list[idx][1])
-                    display_value = new_value
-                elif edit_field == 'price':
-                    df.loc[mask, 'price'] = new_value
-                    # فرمت‌بندی قیمت برای نمایش
-                    formatted_price = f"{int(new_value):,}"
-                    drug_list[idx] = (drug_list[idx][0], formatted_price)
-                    display_value = formatted_price
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                UPDATE drug_items 
+                SET name = %s 
+                WHERE id = %s
+                ''', (new_name, editing_drug['id']))
+                conn.commit()
                 
-                df.to_excel(excel_file, index=False, engine='openpyxl')
+                # به روزرسانی لیست کش شده
+                for i, (name, price) in enumerate(drug_list):
+                    if name == editing_drug['name']:
+                        drug_list[i] = (new_name, price)
+                        break
                 
-                # پیام تأیید با دکمه‌های ادامه یا بازگشت
-                keyboard = [
-                    [InlineKeyboardButton("🔄 ویرایش داروی دیگر", callback_data="admin_edit_back")],
-                    [InlineKeyboardButton("🔙 بازگشت به منوی اصلی", callback_data="back_to_main")]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await update.message.reply_text(
-                    f"✅ {'نام' if edit_field == 'name' else 'قیمت'} دارو با موفقیت به‌روزرسانی شد!\n\n"
-                    f"💊 نام: {new_value if edit_field == 'name' else drug_data['name']}\n"
-                    f"💰 قیمت: {display_value if edit_field == 'price' else drug_data['price']}",
-                    reply_markup=reply_markup
-                )
-                
-                # پاک‌سازی داده‌های موقت
-                context.user_data.pop('admin_edit_field', None)
-                context.user_data.pop('admin_editing_drug', None)
-                context.user_data.pop('original_price', None)
-                
-                return States.ADMIN_EDIT_DRUG
-            else:
-                await update.message.reply_text(
-                    f"❌ دارو در فایل اکسل یافت نشد.\n"
-                    f"Debug info: نام={old_name}, قیمت={old_price}"
-                )
-                return ConversationHandler.END
+                await update.message.reply_text(f"✅ نام دارو با موفقیت به «{new_name}» تغییر یافت.")
                 
         except Exception as e:
-            logger.error(f"Error updating Excel file: {e}")
-            await update.message.reply_text(
-                "❌ خطا در به‌روزرسانی فایل اکسل. لطفاً دوباره تلاش کنید."
-            )
-            return ConversationHandler.END
-            
+            logger.error(f"Error updating drug name: {e}")
+            if conn:
+                conn.rollback()
+            await update.message.reply_text("❌ خطا در به‌روزرسانی نام دارو.")
+            return States.ADMIN_EDIT_DRUG_NAME
+        finally:
+            if conn:
+                conn.close()
+        
+        # پاک‌سازی و پایان
+        context.user_data.clear()
+        return ConversationHandler.END
+        
     except Exception as e:
-        logger.error(f"Error in save_admin_drug_edit: {e}")
-        await update.message.reply_text("❌ خطا در ذخیره تغییرات. لطفاً دوباره تلاش کنید.")
+        logger.error(f"Error in save_admin_drug_name_edit: {e}")
+        await update.message.reply_text("❌ خطایی رخ داد.")
         return ConversationHandler.END
 async def handle_admin_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """حذف دارو از لیست"""
