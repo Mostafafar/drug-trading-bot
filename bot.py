@@ -7617,14 +7617,22 @@ def main():
                     CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$")
                 ],
                 States.ADMIN_EDIT_DRUG_NAME: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_admin_drug_edit)
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_admin_drug_edit),
+                    CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$")
                 ],
                 States.ADMIN_EDIT_DRUG_PRICE: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_admin_drug_edit)
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, save_admin_drug_edit),
+                    CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', clear_conversation_state)],
-            allow_reentry=True
+            fallbacks=[
+                CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$"),
+                CallbackQueryHandler(show_admin_panel, pattern="^back_to_main$"),
+                CommandHandler("cancel", cancel_operation),
+            ],
+            name="admin_edit_drug",
+            persistent=False,
+            allow_reentry=True,
         )
 
         # Admin verification handler
