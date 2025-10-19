@@ -7259,9 +7259,13 @@ async def handle_admin_edit_action(update: Update, context: ContextTypes.DEFAULT
 
 async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Save admin drug edits with detailed logging"""
+    
+        
+        # بقیه کد...
     try:
         user_input = update.message.text.strip()
         logger.info(f"Admin drug edit input received: '{user_input}' from user {update.effective_user.id}")
+        logger.info(f"🟢 save_admin_drug_edit CALLED - Text: '{update.message.text}'")
         
         editing_drug = context.user_data.get('admin_editing_drug')
         edit_field = context.user_data.get('edit_field')
