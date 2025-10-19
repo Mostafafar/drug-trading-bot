@@ -7096,7 +7096,7 @@ async def start_admin_edit_drug(update: Update, context: ContextTypes.DEFAULT_TY
         
         return ConversationHandler.END
 async def handle_admin_edit_drug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle drug selection for admin editing"""
+    """مدیریت callback ویرایش دارو توسط ادمین"""
     try:
         query = update.callback_query
         await query.answer()
@@ -7106,34 +7106,34 @@ async def handle_admin_edit_drug_callback(update: Update, context: ContextTypes.
             if 0 <= idx < len(drug_list):
                 selected_drug = drug_list[idx]
                 
-                # ذخیره اطلاعات داروی انتخاب شده
+                # ذخیره اطلاعات دارو در context
                 context.user_data['admin_editing_drug'] = {
+                    'id': idx,  # استفاده از ایندکس به عنوان شناسه موقت
                     'name': selected_drug[0],
-                    'price': selected_drug[1],
-                    'index': idx
+                    'price': selected_drug[1]
                 }
                 
-                # نمایش منوی ویرایش
                 keyboard = [
                     [InlineKeyboardButton("✏️ ویرایش نام", callback_data="admin_edit_name")],
-                    [InlineKeyboardButton("💰 ویرایش قیمت", callback_data="admin_edit_price")],
+                    [InlineKeyboardButton("✏️ ویرایش قیمت", callback_data="admin_edit_price")],
                     [InlineKeyboardButton("🗑️ حذف دارو", callback_data="admin_delete_drug")],
-                    [InlineKeyboardButton("🔙 بازگشت", callback_data="admin_edit_back")]
+                    [InlineKeyboardButton("🔙 بازگشت به لیست", callback_data="admin_back_to_list")]
                 ]
                 
                 await query.edit_message_text(
-                    f"💊 داروی انتخاب شده:\n\n"
-                    f"نام: {selected_drug[0]}\n"
-                    f"قیمت: {selected_drug[1]}\n\n"
-                    "لطفا عمل مورد نظر را انتخاب کنید:",
+                    f"ویرایش دارو:\n\n"
+                    f"💊 نام: {selected_drug[0]}\n"
+                    f"💰 قیمت: {selected_drug[1]}\n\n"
+                    "لطفا گزینه مورد نظر را انتخاب کنید:",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 return States.ADMIN_EDIT_DRUG
                 
     except Exception as e:
         logger.error(f"Error in handle_admin_edit_drug_callback: {e}")
-        await query.edit_message_text("خطا در انتخاب دارو.")
-        return ConversationHandler.END
+        await query.edit_message_text("خطا در انتخاب دارو برای ویرایش.")
+    
+    return States.ADMIN_EDIT_DRUG
 
 async def save_admin_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ذخیره ویرایش قیمت دارو توسط ادمین - نسخه اصلاح شده"""
