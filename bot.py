@@ -1007,11 +1007,17 @@ async def personnel_login_start(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 
+
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Central callback query handler"""
     try:
         query = update.callback_query
         await query.answer()  # Always answer the callback query first
+        
+        # 🔥 لاگ وضعیت context برای دیباگ
+        logger.info(f"🔍 callback_handler START - Context keys: {list(context.user_data.keys())}")
+        logger.info(f"🔍 callback_handler START - Current state: {context.user_data.get('_conversation_state')}")
+        logger.info(f"🔍 callback_handler START - Callback data: {query.data}")
         
         if not query.data:
             logger.warning("Empty callback data received")
@@ -1040,7 +1046,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
             return States.START
-
         # Handle back button - بازگشت مستقیم به لیست داروها
         elif query.data == "back":
             try:
