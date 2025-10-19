@@ -7311,19 +7311,7 @@ async def handle_admin_drug_deletion(update: Update, context: ContextTypes.DEFAU
         logger.error(f"Error in handle_admin_drug_deletion: {e}")
         await query.edit_message_text("خطا در حذف دارو.")
         return ConversationHandler.END
-async def admin_edit_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Fallback handler for admin edit mode"""
-    try:
-        # اگر در حال ویرایش ادمین هستیم، به منوی ویرایش برگردیم
-        if 'admin_editing_drug' in context.user_data:
-            return await handle_admin_edit_drug_callback(update, context)
-        
-        # در غیر این صورت به منوی اصلی برو
-        return await clear_conversation_state(update, context)
-        
-    except Exception as e:
-        logger.error(f"Error in admin_edit_fallback: {e}")
-        return await clear_conversation_state(update, context)
+
 
                 
 def main():
@@ -7380,8 +7368,7 @@ def main():
                     CallbackQueryHandler(handle_admin_edit_drug_callback, pattern="^admin_edit_drug_"),
                     CallbackQueryHandler(handle_admin_edit_action, pattern="^admin_edit_"),
                     CallbackQueryHandler(handle_admin_drug_deletion, pattern="^admin_(confirm|cancel)_delete$"),
-                    CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$"),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, admin_edit_fallback)
+                    CallbackQueryHandler(start_admin_edit_drug, pattern="^admin_edit_back$")
                     
                ],
                States.ADMIN_EDIT_DRUG_NAME: [
