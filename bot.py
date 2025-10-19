@@ -639,48 +639,82 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
             conn.close()
 
 async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT_TYPE, silent: bool = False):
-    """Clear the conversation state while preserving essential trade and need data"""
+    """Clear the conversation state while preserving essential trade, need and admin data"""
     try:
-        logger.info(f"Clearing conversation state for user {update.effective_user.id}")
+        user_id = update.effective_user.id
+        logger.info(f"Clearing conversation state for user {user_id}")
         logger.info(f"Current keys in user_data: {list(context.user_data.keys())}")
         
-        # 🔥 بررسی اینکه آیا کاربر در حال ثبت نیاز است یا مبادله
+        # 🔥 تشخیص اگر کاربر ادمین است و در حال ویرایش دارو است
+        is_admin_editing = any(key in context.user_data for key in ['admin_editing_drug', 'admin_mode'])
         current_state = context.user_data.get('_conversation_state')
-        is_in_need_process = current_state in [
-            States.SEARCH_DRUG_FOR_NEED, 
-            States.ADD_NEED_QUANTITY,
-            States.ADD_NEED_NAME,
+        is_in_admin_process = current_state in [
+            States.ADMIN_EDIT_DRUG, 
+            States.ADMIN_EDIT_DRUG_NAME, 
+            States.ADMIN_EDIT_DRUG_PRICE,
+            States.ADMIN_UPLOAD_EXCEL
         ]
         
-        if is_in_need_process:
-            # اگر در حال ثبت نیاز است، همه چیز را پاک کن
+        # 🔥 اگر ادمین در حال ویرایش است، stateها را حفظ کن
+        if is_admin_editing or is_in_admin_process:
+            logger.info(f"Admin editing detected - preserving state for user {user_id}")
+            
+            # حفظ تمام کلیدهای مربوط به ادمین
+            admin_keys_to_preserve = [
+                'admin_editing_drug', 'admin_mode', '_conversation_state',
+                'edit_field', 'excel_file_path', 'uploaded_excel_data',
+                'pending_approvals', 'selected_user_id', 'last_admin_action'
+            ]
+            
+            preserved_data = {}
+            for key in admin_keys_to_preserve:
+                if key in context.user_data:
+                    preserved_data[key] = context.user_data[key]
+                    logger.info(f"Preserving admin key: {key}")
+            
+            # پاک کردن کامل context
             context.user_data.clear()
-            logger.info("Cleared all data for need registration process")
+            
+            # بازگردانی داده‌های ادمین
+            context.user_data.update(preserved_data)
+            logger.info(f"Admin state preserved for user {user_id}")
+            
         else:
-            # حفظ اطلاعات ضروری مربوط به مبادله
-            trade_keys_to_preserve = [
+            # برای کاربران عادی، منطق قبلی
+            # حفظ اطلاعات ضروری مربوط به مبادله و ادمین
+            keys_to_preserve = [
+                # کلیدهای مبادله
                 'selected_pharmacy_id', 'selected_pharmacy_name', 'selected_drug',
                 'offer_items', 'comp_items', 'need_name', 'need_desc',
                 'selected_drug_for_need', 'editing_need', 'edit_field',
-                'editing_drug','user_needs_list', 'editing_needs_list', 'editing_need',
-                'editing_drug', 'edit_field'  
+                'editing_drug', 'user_needs_list', 'editing_needs_list',
+                
+                # کلیدهای ادمین
+                'admin_editing_drug', 'edit_field', 'admin_mode',
+                
+                # کلیدهای جستجو و لیست‌ها
+                'matched_drugs', 'search_query', 'current_list_type',
+                'page_target', 'page_mine', 'target_drugs', 'my_drugs',
+                
+                # کلیدهای شخصی کاربر
+                'user_categories', 'personnel_code'
             ]
             
-            # ذخیره اطلاعات مبادله
-            preserved_trade_data = {}
-            for key in trade_keys_to_preserve:
+            # حذف مقادیر تکراری و None
+            keys_to_preserve = list(set([k for k in keys_to_preserve if k]))
+            
+            # ذخیره اطلاعات
+            preserved_data = {}
+            for key in keys_to_preserve:
                 if key in context.user_data:
-                    preserved_trade_data[key] = context.user_data[key]
-                    logger.info(f"Preserving trade key: {key}")
+                    preserved_data[key] = context.user_data[key]
+                    logger.info(f"Preserving key: {key}")
             
             # پاک کردن کامل همه stateها
             context.user_data.clear()
             
-            # بازگرداندن اطلاعات مبادله
-            context.user_data.update(preserved_trade_data)
-        
-        # حذف state مکالمه
-        context.user_data.pop('_conversation_state', None)
+            # بازگردانی اطلاعات
+            context.user_data.update(preserved_data)
         
         logger.info(f"Final keys after clearing: {list(context.user_data.keys())}")
         
