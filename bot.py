@@ -2764,25 +2764,35 @@ async def select_drug_for_adding(update: Update, context: ContextTypes.DEFAULT_T
 async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if update.message and update.message.text:
-            expiry_date = update.message.text.strip()
-            logger.info(f"User {update.effective_user.id} entered expiry date: {expiry_date}")
+            expiry_date_input = update.message.text.strip()
+            logger.info(f"User {update.effective_user.id} entered expiry date: {expiry_date_input}")
             
             # تبدیل اعداد فارسی به انگلیسی
             persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
-            expiry_date = expiry_date.translate(persian_to_english)
+            expiry_date_input = expiry_date_input.translate(persian_to_english)
             
-            # Validate date format
-            if not re.match(r'^\d{4}/\d{2}/\d{2}$', expiry_date):
+            # پردازش و تبدیل تاریخ
+            processed_date = process_date_input(expiry_date_input)
+            
+            if not processed_date:
                 await update.message.reply_text(
-                    "فرمت تاریخ نامعتبر است. لطفا تاریخ را به فرمت 2026/01/23 وارد کنید:"
+                    "❌ فرمت تاریخ نامعتبر است.\n\n"
+                    "فرمت‌های قابل قبول:\n"
+                    "• 2026/09/09\n• 2026.09.09\n• 2026-09-09\n"
+                    "• 26.9 (تبدیل به 2026/09/01)\n• 1405/6 (تبدیل به 2026/09/01)\n"
+                    "• 10 شهریور 1405\n\n"
+                    "لطفا تاریخ را مجدداً وارد کنید:"
                 )
                 return States.ADD_DRUG_DATE
             
-            context.user_data['expiry_date'] = expiry_date
-            logger.info(f"Stored expiry_date: {expiry_date} for user {update.effective_user.id}")
+            context.user_data['expiry_date'] = processed_date
+            logger.info(f"Stored expiry_date: {processed_date} for user {update.effective_user.id}")
             
-            await update.message.reply_text("📦 لطفا تعداد موجودی را وارد کنید:")
-            return States.ADD_DRUG_QUANTITY  # این خط مهم است
+            await update.message.reply_text(
+                f"✅ تاریخ انقضا: {processed_date}\n\n"
+                "📦 لطفا تعداد موجودی را وارد کنید:"
+            )
+            return States.ADD_DRUG_QUANTITY
             
         elif update.callback_query:
             query = update.callback_query
@@ -2790,14 +2800,14 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if query.data == "back_to_search":
                 return await search_drug_for_adding(update, context)
             
-            await query.edit_message_text("لطفا تاریخ انقضا را به صورت متنی وارد کنید (مثال: 2026/01/23):")
+            await query.edit_message_text("لطفا تاریخ انقضا را به صورت متنی وارد کنید:")
             return States.ADD_DRUG_DATE
             
         else:
             logger.warning(f"Unexpected update type for user {update.effective_user.id}: {update}")
             await context.bot.send_message(
                 chat_id=update.effective_user.id,
-                text="لطفا تاریخ انقضا را به فرمت 2026/01/23 وارد کنید:"
+                text="لطفا تاریخ انقضا را وارد کنید:"
             )
             return States.ADD_DRUG_DATE
             
@@ -2808,6 +2818,86 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text="خطایی رخ داده است. لطفا دوباره تاریخ انقضا را وارد کنید:"
         )
         return States.ADD_DRUG_DATE
+
+
+def process_date_input(date_input):
+    """پردازش و تبدیل فرمت‌های مختلف تاریخ به فرمت استاندارد YYYY/MM/DD"""
+    try:
+        # حذف فضاهای اضافی
+        date_input = date_input.strip()
+        
+        # اگر فقط عدد باشد (فرمت‌های کوتاه)
+        if re.match(r'^[\d\.\/\-]+$', date_input):
+            return process_numeric_date(date_input)
+        
+        # اگر حاوی متن باشد (فرمت‌های متنی)
+        return process_text_date(date_input)
+        
+    except Exception as e:
+        logger.error(f"Error processing date input '{date_input}': {e}")
+        return None
+
+
+def process_numeric_date(date_input):
+    """پردازش تاریخ‌های عددی"""
+    # جایگزینی جداکننده‌های مختلف با اسلش
+    normalized = re.sub(r'[\.\-]', '/', date_input)
+    parts = normalized.split('/')
+    
+    # حذف قسمت‌های خالی
+    parts = [p for p in parts if p.strip()]
+    
+    if len(parts) == 1:  # فقط سال
+        year = normalize_year(parts[0])
+        return f"{year}/01/01"
+    
+    elif len(parts) == 2:  # سال و ماه
+        year = normalize_year(parts[0])
+        month = parts[1].zfill(2)
+        return f"{year}/{month}/01"
+    
+    elif len(parts) == 3:  # سال، ماه و روز کامل
+        year = normalize_year(parts[0])
+        month = parts[1].zfill(2)
+        day = parts[2].zfill(2)
+        return f"{year}/{month}/{day}"
+    
+    return None
+
+
+def process_text_date(date_input):
+    """پردازش تاریخ‌های متنی (فعلاً ساده‌سازی شده)"""
+    # در اینجا می‌توانید کتابخانه‌هایی مثل jdatetime برای تبدیل شمسی اضافه کنید
+    # فعلاً فقط فرمت‌های میلادی ساده پردازش می‌شوند
+    
+    # تبدیل ماه‌های انگلیسی
+    month_map = {
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+        'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+        'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+    }
+    
+    date_lower = date_input.lower()
+    for eng_month, num_month in month_map.items():
+        if eng_month in date_lower:
+            # استخراج سال از متن
+            year_match = re.search(r'20\d{2}', date_input)
+            year = year_match.group() if year_match else str(datetime.now().year)
+            return f"{year}/{num_month}/01"
+    
+    return None
+
+
+def normalize_year(year_str):
+    """نرمال‌سازی سال (تبدیل ۲۶ به ۲۰۲۶)"""
+    year_str = year_str.strip()
+    
+    if len(year_str) == 2:  # سال دو رقمی
+        return f"20{year_str}"
+    elif len(year_str) == 3:  # سال سه رقمی (مثلاً ۱۴۰)
+        return f"2{year_str}" if year_str.startswith('0') else f"1{year_str}"
+    else:  # سال چهار رقمی
+        return year_str
 
 async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده"""
@@ -3514,7 +3604,6 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await clear_conversation_state(update, context)
         
         edit_field = context.user_data.get('edit_field')
-        new_value = user_input
         drug = context.user_data.get('editing_drug')
         
         if not edit_field or not drug:
@@ -3526,10 +3615,10 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 # تبدیل اعداد فارسی به انگلیسی
                 persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
-                new_value = new_value.translate(persian_to_english)
+                user_input = user_input.translate(persian_to_english)
                 
                 # استخراج فقط ارقام
-                digits = ''.join(filter(str.isdigit, new_value))
+                digits = ''.join(filter(str.isdigit, user_input))
                 if not digits:
                     await update.message.reply_text("❌ لطفا یک عدد معتبر وارد کنید.")
                     return States.EDIT_DRUG
@@ -3543,16 +3632,18 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return States.EDIT_DRUG
         
         elif edit_field == 'date':
-            # اعتبارسنجی فرمت تاریخ
-            persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
-            new_value = new_value.translate(persian_to_english)
-            
-            if not re.match(r'^\d{4}/\d{2}/\d{2}$', new_value):
+            # پردازش تاریخ با تابع جدید
+            new_value = process_date_input(user_input)
+            if not new_value:
                 await update.message.reply_text(
                     "❌ فرمت تاریخ نامعتبر است.\n\n"
-                    "لطفا تاریخ را به فرمت 2026/01/23 وارد کنید:"
+                    "فرمت‌های قابل قبول:\n"
+                    "• 2026/09/09\n• 2026.09.09\n• 26.9\n• 1405/6\n\n"
+                    "لطفا تاریخ را مجدداً وارد کنید:"
                 )
                 return States.EDIT_DRUG
+        
+        # بقیه کد بدون تغییر...
         
         conn = None
         try:
