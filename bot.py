@@ -1308,6 +1308,24 @@ async def admin_verify_pharmacy_name(update: Update, context: ContextTypes.DEFAU
         pharmacy_name = update.message.text
         context.user_data['pharmacy_name'] = pharmacy_name
         
+        # ذخیره موقت نام داروخانه در دیتابیس
+        conn = None
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                INSERT INTO pharmacies (user_id, name, verified)
+                VALUES (%s, %s, FALSE)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    name = EXCLUDED.name
+                ''', (update.effective_user.id, pharmacy_name))
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Error saving pharmacy name: {e}")
+        finally:
+            if conn:
+                conn.close()
+        
         # درخواست شماره تلفن از کاربر
         keyboard = [[KeyboardButton("اشتراک گذاری شماره تلفن", request_contact=True)]]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
@@ -1408,19 +1426,10 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                # بررسی وجود کاربر
-                cursor.execute('SELECT id, is_verified FROM users WHERE id = %s', (user_id,))
-                user_data = cursor.fetchone()
-                
-                if not user_data:
-                    logger.error(f"کاربر {user_id} یافت نشد")
-                    await query.edit_message_text(f"❌ کاربر با آیدی {user_id} در سیستم ثبت نشده است")
-                    return
-                
-                if user_data[1]:  # اگر کاربر از قبل تایید شده باشد
-                    logger.warning(f"کاربر {user_id} از قبل تایید شده است")
-                    await query.edit_message_text(f"⚠️ کاربر {user_id} قبلاً تایید شده بود")
-                    return
+                # دریافت نام داروخانه از دیتابیس
+                cursor.execute('SELECT name FROM pharmacies WHERE user_id = %s', (user_id,))
+                pharmacy_data = cursor.fetchone()
+                pharmacy_name = pharmacy_data[0] if pharmacy_data else "داروخانه جدید"
                 
                 # تایید کاربر
                 cursor.execute('''
@@ -1437,29 +1446,27 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text("خطا در به‌روزرسانی وضعیت کاربر")
                     return
                 
-                # ایجاد/به‌روزرسانی داروخانه
+                # به‌روزرسانی وضعیت داروخانه به تایید شده
                 cursor.execute('''
-                INSERT INTO pharmacies (user_id, verified, verified_at, admin_id)
-                VALUES (%s, TRUE, CURRENT_TIMESTAMP, %s)
-                ON CONFLICT (user_id) DO UPDATE SET
-                    verified = TRUE,
+                UPDATE pharmacies 
+                SET verified = TRUE,
                     verified_at = CURRENT_TIMESTAMP,
-                    admin_id = EXCLUDED.admin_id
+                    admin_id = %s
+                WHERE user_id = %s
                 RETURNING user_id
-                ''', (user_id, update.effective_user.id))
+                ''', (update.effective_user.id, user_id))
                 
                 if not cursor.fetchone():
-                    logger.error(f"خطا در ثبت داروخانه برای کاربر {user_id}")
-                    await query.edit_message_text("خطا در ثبت اطلاعات داروخانه")
+                    logger.error(f"خطا در به‌روزرسانی داروخانه برای کاربر {user_id}")
+                    await query.edit_message_text("خطا در به‌روزرسانی اطلاعات داروخانه")
                     conn.rollback()
                     return
                 
                 conn.commit()
-                logger.info(f"کاربر {user_id} با موفقیت تایید شد")
+                logger.info(f"کاربر {user_id} با موفقیت تایید شد - داروخانه: {pharmacy_name}")
                 
                 # ارسال پیام به کاربر با کیبورد مدیریت
                 try:
-                    # کیبورد مدیریت برای داروخانه
                     keyboard = [
                         ['اضافه کردن دارو', 'جستجوی دارو'],
                         ['لیست داروهای من', 'ثبت نیاز جدید'],
@@ -1470,7 +1477,8 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                     await context.bot.send_message(
                         chat_id=user_id,
-                        text="✅ حساب شما توسط ادمین تایید شد!\n\n"
+                        text=f"✅ حساب شما توسط ادمین تایید شد!\n\n"
+                             f"نام داروخانه: {pharmacy_name}\n\n"
                              "شما اکنون می‌توانید از تمام امکانات مدیریت داروخانه استفاده کنید.",
                         reply_markup=reply_markup
                     )
@@ -1478,7 +1486,8 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     logger.error(f"خطا در ارسال پیام به کاربر {user_id}: {str(e)}")
                 
                 await query.edit_message_text(
-                    f"✅ کاربر {user_id} با موفقیت تایید شد و به عنوان مدیر داروخانه تنظیم شد."
+                    f"✅ کاربر {user_id} با موفقیت تایید شد.\n"
+                    f"نام داروخانه: {pharmacy_name}"
                 )
                 
         except Exception as e:
