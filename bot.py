@@ -6423,8 +6423,9 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                 
                 if action == 'accept':
                     # به روزرسانی وضعیت پیشنهاد
+                    # ابتدا فقط status را آپدیت کنید
                     cursor.execute('''
-                    UPDATE offers SET status = 'accepted', responded_at = CURRENT_TIMESTAMP
+                    UPDATE offers SET status = 'accepted'
                     WHERE id = %s
                     ''', (offer_id,))
                     
