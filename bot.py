@@ -5570,7 +5570,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if quantity == 0:
                 await update.message.reply_text(
                     "🔙 به لیست داروها بازگشتید. می‌توانید داروی دیگری انتخاب کنید یا ادامه دهید.",
-                    reply_markup=ReplyKeyboardRemove()
+                    reply_markup=ReplyKeyboardRemove(),
                     parse_mode=None 
                 )
                 return await show_two_column_selection(update, context)
