@@ -6483,7 +6483,7 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                     buyer_message = "❌ پیشنهاد شما رد شد\n\n"
                     buyer_message += f"🏥 داروخانه: {pharmacy_name}\n"
                     buyer_message += "📞 برای اطلاعات بیشتر با ادمین تماس بگیرید.\n"
-                    buyer_message += f"👤 ادمین: {09372353652}"
+                    buyer_message += f"👤 ادمین: {'09372353652'}"
                     
                     await context.bot.send_message(
                         chat_id=buyer_id,
