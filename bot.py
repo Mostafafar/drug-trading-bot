@@ -2819,12 +2819,15 @@ async def add_drug_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return States.ADD_DRUG_DATE
 
-
 def process_date_input(date_input):
     """پردازش و تبدیل فرمت‌های مختلف تاریخ به فرمت استاندارد YYYY/MM/DD"""
     try:
         # حذف فضاهای اضافی
         date_input = date_input.strip()
+        
+        # تبدیل تمام اعداد فارسی به انگلیسی
+        persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+        date_input = date_input.translate(persian_to_english)
         
         # اگر فقط عدد باشد (فرمت‌های کوتاه)
         if re.match(r'^[\d\.\/\-]+$', date_input):
@@ -2837,15 +2840,14 @@ def process_date_input(date_input):
         logger.error(f"Error processing date input '{date_input}': {e}")
         return None
 
-
 def process_numeric_date(date_input):
     """پردازش تاریخ‌های عددی"""
     # جایگزینی جداکننده‌های مختلف با اسلش
     normalized = re.sub(r'[\.\-]', '/', date_input)
     parts = normalized.split('/')
     
-    # حذف قسمت‌های خالی
-    parts = [p for p in parts if p.strip()]
+    # حذف قسمت‌های خالی و فیلتر کردن مقادیر معتبر
+    parts = [p.strip() for p in parts if p.strip()]
     
     if len(parts) == 1:  # فقط سال
         year = normalize_year(parts[0])
@@ -2863,6 +2865,51 @@ def process_numeric_date(date_input):
         return f"{year}/{month}/{day}"
     
     return None
+
+def normalize_year(year_str):
+    """نرمال‌سازی سال (تبدیل ۲۶ به ۲۰۲۶ و مدیریت سال‌های ترکیبی)"""
+    year_str = year_str.strip()
+    
+    # حذف هرگونه کاراکتر غیرعددی
+    year_str = ''.join(filter(str.isdigit, year_str))
+    
+    if not year_str:
+        return str(datetime.now().year)
+    
+    if len(year_str) == 2:  # سال دو رقمی
+        return f"20{year_str}"
+    elif len(year_str) == 3:  # سال سه رقمی (مثلاً ۱۴۰)
+        return f"2{year_str}" if year_str.startswith('0') else f"1{year_str}"
+    else:  # سال چهار رقمی
+        return year_str
+
+def validate_and_format_date(date_str):
+    """اعتبارسنجی و فرمت دهی نهایی تاریخ"""
+    try:
+        # اطمینان از فرمت YYYY/MM/DD
+        parts = date_str.split('/')
+        if len(parts) != 3:
+            return None
+            
+        year, month, day = parts
+        
+        # اعتبارسنجی اعداد
+        year_int = int(year)
+        month_int = int(month)
+        day_int = int(day)
+        
+        # اعتبارسنجی محدوده‌ها
+        if not (1900 <= year_int <= 2100):
+            return None
+        if not (1 <= month_int <= 12):
+            return None
+        if not (1 <= day_int <= 31):
+            return None
+            
+        return f"{year_int:04d}/{month_int:02d}/{day_int:02d}"
+        
+    except (ValueError, IndexError):
+        return None
 
 
 def process_text_date(date_input):
@@ -2888,16 +2935,6 @@ def process_text_date(date_input):
     return None
 
 
-def normalize_year(year_str):
-    """نرمال‌سازی سال (تبدیل ۲۶ به ۲۰۲۶)"""
-    year_str = year_str.strip()
-    
-    if len(year_str) == 2:  # سال دو رقمی
-        return f"20{year_str}"
-    elif len(year_str) == 3:  # سال سه رقمی (مثلاً ۱۴۰)
-        return f"2{year_str}" if year_str.startswith('0') else f"1{year_str}"
-    else:  # سال چهار رقمی
-        return year_str
 
 async def add_drug_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده"""
@@ -3594,6 +3631,8 @@ async def handle_drug_edit_action(update: Update, context: ContextTypes.DEFAULT_
         await update.callback_query.edit_message_text("خطایی رخ داده است. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
+
+        
 async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ذخیره ویرایش تاریخ یا تعداد دارو و بازگشت صحیح"""
     try:
@@ -3632,19 +3671,27 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return States.EDIT_DRUG
         
         elif edit_field == 'date':
-            # پردازش تاریخ با تابع جدید
+            # پردازش تاریخ با تابع بهبود یافته
             new_value = process_date_input(user_input)
             if not new_value:
                 await update.message.reply_text(
                     "❌ فرمت تاریخ نامعتبر است.\n\n"
                     "فرمت‌های قابل قبول:\n"
-                    "• 2026/09/09\n• 2026.09.09\n• 26.9\n• 1405/6\n\n"
+                    "• 2026/09/09\n• 2026.09.09\n• 26.9\n• 1405/6\n• ۲۰۲۶/۰۹/۰۹ (اعداد فارسی)\n\n"
                     "لطفا تاریخ را مجدداً وارد کنید:"
                 )
                 return States.EDIT_DRUG
+            
+            # اعتبارسنجی نهایی تاریخ
+            new_value = validate_and_format_date(new_value)
+            if not new_value:
+                await update.message.reply_text(
+                    "❌ تاریخ وارد شده معتبر نیست.\n\n"
+                    "لطفا یک تاریخ معتبر وارد کنید (مثال: 2025/03/01):"
+                )
+                return States.EDIT_DRUG
         
-        # بقیه کد بدون تغییر...
-        
+        # به روزرسانی در دیتابیس
         conn = None
         try:
             conn = get_db_connection()
@@ -3714,7 +3761,6 @@ async def save_drug_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
         return ConversationHandler.END
-
 async def handle_drug_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle drug deletion confirmation"""
     await clear_conversation_state(update, context, silent=True)
