@@ -5451,6 +5451,7 @@ async def handle_drug_selection_from_keyboard(update: Update, context: ContextTy
                         f"📅 تاریخ انقضا: {drug['date']}\n"
                         f"📦 موجودی: {drug['quantity']}\n\n"
                         f"لطفا تعداد مورد نظر را وارد کنید:",
+                        f"📝 نکته: اگر می‌خواهید بازگردید، عدد ۰ را وارد کنید.",
                         reply_markup=ReplyKeyboardRemove()
                     )
                     return States.SELECT_QUANTITY
@@ -5492,6 +5493,7 @@ async def handle_drug_selection_from_keyboard(update: Update, context: ContextTy
                     f"📅 تاریخ انقضا: {drug['date']}\n"
                     f"📦 موجودی: {drug['quantity']}\n\n"
                     f"لطفا تعداد مورد نظر را وارد کنید:",
+                    f"📝 نکته: اگر می‌خواهید بازگردید، عدد ۰ را وارد کنید.",
                     reply_markup=ReplyKeyboardRemove()
                 )
                 return States.SELECT_QUANTITY
@@ -5524,6 +5526,8 @@ async def handle_drug_selection_from_keyboard(update: Update, context: ContextTy
         # بازگشت به لیست داروها
         return await show_two_column_selection(update, context)
 
+
+                
 async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دریافت تعداد برای داروی انتخاب شده و جمع کردن مقادیر تکراری"""
     try:
@@ -5535,6 +5539,14 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("انتخاب دارو از دست رفته. لطفا دوباره از لیست انتخاب کنید.")
             return await show_two_column_selection(update, context)
         
+        # 🔥 تغییر جدید: اگر کاربر صفر وارد کند، به مرحله قبل برگردد
+        if quantity_text in ['0', '۰', '٠']:
+            await update.message.reply_text(
+                "🔙 به لیست داروها بازگشتید. می‌توانید داروی دیگری انتخاب کنید یا ادامه دهید.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return await show_two_column_selection(update, context)
+        
         # پردازش تعداد
         try:
             # تبدیل اعداد فارسی به انگلیسی
@@ -5542,6 +5554,15 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             quantity_text = quantity_text.translate(persian_to_english)
             
             quantity = int(''.join(filter(str.isdigit, quantity_text)))
+            
+            # 🔥 تغییر: بررسی صفر بعد از تبدیل (برای اعداد ترکیبی)
+            if quantity == 0:
+                await update.message.reply_text(
+                    "🔙 به لیست داروها بازگشتید. می‌توانید داروی دیگری انتخاب کنید یا ادامه دهید.",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+                return await show_two_column_selection(update, context)
+                
             if quantity <= 0:
                 await update.message.reply_text(
                     f"❌ لطفا عددی بزرگتر از صفر وارد کنید.\nموجودی قابل دسترس: {current_selection['quantity']}"
@@ -5560,6 +5581,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 "❌ لطفا یک عدد معتبر وارد کنید.\n"
                 f"مثال: ۵ یا 10\n\n"
+                f"📝 نکته: اگر می‌خواهید بازگردید، عدد ۰ را وارد کنید.\n"
                 f"موجودی قابل دسترس: {current_selection['quantity']}"
             )
             return States.SELECT_QUANTITY
@@ -5571,7 +5593,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if 'offer_items' not in context.user_data:
                 context.user_data['offer_items'] = []
             
-            # 🔥 تغییر اصلی: بررسی تکراری نبودن دارو و جمع کردن مقادیر
+            # بررسی تکراری نبودن دارو و جمع کردن مقادیر
             existing_index = None
             for i, item in enumerate(context.user_data['offer_items']):
                 if item['drug_id'] == current_selection['id']:
@@ -5579,7 +5601,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     break
             
             if existing_index is not None:
-                # 🔥 جمع کردن مقدار جدید با مقدار موجود
+                # جمع کردن مقدار جدید با مقدار موجود
                 new_quantity = context.user_data['offer_items'][existing_index]['quantity'] + quantity
                 
                 # بررسی عدم превыاز موجودی
@@ -5589,6 +5611,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"موجودی قابل دسترس: {current_selection['quantity']}\n"
                         f"تعداد قبلی: {context.user_data['offer_items'][existing_index]['quantity']}\n"
                         f"تعداد جدید: {quantity}\n\n"
+                        f"📝 نکته: اگر می‌خواهید بازگردید، عدد ۰ را وارد کنید.\n"
                         f"لطفا تعداد معتبر وارد کنید:"
                     )
                     return States.SELECT_QUANTITY
@@ -5611,7 +5634,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if 'comp_items' not in context.user_data:
                 context.user_data['comp_items'] = []
             
-            # 🔥 تغییر اصلی: بررسی تکراری نبودن دارو و جمع کردن مقادیر
+            # بررسی تکراری نبودن دارو و جمع کردن مقادیر
             existing_index = None
             for i, item in enumerate(context.user_data['comp_items']):
                 if item['id'] == current_selection['id']:
@@ -5619,7 +5642,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     break
             
             if existing_index is not None:
-                # 🔥 جمع کردن مقدار جدید با مقدار موجود
+                # جمع کردن مقدار جدید با مقدار موجود
                 new_quantity = context.user_data['comp_items'][existing_index]['quantity'] + quantity
                 
                 # بررسی عدم превыاز موجودی
@@ -5629,6 +5652,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"موجودی قابل دسترس: {current_selection['quantity']}\n"
                         f"تعداد قبلی: {context.user_data['comp_items'][existing_index]['quantity']}\n"
                         f"تعداد جدید: {quantity}\n\n"
+                        f"📝 نکته: اگر می‌خواهید بازگردید، عدد ۰ را وارد کنید.\n"
                         f"لطفا تعداد معتبر وارد کنید:"
                     )
                     return States.SELECT_QUANTITY
@@ -5705,7 +5729,6 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # بازگشت به لیست داروها
         return await show_two_column_selection(update, context)
-
 async def select_drug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """انتخاب دارو از لیست"""
     await clear_conversation_state(update, context, silent=True)
