@@ -6435,7 +6435,7 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                     buyer_message += f"🏥 داروخانه: {pharmacy_name}\n"
                     buyer_message += f"💰 مبلغ کل: {format_price(total_price)}\n\n"
                     buyer_message += "📞 لطفاً با ادمین تماس بگیرید تا هماهنگی‌های نهایی انجام شود.\n"
-                    buyer_message += f"👤 ادمین: @{ADMIN_CHAT_ID}\n\n"
+                    buyer_message += f"👤 ادمین: {09372353652}\n\n"
                     buyer_message += "✅ این پیشنهاد توسط داروخانه تأیید شده است."
                     
                     await context.bot.send_message(
@@ -6483,7 +6483,7 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                     buyer_message = "❌ پیشنهاد شما رد شد\n\n"
                     buyer_message += f"🏥 داروخانه: {pharmacy_name}\n"
                     buyer_message += "📞 برای اطلاعات بیشتر با ادمین تماس بگیرید.\n"
-                    buyer_message += f"👤 ادمین: @{ADMIN_CHAT_ID}"
+                    buyer_message += f"👤 ادمین: {09372353652}"
                     
                     await context.bot.send_message(
                         chat_id=buyer_id,
