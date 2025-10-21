@@ -6202,7 +6202,7 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("✅ ارسال پیشنهاد", callback_data="send_offer")],
             [InlineKeyboardButton("✏️ ویرایش", callback_data="edit_selection")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_selection")]
+            #[InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_selection")]
         ]
         
         message = "📋 تأیید نهایی پیشنهاد:\n\n"
