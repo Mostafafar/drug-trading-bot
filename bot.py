@@ -5369,6 +5369,7 @@ async def show_two_column_selection(update: Update, context: ContextTypes.DEFAUL
         elif update.callback_query:
             await context.bot.send_message(chat_id=chat_id, text=error_text)
     return States.SELECT_DRUGS
+
 async def handle_drug_selection_from_keyboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """پردازش انتخاب دارو از کیبورد"""
     try:
@@ -5445,14 +5446,16 @@ async def handle_drug_selection_from_keyboard(update: Update, context: ContextTy
                         'timestamp': time.time()
                     }
                     
+                    # 🔥 اصلاح: اضافه کردن parse_mode=None برای جلوگیری از خطا
                     await update.message.reply_text(
                         f"💊 داروی انتخاب شده: {drug['name']}\n"
                         f"💰 قیمت: {drug['price']}\n"
                         f"📅 تاریخ انقضا: {drug['date']}\n"
                         f"📦 موجودی: {drug['quantity']}\n\n"
-                        f"لطفا تعداد مورد نظر را وارد کنید:",
+                        f"لطفا تعداد مورد نظر را وارد کنید:\n"
                         f"📝 نکته: اگر می‌خواهید بازگردید، عدد ۰ را وارد کنید.",
-                        reply_markup=ReplyKeyboardRemove()
+                        reply_markup=ReplyKeyboardRemove(),
+                        parse_mode=None  # 🔥 اضافه کردن این خط
                     )
                     return States.SELECT_QUANTITY
                 else:
@@ -5487,14 +5490,16 @@ async def handle_drug_selection_from_keyboard(update: Update, context: ContextTy
                     'timestamp': time.time()
                 }
                 
+                # 🔥 اصلاح: اضافه کردن parse_mode=None برای جلوگیری از خطا
                 await update.message.reply_text(
                     f"💊 داروی انتخاب شده: {drug['name']}\n"
                     f"💰 قیمت: {drug['price']}\n"
                     f"📅 تاریخ انقضا: {drug['date']}\n"
                     f"📦 موجودی: {drug['quantity']}\n\n"
-                    f"لطفا تعداد مورد نظر را وارد کنید:",
+                    f"لطفا تعداد مورد نظر را وارد کنید:\n"
                     f"📝 نکته: اگر می‌خواهید بازگردید، عدد ۰ را وارد کنید.",
-                    reply_markup=ReplyKeyboardRemove()
+                    reply_markup=ReplyKeyboardRemove(),
+                    parse_mode=None  # 🔥 اضافه کردن این خط
                 )
                 return States.SELECT_QUANTITY
         except ValueError:
@@ -5508,7 +5513,8 @@ async def handle_drug_selection_from_keyboard(update: Update, context: ContextTy
             "مثال:\n"
             "- روی دکمه '💊 1 - نام دارو' کلیک کنید\n"
             "- یا عدد '1' را وارد کنید",
-            reply_markup=ReplyKeyboardRemove()
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=None  # 🔥 اضافه کردن این خط
         )
         
         # نمایش مجدد لیست داروها
@@ -5520,7 +5526,8 @@ async def handle_drug_selection_from_keyboard(update: Update, context: ContextTy
         await update.message.reply_text(
             "❌ خطا در پردازش انتخاب!\n\n"
             "در حال بازگشت به لیست داروها...",
-            reply_markup=ReplyKeyboardRemove()
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=None  # 🔥 اضافه کردن این خط
         )
         
         # بازگشت به لیست داروها
@@ -5536,14 +5543,18 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if not current_selection:
             logger.error("No current selection found in context")
-            await update.message.reply_text("انتخاب دارو از دست رفته. لطفا دوباره از لیست انتخاب کنید.")
+            await update.message.reply_text(
+                "انتخاب دارو از دست رفته. لطفا دوباره از لیست انتخاب کنید.",
+                parse_mode=None  # 🔥 اضافه کردن این خط
+            )
             return await show_two_column_selection(update, context)
         
         # 🔥 تغییر جدید: اگر کاربر صفر وارد کند، به مرحله قبل برگردد
         if quantity_text in ['0', '۰', '٠']:
             await update.message.reply_text(
                 "🔙 به لیست داروها بازگشتید. می‌توانید داروی دیگری انتخاب کنید یا ادامه دهید.",
-                reply_markup=ReplyKeyboardRemove()
+                reply_markup=ReplyKeyboardRemove(),
+                parse_mode=None  # 🔥 اضافه کردن این خط
             )
             return await show_two_column_selection(update, context)
         
@@ -5560,6 +5571,7 @@ async def enter_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "🔙 به لیست داروها بازگشتید. می‌توانید داروی دیگری انتخاب کنید یا ادامه دهید.",
                     reply_markup=ReplyKeyboardRemove()
+                    parse_mode=None 
                 )
                 return await show_two_column_selection(update, context)
                 
