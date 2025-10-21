@@ -6303,19 +6303,10 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 buyer_info = cursor.fetchone()
                 
                 # ساخت پیام برای داروخانه
-                buyer_name_parts = []
-                if buyer_info[0]:  # first_name
-                    buyer_name_parts.append(buyer_info[0])
-                if buyer_info[1]:  # last_name
-                    buyer_name_parts.append(buyer_info[1])
-    
-                buyer_display_name = " ".join(buyer_name_parts) if buyer_name_parts else "نامشخص"
-
-                offer_message += f"👤 از: {buyer_display_name}\n"
-                if buyer_info[2]:  # username
-                    offer_message += f"📎 @{buyer_info[2]}\n"
-
-                offer_message += f"🏥 داروخانه: {pharmacy_name}\n\n" 
+                offer_message = "📬 پیشنهاد جدید دریافت شد:\n\n"
+                offer_message += f"👤 از: {buyer_info[0]} {buyer_info[1]}\n"
+               # if buyer_info[2]:
+                   #offer_message += f"📎 @{buyer_info[2]}\n"
                 
                 offer_message += "\n📌 داروهای درخواستی:\n"
                 for item in offer_items:
