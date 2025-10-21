@@ -518,20 +518,11 @@ def parse_price(price_str: str) -> float:
 def format_price(price: float) -> str:
     """Format price with comma separators every 3 digits from right"""
     try:
-        # اگر price از نوع Decimal باشد، ابتدا به float تبدیل کنید
-        if hasattr(price, 'is_integer'):
-            # برای float معمولی
-            if price.is_integer():
-                return "{:,}".format(int(price)).replace(",", "،")
-            else:
-                return "{:,.2f}".format(price).replace(",", "،")
+        # Convert to integer if it's a whole number
+        if price.is_integer():
+            return "{:,}".format(int(price)).replace(",", "،")  # Using Persian comma
         else:
-            # برای Decimal یا سایر انواع
-            price_float = float(price)
-            if price_float.is_integer():
-                return "{:,}".format(int(price_float)).replace(",", "،")
-            else:
-                return "{:,.2f}".format(price_float).replace(",", "،")
+            return "{:,.2f}".format(price).replace(",", "،")  # Using Persian comma for decimal numbers
     except (ValueError, TypeError):
         return "0"
 
