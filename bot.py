@@ -6435,7 +6435,7 @@ async def handle_offer_response(update: Update, context: ContextTypes.DEFAULT_TY
                     buyer_message += f"🏥 داروخانه: {pharmacy_name}\n"
                     buyer_message += f"💰 مبلغ کل: {format_price(total_price)}\n\n"
                     buyer_message += "📞 لطفاً با ادمین تماس بگیرید تا هماهنگی‌های نهایی انجام شود.\n"
-                    buyer_message += "\n👤 ادمین: 09372353652"
+                    buyer_message += "\n👤 ادمین: +989372353652"
                     buyer_message += "✅ این پیشنهاد توسط داروخانه تأیید شده است."
                     
                     await context.bot.send_message(
