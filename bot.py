@@ -6297,7 +6297,7 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pharmacy_info = cursor.fetchone()
                 
                 cursor.execute('''
-                SELECT u.first_name, u.last_name, u.username 
+                SELECT first_name, last_name, username 
                 FROM users WHERE id = %s
                 ''', (buyer_id,))
                 buyer_info = cursor.fetchone()
@@ -6305,7 +6305,7 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # ساخت پیام برای داروخانه
                 offer_message = "📬 پیشنهاد جدید دریافت شد:\n\n"
                 offer_message += f"👤 از: {buyer_info[0]} {buyer_info[1]}\n"
-                offer_message += f"🏥 به داروخانه: {pharmacy_info[0] if pharmacy_info else 'نامشخص'}\n\n"
+                
                # if buyer_info[2]:
                    #offer_message += f"📎 @{buyer_info[2]}\n"
                 
