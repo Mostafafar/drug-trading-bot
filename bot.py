@@ -598,15 +598,15 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                         f"داروخانه: {match['drug']['pharmacy_name']}\n"
                         f"قیمت: {match['drug']['price']}\n"
                         f"موجودی: {match['drug']['quantity']}\n\n"
-                        "برای مشاهده جزئیات و تبادل، روی دکمه زیر کلیک کنید:"
+                        
                     )
                     
-                    keyboard = [[
-                        InlineKeyboardButton(
-                            "مشاهده و تبادل",
-                            callback_data=f"view_match_{match['drug']['id']}_{match['need']['id']}"
-                        )
-                    ]]
+                    #keyboard = [[
+                        #InlineKeyboardButton(
+                            #"مشاهده و تبادل",
+                            #callback_data=f"view_match_{match['drug']['id']}_{match['need']['id']}"
+                        #)
+                    #]]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
                     await context.bot.send_message(
