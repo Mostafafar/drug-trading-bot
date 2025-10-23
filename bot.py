@@ -786,8 +786,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await ensure_user(update, context)
         
-        # Check if user is banned
+        # Check verification status
+        is_verified = False
+        is_pharmacy_admin = False
+        is_personnel = False
         conn = None
+        
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
@@ -798,63 +802,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ''', (update.effective_user.id,))
                 result = cursor.fetchone()
                 
-                if result and not result[0]:  # اگر کاربر اخراج شده باشد
-                    # پاک کردن کیبورد قبلی
-                    await update.message.reply_text(
-                        "❌ حساب شما اخراج شده است.\n\n"
-                        "برای استفاده مجدد از ربات، لطفا دوباره ثبت‌نام کنید.",
-                        reply_markup=ReplyKeyboardRemove()
-                    )
+                if result:
+                    is_verified, is_pharmacy_admin, is_personnel = result
                     
-                    # نمایش گزینه‌های ثبت‌نام مجدد
-                    keyboard = [
-                        [InlineKeyboardButton("ثبت نام با تایید ادمین", callback_data="admin_verify")],
-                        [InlineKeyboardButton("ورود با کد پرسنل", callback_data="personnel_login")],
-                        [InlineKeyboardButton("ثبت نام با مدارک", callback_data="register")]
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    
-                    await update.message.reply_text(
-                        "لطفاً روش ورود را انتخاب کنید:",
-                        reply_markup=reply_markup
-                    )
-                    return States.START
-                    
+                    # 🔥 **اصلاح: فقط اگر کاربر تأیید شده باشد و سپس اخراج شده باشد**
+                    if is_verified == False and (is_pharmacy_admin == False and is_personnel == False):
+                        # این حالت ممکن است برای کاربران اخراج شده یا جدید باشد
+                        # برای تشخیص بهتر، بررسی می‌کنیم آیا کاربر قبلاً تأیید شده بوده یا نه
+                        cursor.execute('''
+                        SELECT COUNT(*) FROM pharmacies WHERE user_id = %s AND verified = TRUE
+                        ''', (update.effective_user.id,))
+                        was_verified = cursor.fetchone()[0] > 0
+                        
+                        if was_verified:
+                            # کاربر قبلاً تأیید شده بوده و اکنون اخراج شده
+                            await update.message.reply_text(
+                                "❌ حساب شما اخراج شده است.\n\n"
+                                "برای استفاده مجدد از ربات، لطفا دوباره ثبت‌نام کنید.",
+                                reply_markup=ReplyKeyboardRemove()
+                            )
+                            
+                            # نمایش گزینه‌های ثبت‌نام مجدد
+                            keyboard = [
+                                [InlineKeyboardButton("ثبت نام با تایید ادمین", callback_data="admin_verify")],
+                                [InlineKeyboardButton("ورود با کد پرسنل", callback_data="personnel_login")],
+                                [InlineKeyboardButton("ثبت نام با مدارک", callback_data="register")]
+                            ]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            
+                            await update.message.reply_text(
+                                "لطفاً روش ورود را انتخاب کنید:",
+                                reply_markup=reply_markup
+                            )
+                            return States.START
+                
         except Exception as e:
             logger.error(f"Error checking user status: {e}")
         finally:
             if conn:
                 conn.close()
 
-        
-        # 🔥 **اصلاح این بخش - حذف بررسی اشتباه اخراج شدن**
-        # Check verification status
-        is_verified = False
-        is_pharmacy_admin = False
-        is_personnel = False
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cursor:
-                cursor.execute('''
-                SELECT u.is_verified, u.is_pharmacy_admin, u.is_personnel
-                FROM users u
-                WHERE u.id = %s
-                ''', (update.effective_user.id,))
-                result = cursor.fetchone()
-                if result:
-                    is_verified, is_pharmacy_admin, is_personnel = result
-                else:
-                    # کاربر جدید - هیچ رکوردی در دیتابیس ندارد
-                    is_verified = False
-        except Exception as e:
-            logger.error(f"Database error in start: {e}")
-            # در صورت خطا، کاربر را تأیید نشده در نظر بگیر
-            is_verified = False
-        finally:
-            if conn:
-                conn.close()
-
+        # اگر کاربر تأیید نشده (جدید یا اخراج نشده)
         if not is_verified:
             # Show registration options for unverified users
             keyboard = [
@@ -870,7 +858,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
             return States.START
-
         # بقیه کد بدون تغییر...
 
         # For verified users - show appropriate main menu
