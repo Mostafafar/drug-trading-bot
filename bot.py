@@ -532,12 +532,14 @@ def similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
 async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Check for matches between user needs and available drugs"""
+    """بررسی برای همخوانی بین نیازهای کاربر و داروهای موجود"""
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-            # Get user needs
+            logger.info(f"Checking matches for user {user_id}")
+            
+            # دریافت نیازهای کاربر
             cursor.execute('''
             SELECT id, name, quantity 
             FROM user_needs 
@@ -545,30 +547,37 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
             ''', (user_id,))
             needs = cursor.fetchall()
             
+            logger.info(f"Found {len(needs)} needs for user {user_id}")
+            
             if not needs:
                 return
             
-            # Get available drugs from other pharmacies
+            # دریافت داروهای موجود از سایر داروخانه‌ها
             cursor.execute('''
-            SELECT di.id, di.name, di.price, di.quantity, 
-                   u.id as pharmacy_id, 
-                   p.name as pharmacy_name
+            SELECT DISTINCT ON (di.name, p.user_id)
+                di.id, di.name, di.price, di.quantity, 
+                u.id as pharmacy_id, 
+                p.name as pharmacy_name
             FROM drug_items di
             JOIN users u ON di.user_id = u.id
             JOIN pharmacies p ON u.id = p.user_id
-            WHERE di.user_id != %s AND di.quantity > 0
-            ORDER BY di.created_at DESC
+            WHERE di.user_id != %s 
+                AND di.quantity > 0
+                AND p.verified = TRUE
+            ORDER BY di.name, p.user_id, di.created_at DESC
             ''', (user_id,))
             drugs = cursor.fetchall()
+            
+            logger.info(f"Found {len(drugs)} available drugs from other pharmacies")
             
             if not drugs:
                 return
             
-            # Find matches
+            # پیدا کردن همخوانی‌ها
             matches = []
             for need in needs:
                 for drug in drugs:
-                    # Check if already notified
+                    # بررسی اینکه قبلاً اعلان نشده باشد
                     cursor.execute('''
                     SELECT id FROM match_notifications 
                     WHERE user_id = %s AND drug_id = %s AND need_id = %s
@@ -576,19 +585,24 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                     if cursor.fetchone():
                         continue
                     
-                    # Calculate similarity
+                    # محاسبه شباهت
                     sim_score = similarity(need['name'], drug['name'])
-                    if sim_score >= 0.7:
+                    logger.info(f"Similarity between '{need['name']}' and '{drug['name']}': {sim_score}")
+                    
+                    if sim_score >= 0.7:  # حداقل 70% شباهت
                         matches.append({
                             'need': dict(need),
                             'drug': dict(drug),
                             'similarity': sim_score
                         })
+                        logger.info(f"Match found: {need['name']} -> {drug['name']} (score: {sim_score})")
+            
+            logger.info(f"Total matches found: {len(matches)}")
             
             if not matches:
                 return
             
-            # Notify user about matches
+            # ارسال اعلان به کاربر
             for match in matches:
                 try:
                     message = (
@@ -598,24 +612,15 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                         f"داروخانه: {match['drug']['pharmacy_name']}\n"
                         f"قیمت: {match['drug']['price']}\n"
                         f"موجودی: {match['drug']['quantity']}\n\n"
-                        
+                        "برای مشاهده جزئیات و تبادل، از منوی جستجوی دارو استفاده کنید."
                     )
-                    
-                    #keyboard = [[
-                        #InlineKeyboardButton(
-                            #"مشاهده و تبادل",
-                            #callback_data=f"view_match_{match['drug']['id']}_{match['need']['id']}"
-                        #)
-                    #]]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
                     
                     await context.bot.send_message(
                         chat_id=user_id,
-                        text=message,
-                        reply_markup=reply_markup
+                        text=message
                     )
                     
-                    # Record notification
+                    # ثبت اعلان
                     cursor.execute('''
                     INSERT INTO match_notifications (
                         user_id, drug_id, need_id, similarity_score
@@ -628,13 +633,15 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                     ))
                     conn.commit()
                     
+                    logger.info(f"Notification sent to user {user_id} for match {match['need']['name']}")
+                    
                 except Exception as e:
-                    logger.error(f"Failed to notify user: {e}")
+                    logger.error(f"Failed to notify user {user_id}: {e}")
                     if conn:
                         conn.rollback()
                         
     except Exception as e:
-        logger.error(f"Error in check_for_matches: {e}")
+        logger.error(f"Error in check_for_matches: {e}", exc_info=True)
     finally:
         if conn:
             conn.close()
