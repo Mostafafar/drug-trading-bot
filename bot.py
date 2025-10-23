@@ -779,6 +779,8 @@ async def clear_conversation_state(update: Update, context: ContextTypes.DEFAULT
                 
 
 # Command Handlers
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler with both registration options and verification check"""
     try:
@@ -824,6 +826,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if conn:
                 conn.close()
 
+        
+        # 🔥 **اصلاح این بخش - حذف بررسی اشتباه اخراج شدن**
         # Check verification status
         is_verified = False
         is_pharmacy_admin = False
@@ -840,8 +844,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 result = cursor.fetchone()
                 if result:
                     is_verified, is_pharmacy_admin, is_personnel = result
+                else:
+                    # کاربر جدید - هیچ رکوردی در دیتابیس ندارد
+                    is_verified = False
         except Exception as e:
             logger.error(f"Database error in start: {e}")
+            # در صورت خطا، کاربر را تأیید نشده در نظر بگیر
+            is_verified = False
         finally:
             if conn:
                 conn.close()
@@ -861,6 +870,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
             return States.START
+
+        # بقیه کد بدون تغییر...
 
         # For verified users - show appropriate main menu
         context.application.create_task(check_for_matches(update.effective_user.id, context))
