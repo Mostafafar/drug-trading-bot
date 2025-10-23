@@ -3029,7 +3029,7 @@ async def save_drug_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     action = "ثبت"
                 
                 conn.commit()
-                
+                context.application.create_task(check_for_matches(update.effective_user.id, context))
                 # پیام موفقیت
                 success_msg = (
                     f"✅ دارو با موفقیت {action} شد:\n"
