@@ -532,116 +532,125 @@ def similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
 async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """بررسی برای همخوانی بین نیازهای کاربر و داروهای موجود"""
+    """بررسی برای همخوانی بین نیازهای تمام کاربران و داروی اضافه شده"""
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-            logger.info(f"Checking matches for user {user_id}")
+            logger.info(f"Checking matches for newly added drug by user {user_id}")
             
-            # دریافت نیازهای کاربر
+            # 🔥 تغییر: دریافت آخرین داروی اضافه شده توسط این کاربر
             cursor.execute('''
-            SELECT id, name, quantity 
-            FROM user_needs 
-            WHERE user_id = %s
+            SELECT id, name, price, quantity, user_id
+            FROM drug_items 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC 
+            LIMIT 1
             ''', (user_id,))
-            needs = cursor.fetchall()
+            new_drug = cursor.fetchone()
             
-            logger.info(f"Found {len(needs)} needs for user {user_id}")
-            
-            if not needs:
+            if not new_drug:
+                logger.info("No recently added drug found")
                 return
             
-            # دریافت داروهای موجود از سایر داروخانه‌ها
+            logger.info(f"New drug added: {new_drug['name']} by user {user_id}")
+            
+            # 🔥 تغییر: دریافت نیازهای تمام کاربران به جز خودش
             cursor.execute('''
-            SELECT DISTINCT ON (di.name, p.user_id)
-                di.id, di.name, di.price, di.quantity, 
-                u.id as pharmacy_id, 
-                p.name as pharmacy_name
-            FROM drug_items di
-            JOIN users u ON di.user_id = u.id
-            JOIN pharmacies p ON u.id = p.user_id
-            WHERE di.user_id != %s 
-                AND di.quantity > 0
-                AND p.verified = TRUE
-            ORDER BY di.name, p.user_id, di.created_at DESC
+            SELECT un.id, un.user_id, un.name, un.quantity, 
+                   u.username, u.first_name, u.last_name
+            FROM user_needs un
+            JOIN users u ON un.user_id = u.id
+            WHERE un.user_id != %s AND u.is_verified = TRUE
             ''', (user_id,))
-            drugs = cursor.fetchall()
+            all_needs = cursor.fetchall()
             
-            logger.info(f"Found {len(drugs)} available drugs from other pharmacies")
+            logger.info(f"Found {len(all_needs)} needs from other users")
             
-            if not drugs:
+            if not all_needs:
+                logger.info("No needs found from other users")
                 return
             
             # پیدا کردن همخوانی‌ها
             matches = []
-            for need in needs:
-                for drug in drugs:
+            for need in all_needs:
+                # محاسبه شباهت
+                sim_score = similarity(need['name'], new_drug['name'])
+                logger.info(f"Similarity between '{need['name']}' and '{new_drug['name']}': {sim_score}")
+                
+                if sim_score >= 0.8:  # حداقل 70% شباهت
                     # بررسی اینکه قبلاً اعلان نشده باشد
                     cursor.execute('''
                     SELECT id FROM match_notifications 
                     WHERE user_id = %s AND drug_id = %s AND need_id = %s
-                    ''', (user_id, drug['id'], need['id']))
-                    if cursor.fetchone():
-                        continue
+                    ''', (need['user_id'], new_drug['id'], need['id']))
                     
-                    # محاسبه شباهت
-                    sim_score = similarity(need['name'], drug['name'])
-                    logger.info(f"Similarity between '{need['name']}' and '{drug['name']}': {sim_score}")
-                    
-                    if sim_score >= 0.7:  # حداقل 70% شباهت
+                    if not cursor.fetchone():
                         matches.append({
                             'need': dict(need),
-                            'drug': dict(drug),
+                            'drug': dict(new_drug),
                             'similarity': sim_score
                         })
-                        logger.info(f"Match found: {need['name']} -> {drug['name']} (score: {sim_score})")
+                        logger.info(f"Match found: {need['name']} -> {new_drug['name']} (score: {sim_score})")
             
             logger.info(f"Total matches found: {len(matches)}")
             
             if not matches:
                 return
             
-            # ارسال اعلان به کاربر
+            # ارسال اعلان به کاربران نیازمند
             for match in matches:
                 try:
+                    # دریافت اطلاعات داروخانه
+                    cursor.execute('''
+                    SELECT p.name as pharmacy_name, u.phone
+                    FROM pharmacies p
+                    JOIN users u ON p.user_id = u.id
+                    WHERE p.user_id = %s
+                    ''', (user_id,))
+                    pharmacy_info = cursor.fetchone()
+                    
+                    pharmacy_name = pharmacy_info['pharmacy_name'] if pharmacy_info else "داروخانه ناشناس"
+                    
                     message = (
                         "🔔 یک داروی مطابق با نیاز شما پیدا شد!\n\n"
                         f"نیاز شما: {match['need']['name']} (تعداد: {match['need']['quantity']})\n"
                         f"داروی موجود: {match['drug']['name']}\n"
-                        f"داروخانه: {match['drug']['pharmacy_name']}\n"
+                        f"داروخانه: {pharmacy_name}\n"
                         f"قیمت: {match['drug']['price']}\n"
                         f"موجودی: {match['drug']['quantity']}\n\n"
-                        "برای مشاهده جزئیات و تبادل، از منوی جستجوی دارو استفاده کنید."
+                        "برای مشاهده و تبادل، از منوی 'جستجوی دارو' استفاده کنید."
                     )
                     
                     await context.bot.send_message(
-                        chat_id=user_id,
+                        chat_id=match['need']['user_id'],
                         text=message
                     )
                     
-                    # ثبت اعلان
+                    # ثبت اعلان در دیتابیس
                     cursor.execute('''
                     INSERT INTO match_notifications (
                         user_id, drug_id, need_id, similarity_score
                     ) VALUES (%s, %s, %s, %s)
                     ''', (
-                        user_id,
+                        match['need']['user_id'],
                         match['drug']['id'],
                         match['need']['id'],
                         match['similarity']
                     ))
-                    conn.commit()
                     
-                    logger.info(f"Notification sent to user {user_id} for match {match['need']['name']}")
+                    logger.info(f"Notification sent to user {match['need']['user_id']} for drug {match['drug']['name']}")
                     
                 except Exception as e:
-                    logger.error(f"Failed to notify user {user_id}: {e}")
-                    if conn:
-                        conn.rollback()
+                    logger.error(f"Failed to notify user {match['need']['user_id']}: {e}")
+            
+            conn.commit()
+            logger.info(f"Successfully sent {len(matches)} match notifications")
                         
     except Exception as e:
         logger.error(f"Error in check_for_matches: {e}", exc_info=True)
+        if conn:
+            conn.rollback()
     finally:
         if conn:
             conn.close()
