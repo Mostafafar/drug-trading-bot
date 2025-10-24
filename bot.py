@@ -6250,6 +6250,7 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in confirm_offer: {e}")
         await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
+
 async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send the finalized offer to the pharmacy"""
     await clear_conversation_state(update, context, silent=True)
@@ -6303,7 +6304,7 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 conn.commit()
                 
-                # 🔥 دریافت اطلاعات برای پیام‌رسانی
+                # 🔥 دریافت اطلاعات برای پیام‌رسانی - با تاریخ
                 cursor.execute('''
                 SELECT u.first_name, u.last_name, u.username, p.name as pharmacy_name
                 FROM users u
@@ -6318,23 +6319,57 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ''', (buyer_id,))
                 buyer_info = cursor.fetchone()
                 
-                # ساخت پیام برای داروخانه
+                # 🔥 دریافت اطلاعات تاریخ داروهای درخواستی
+                offer_drugs_with_dates = []
+                for item in offer_items:
+                    cursor.execute('''
+                    SELECT date FROM drug_items WHERE id = %s
+                    ''', (item.get('drug_id'),))
+                    date_result = cursor.fetchone()
+                    date = date_result[0] if date_result else 'نامشخص'
+                    offer_drugs_with_dates.append({
+                        'name': item['drug_name'],
+                        'price': item['price'],
+                        'quantity': item['quantity'],
+                        'date': date
+                    })
+                
+                # 🔥 دریافت اطلاعات تاریخ داروهای جبرانی
+                comp_drugs_with_dates = []
+                for item in comp_items:
+                    cursor.execute('''
+                    SELECT name, price, date FROM drug_items WHERE id = %s
+                    ''', (item['id'],))
+                    drug_result = cursor.fetchone()
+                    if drug_result:
+                        comp_drugs_with_dates.append({
+                            'name': drug_result[0],
+                            'price': drug_result[1],
+                            'quantity': item['quantity'],
+                            'date': drug_result[2]
+                        })
+                    else:
+                        comp_drugs_with_dates.append({
+                            'name': item.get('name', 'نامشخص'),
+                            'price': item.get('price', 'نامشخص'),
+                            'quantity': item['quantity'],
+                            'date': 'نامشخص'
+                        })
+                
+                # ساخت پیام برای داروخانه - با تاریخ
                 offer_message = "📬 پیشنهاد جدید دریافت شد:\n\n"
                 offer_message += f"👤 از: {buyer_info[0]} {buyer_info[1]}\n"
                 
-               # if buyer_info[2]:
-                   #offer_message += f"📎 @{buyer_info[2]}\n"
-                
                 offer_message += "\n📌 داروهای درخواستی:\n"
-                for item in offer_items:
-                    offer_message += f"• {item['drug_name']} - {item['price']}\n"
-                    offer_message += f"  📦 تعداد: {item['quantity']} عدد\n"
+                for item in offer_drugs_with_dates:
+                    offer_message += f"• {item['name']} - {item['price']}\n"
+                    offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
                 
                 offer_message += "\n📌 داروهای جبرانی:\n"
-                if comp_items:
-                    for item in comp_items:
-                        offer_message += f"• {item.get('name', 'نامشخص')} - {item.get('price', 'نامشخص')}\n"
-                        offer_message += f"  📦 تعداد: {item['quantity']} عدد\n"
+                if comp_drugs_with_dates:
+                    for item in comp_drugs_with_dates:
+                        offer_message += f"• {item['name']} - {item['price']}\n"
+                        offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
                 else:
                     offer_message += "• هیچ داروی جبرانی\n"
                 
@@ -6352,14 +6387,28 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 
-                # 🔥 ارسال پیام به ادمین
+                # 🔥 ارسال پیام به ادمین - با تاریخ
                 admin_message = "🆕 پیشنهاد جدید ثبت شد:\n\n"
                 admin_message += f"🆔 کد پیشنهاد: {offer_id}\n"
                 admin_message += f"👤 خریدار: {buyer_info[0]} {buyer_info[1]}\n"
                 if buyer_info[2]:
                     admin_message += f"📎 @{buyer_info[2]}\n"
                 admin_message += f"🏥 داروخانه: {pharmacy_info[3] if pharmacy_info else 'نامشخص'}\n"
-                admin_message += f"💰 مبلغ: {format_price(offer_total)}\n"
+                
+                admin_message += "\n📌 داروهای درخواستی:\n"
+                for item in offer_drugs_with_dates:
+                    admin_message += f"• {item['name']} - {item['price']}\n"
+                    admin_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
+                
+                admin_message += "\n📌 داروهای جبرانی:\n"
+                if comp_drugs_with_dates:
+                    for item in comp_drugs_with_dates:
+                        admin_message += f"• {item['name']} - {item['price']}\n"
+                        admin_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
+                else:
+                    admin_message += "• هیچ داروی جبرانی\n"
+                
+                admin_message += f"\n💰 مبلغ: {format_price(offer_total)}\n"
                 admin_message += "\n📞 منتظر پاسخ داروخانه هستیم..."
                 
                 await context.bot.send_message(
