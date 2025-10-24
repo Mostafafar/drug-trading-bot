@@ -6078,17 +6078,81 @@ async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         comp_total = sum(parse_price(item['price']) * item['quantity'] for item in comp_items)
         price_difference = offer_total - comp_total
         
+        # 🔥 دریافت اطلاعات تاریخ از دیتابیس
+        conn = None
+        offer_drugs_info = []
+        comp_drugs_info = []
+        
+        try:
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                # دریافت اطلاعات داروهای درخواستی با تاریخ
+                for item in offer_items:
+                    cursor.execute('''
+                    SELECT date FROM drug_items WHERE id = %s
+                    ''', (item.get('drug_id'),))
+                    date_result = cursor.fetchone()
+                    date = date_result[0] if date_result else 'نامشخص'
+                    offer_drugs_info.append({
+                        'name': item['drug_name'],
+                        'price': item['price'],
+                        'quantity': item['quantity'],
+                        'date': date
+                    })
+                
+                # دریافت اطلاعات داروهای جبرانی با تاریخ
+                for item in comp_items:
+                    cursor.execute('''
+                    SELECT name, price, date FROM drug_items WHERE id = %s
+                    ''', (item['id'],))
+                    drug_result = cursor.fetchone()
+                    if drug_result:
+                        comp_drugs_info.append({
+                            'name': drug_result[0],
+                            'price': drug_result[1],
+                            'quantity': item['quantity'],
+                            'date': drug_result[2]
+                        })
+                    else:
+                        comp_drugs_info.append({
+                            'name': item.get('name', 'نامشخص'),
+                            'price': item.get('price', 'نامشخص'),
+                            'quantity': item['quantity'],
+                            'date': 'نامشخص'
+                        })
+        except Exception as e:
+            logger.error(f"Error getting drug dates: {e}")
+            # در صورت خطا، از اطلاعات موجود استفاده کن
+            for item in offer_items:
+                offer_drugs_info.append({
+                    'name': item['drug_name'],
+                    'price': item['price'],
+                    'quantity': item['quantity'],
+                    'date': 'نامشخص'
+                })
+            for item in comp_items:
+                comp_drugs_info.append({
+                    'name': item.get('name', 'نامشخص'),
+                    'price': item.get('price', 'نامشخص'),
+                    'quantity': item['quantity'],
+                    'date': 'نامشخص'
+                })
+        finally:
+            if conn:
+                conn.close()
+        
         message = "📋 خلاصه پیشنهاد:\n\n"
         message += "📌 داروهای درخواستی:\n"
-        for item in offer_items:
-            message += f"- {item['drug_name']} ({item['quantity']} عدد) - {item['price']}\n"
+        for item in offer_drugs_info:
+            message += f"- {item['name']} - {item['price']}\n"
+            message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
         message += f"\n💰 جمع کل درخواستی: {format_price(offer_total)}\n"
         
         message += "\n📌 داروهای جبرانی شما:\n"
-        if comp_items:
-            for item in offer_items:
-              message += f"- {item['drug_name']} - {item['price']}\n"
-              message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item.get('date', 'نامشخص')}\n"
+        if comp_drugs_info:
+            for item in comp_drugs_info:
+                message += f"- {item['name']} - {item['price']}\n"
+                message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
             message += f"\n💰 جمع کل جبرانی: {format_price(comp_total)}\n"
         else:
             message += "هیچ داروی جبرانی انتخاب نشده است.\n"
@@ -6102,30 +6166,28 @@ async def submit_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.append([InlineKeyboardButton("➕ افزودن داروی جبرانی", callback_data="add_more")])
         keyboard.append([InlineKeyboardButton("✅ تأیید و ارسال", callback_data="confirm_offer")])
         keyboard.append([InlineKeyboardButton("✏️ ویرایش انتخاب‌ها", callback_data="edit_selection")])
-        #keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_selection")])
         
+        # 🔥 پیشنهاد داروهای جبرانی با تاریخ
         if price_difference > 0:
             conn = None
             try:
                 conn = get_db_connection()
                 with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
-                    # ابتدا همه داروها را بگیرید
+                    # دریافت داروهای کاربر با تاریخ
                     cursor.execute('''
-                    SELECT di.id, di.name, di.price, di.quantity
+                    SELECT di.id, di.name, di.price, di.quantity, di.date
                     FROM drug_items di
                     WHERE di.user_id = %s AND di.quantity > 0
+                    ORDER BY di.price DESC
+                    LIMIT 3
                     ''', (update.effective_user.id,))
-                    all_drugs = cursor.fetchall()
-                    
-                    # در پایتون بر اساس قیمت عددی مرتب کنید
-                    all_drugs.sort(key=lambda x: parse_price(x['price']), reverse=True)
-                    suggested_drugs = all_drugs[:3]  # 3 مورد اول
+                    suggested_drugs = cursor.fetchall()
                     
                     if suggested_drugs:
-                        message += "\n📜 پیشنهاد داروهای جبرانی:\n"
+                        message += "\n💡 پیشنهاد داروهای جبرانی:\n"
                         for drug in suggested_drugs:
-                            message += f"- {item['name']} - {item['price']}\n"
-                            message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item.get('date', 'نامشخص')}\n"
+                            message += f"- {drug['name']} - {drug['price']}\n"
+                            message += f"  📦 تعداد: {drug['quantity']} عدد | 📅 تاریخ: {drug['date']}\n"
             except Exception as e:
                 logger.error(f"Error suggesting compensation drugs: {e}")
             finally:
