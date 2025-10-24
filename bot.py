@@ -539,9 +539,9 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
         with conn.cursor(cursor_factory=extras.DictCursor) as cursor:
             logger.info(f"Checking matches for newly added drug by user {user_id}")
             
-            # 🔥 تغییر: دریافت آخرین داروی اضافه شده توسط این کاربر
+            # 🔥 تغییر: دریافت آخرین داروی اضافه شده توسط این کاربر با تاریخ انقضا
             cursor.execute('''
-            SELECT id, name, price, quantity, user_id
+            SELECT id, name, price, quantity, date, user_id
             FROM drug_items 
             WHERE user_id = %s 
             ORDER BY created_at DESC 
@@ -553,9 +553,9 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                 logger.info("No recently added drug found")
                 return
             
-            logger.info(f"New drug added: {new_drug['name']} by user {user_id}")
+            logger.info(f"New drug added: {new_drug['name']} by user {user_id}, expiry: {new_drug['date']}")
             
-            # 🔥 تغییر: دریافت نیازهای تمام کاربران به جز خودش
+            # دریافت نیازهای تمام کاربران به جز خودش
             cursor.execute('''
             SELECT un.id, un.user_id, un.name, un.quantity, 
                    u.username, u.first_name, u.last_name
@@ -578,7 +578,7 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                 sim_score = similarity(need['name'], new_drug['name'])
                 logger.info(f"Similarity between '{need['name']}' and '{new_drug['name']}': {sim_score}")
                 
-                if sim_score >= 0.8:  # حداقل 70% شباهت
+                if sim_score >= 0.7:  # حداقل 70% شباهت
                     # بررسی اینکه قبلاً اعلان نشده باشد
                     cursor.execute('''
                     SELECT id FROM match_notifications 
@@ -612,13 +612,15 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                     
                     pharmacy_name = pharmacy_info['pharmacy_name'] if pharmacy_info else "داروخانه ناشناس"
                     
+                    # 🔥 اضافه کردن تاریخ انقضا به پیام اعلان
                     message = (
                         "🔔 یک داروی مطابق با نیاز شما پیدا شد!\n\n"
                         f"نیاز شما: {match['need']['name']} (تعداد: {match['need']['quantity']})\n"
                         f"داروی موجود: {match['drug']['name']}\n"
                         f"داروخانه: {pharmacy_name}\n"
-                        f"قیمت: {match['drug']['price']}\n"
-                        f"موجودی: {match['drug']['quantity']}\n\n"
+                        f"💰 قیمت: {match['drug']['price']}\n"
+                        f"📦 موجودی: {match['drug']['quantity']}\n"
+                        f"📅 تاریخ انقضا: {match['drug']['date']}\n\n"  # 🔥 این خط اضافه شد
                         "برای مشاهده و تبادل، از منوی 'جستجوی دارو' استفاده کنید."
                     )
                     
@@ -639,7 +641,7 @@ async def check_for_matches(user_id: int, context: ContextTypes.DEFAULT_TYPE):
                         match['similarity']
                     ))
                     
-                    logger.info(f"Notification sent to user {match['need']['user_id']} for drug {match['drug']['name']}")
+                    logger.info(f"Notification sent to user {match['need']['user_id']} for drug {match['drug']['name']} with expiry {match['drug']['date']}")
                     
                 except Exception as e:
                     logger.error(f"Failed to notify user {match['need']['user_id']}: {e}")
