@@ -6398,8 +6398,8 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         buyer_pharmacy_name = founder_name
                     else:
                         buyer_pharmacy_name = f"داروخانه {buyer_id}"
-               else:
-                   buyer_pharmacy_name = f"کاربر {buyer_id}"
+                else:
+                    buyer_pharmacy_name = f"کاربر {buyer_id}"
                 
                 # 🔥 دریافت اطلاعات تاریخ داروهای درخواستی
                 offer_drugs_with_dates = []
