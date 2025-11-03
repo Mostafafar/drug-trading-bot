@@ -6379,7 +6379,7 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 SELECT name FROM pharmacies WHERE user_id = %s
                 ''', (buyer_id,))
                 pharmacy_buyer_result = cursor.fetchone()
-                buyer_display_name = pharmacy_buyer_result[0] if pharmacy_buyer_result else f"کاربر {buyer_id}"
+                buyer_pharmacy_name = pharmacy_buyer_result[0] if pharmacy_buyer_result else f"داروخانه ناشناس ({buyer_id})"
                 
                 # 🔥 دریافت اطلاعات تاریخ داروهای درخواستی
                 offer_drugs_with_dates = []
@@ -6420,7 +6420,7 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # ساخت پیام برای داروخانه - با تاریخ
                 offer_message = "📬 پیشنهاد جدید دریافت شد:\n\n"
-                offer_message += f"👤 از: {buyer_display_name}\n"
+                offer_message += f"🏥 از داروخانه: {buyer_pharmacy_name}\n"
                 
                 offer_message += "\n📌 داروهای درخواستی:\n"
                 for item in offer_drugs_with_dates:
@@ -6452,7 +6452,7 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # 🔥 ارسال پیام به ادمین - با تاریخ
                 admin_message = "🆕 پیشنهاد جدید ثبت شد:\n\n"
                 admin_message += f"🆔 کد پیشنهاد: {offer_id}\n"
-                admin_message += f"👤 خریدار: {buyer_display_name}\n"
+                admin_message += f"🏥 خریدار: {buyer_pharmacy_name}\n"
                 if buyer_info[2]:
                     admin_message += f"📎 @{buyer_info[2]}\n"
                 admin_message += f"🏥 داروخانه: {pharmacy_info[3] if pharmacy_info else 'نامشخص'}\n"
