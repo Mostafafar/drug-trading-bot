@@ -6313,6 +6313,8 @@ async def confirm_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("خطایی رخ داد. لطفا دوباره تلاش کنید.")
         return ConversationHandler.END
 
+
+                
 async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send the finalized offer to the pharmacy"""
     await clear_conversation_state(update, context, silent=True)
@@ -6366,42 +6368,21 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 conn.commit()
                 
-                # 🔥 دریافت اطلاعات داروخانه خریدار
-                cursor.execute('''
-                SELECT name FROM pharmacies WHERE user_id = %s
-                ''', (buyer_id,))
-                buyer_pharmacy_result = cursor.fetchone()
-                buyer_pharmacy_name = buyer_pharmacy_result[0] if buyer_pharmacy_result else f"داروخانه ناشناس ({buyer_id})"
-                
-                # 🔥 دریافت اطلاعات داروخانه فروشنده
+                # دریافت نام داروخانه فروشنده
                 cursor.execute('''
                 SELECT name FROM pharmacies WHERE user_id = %s
                 ''', (pharmacy_id,))
-                seller_pharmacy_result = cursor.fetchone()
-                seller_pharmacy_name = seller_pharmacy_result[0] if seller_pharmacy_result else f"داروخانه ناشناس ({pharmacy_id})"
+                pharmacy_result = cursor.fetchone()
+                pharmacy_name = pharmacy_result[0] if pharmacy_result else "داروخانه ناشناس"
                 
-                # 🔥 دریافت اطلاعات کاربر خریدار
                 # دریافت نام داروخانه خریدار
                 cursor.execute('''
-                SELECT name, founder_name FROM pharmacies WHERE user_id = %s
+                SELECT name FROM pharmacies WHERE user_id = %s
                 ''', (buyer_id,))
                 pharmacy_buyer_result = cursor.fetchone()
-
-                if pharmacy_buyer_result:
-                    # بررسی None برای هر فیلد
-                    name = pharmacy_buyer_result[0]
-                    founder_name = pharmacy_buyer_result[1]
-    
-                    if name is not None and name.strip() != "":
-                        buyer_pharmacy_name = name
-                    elif founder_name is not None and founder_name.strip() != "":
-                        buyer_pharmacy_name = founder_name
-                    else:
-                        buyer_pharmacy_name = f"داروخانه {buyer_id}"
-                else:
-                    buyer_pharmacy_name = f"کاربر {buyer_id}"
+                buyer_pharmacy_name = pharmacy_buyer_result[0] if pharmacy_buyer_result else f"داروخانه {buyer_id}"
                 
-                # 🔥 دریافت اطلاعات تاریخ داروهای درخواستی
+                # دریافت اطلاعات تاریخ داروهای درخواستی
                 offer_drugs_with_dates = []
                 for item in offer_items:
                     cursor.execute('''
@@ -6416,7 +6397,7 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         'date': date
                     })
                 
-                # 🔥 دریافت اطلاعات تاریخ داروهای جبرانی
+                # دریافت اطلاعات تاریخ داروهای جبرانی
                 comp_drugs_with_dates = []
                 for item in comp_items:
                     cursor.execute('''
@@ -6438,16 +6419,12 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             'date': 'نامشخص'
                         })
                 
-                # ساخت پیام برای داروخانه فروشنده - با تاریخ
+                # ساخت پیام برای داروخانه فروشنده
                 offer_message = "📬 پیشنهاد جدید دریافت شد:\n\n"
                 offer_message += f"🏥 از داروخانه: {buyer_pharmacy_name}\n"
+                offer_message += f"🏪 به داروخانه: {pharmacy_name}\n\n"
                 
-                if buyer_user_info and (buyer_user_info[0] or buyer_user_info[1]):
-                    offer_message += f"👤 خریدار: {buyer_user_info[0] or ''} {buyer_user_info[1] or ''}\n"
-                if buyer_user_info and buyer_user_info[2]:
-                    offer_message += f"📎 @{buyer_user_info[2]}\n"
-                
-                offer_message += "\n📌 داروهای درخواستی:\n"
+                offer_message += "📌 داروهای درخواستی:\n"
                 for item in offer_drugs_with_dates:
                     offer_message += f"• {item['name']} - {item['price']}\n"
                     offer_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
@@ -6474,16 +6451,13 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 
-                # 🔥 ارسال پیام به ادمین - با تاریخ
+                # ارسال پیام به ادمین
                 admin_message = "🆕 پیشنهاد جدید ثبت شد:\n\n"
                 admin_message += f"🆔 کد پیشنهاد: {offer_id}\n"
                 admin_message += f"🏥 خریدار: {buyer_pharmacy_name}\n"
-                admin_message += f"🏥 فروشنده: {seller_pharmacy_name}\n"
+                admin_message += f"🏪 فروشنده: {pharmacy_name}\n\n"
                 
-                if buyer_user_info and buyer_user_info[2]:
-                    admin_message += f"📎 @{buyer_user_info[2]}\n"
-                
-                admin_message += "\n📌 داروهای درخواستی:\n"
+                admin_message += "📌 داروهای درخواستی:\n"
                 for item in offer_drugs_with_dates:
                     admin_message += f"• {item['name']} - {item['price']}\n"
                     admin_message += f"  📦 تعداد: {item['quantity']} عدد | 📅 تاریخ: {item['date']}\n"
@@ -6506,7 +6480,7 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # پیام موفقیت به کاربر
                 await query.edit_message_text(
-                    f"✅ پیشنهاد شما با موفقیت به داروخانه {seller_pharmacy_name} ارسال شد!\n\n"
+                    "✅ پیشنهاد شما با موفقیت ارسال شد!\n\n"
                     "پس از تأیید داروخانه، ادمین با شما تماس خواهد گرفت."
                 )
                 
@@ -6531,7 +6505,7 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return ConversationHandler.END
                 
         except Exception as e:
-            logger.error(f"Error saving offer: {e}")
+            logger.error(f"Error sending offer: {e}")
             if conn:
                 conn.rollback()
             await query.edit_message_text("خطا در ارسال پیشنهاد. لطفا دوباره تلاش کنید.")
