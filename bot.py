@@ -6381,10 +6381,25 @@ async def send_offer(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 seller_pharmacy_name = seller_pharmacy_result[0] if seller_pharmacy_result else f"داروخانه ناشناس ({pharmacy_id})"
                 
                 # 🔥 دریافت اطلاعات کاربر خریدار
+                # دریافت نام داروخانه خریدار
                 cursor.execute('''
-                SELECT first_name, last_name, username FROM users WHERE id = %s
+                SELECT name, founder_name FROM pharmacies WHERE user_id = %s
                 ''', (buyer_id,))
-                buyer_user_info = cursor.fetchone()
+                pharmacy_buyer_result = cursor.fetchone()
+
+                if pharmacy_buyer_result:
+                    # بررسی None برای هر فیلد
+                    name = pharmacy_buyer_result[0]
+                    founder_name = pharmacy_buyer_result[1]
+    
+                    if name is not None and name.strip() != "":
+                        buyer_pharmacy_name = name
+                    elif founder_name is not None and founder_name.strip() != "":
+                        buyer_pharmacy_name = founder_name
+                    else:
+                        buyer_pharmacy_name = f"داروخانه {buyer_id}"
+               else:
+                   buyer_pharmacy_name = f"کاربر {buyer_id}"
                 
                 # 🔥 دریافت اطلاعات تاریخ داروهای درخواستی
                 offer_drugs_with_dates = []
